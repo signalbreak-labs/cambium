@@ -1,0 +1,272 @@
+# =============================================================================
+# cambium — polyglot Rust + Go monorepo
+# Cross-platform (macOS dev + Linux/Windows CI). Operated by AI coding agents.
+# =============================================================================
+# KEEP TRACKED (never add ignore lines for these):
+#   Cargo.lock              workspace lockfile — committed for reproducible
+#                           binary builds (Cargo: "when in doubt, commit it")
+#   go.mod, go.sum          Go module manifest + checksum lockfile
+#   go.work, go.work.sum    committed for this fixed-layout monorepo
+#   .claude/settings.json   shared agent config (only *.local.* is ignored)
+#   .env.example            secret-free env template
+#   .planning/README.md     scratchpad explainer (re-included below)
+#   testdata/, **/*.snap    Go fixtures + accepted insta snapshots
+#
+# .gitignore does NOT untrack already-committed files: use `git rm --cached`.
+# Anything intentionally committed that a glob below would catch (a prebuilt
+# *.so fixture, a testdata golden file): force it with `git add -f <path>`.
+# =============================================================================
+
+# ----------------------------------------------------------------- Rust / Cargo
+# Build output: workspace-root target/ plus any nested per-crate target/.
+/target/
+**/target/
+# rustfmt backups, MSVC debug symbols, rustc internal-compiler-error dumps.
+**/*.rs.bk
+*.pdb
+rustc-ice-*.txt
+
+# Test / mutation / fuzz tooling that lands OUTSIDE target/.
+# cargo-mutants mutation-testing output.
+**/mutants.out*/
+# insta pending snapshots (accepted *.snap files stay tracked).
+*.snap.new
+*.pending-snap
+# cargo-fuzz: keep fuzz/Cargo.toml + fuzz/fuzz_targets/ tracked; ignore the rest.
+fuzz/target/
+fuzz/artifacts/
+fuzz/corpus/
+fuzz/coverage/
+
+# Profiling (cargo-flamegraph / perf). flamegraph.svg root-anchored so committed
+# diagrams survive; cargo-flamegraph.stacks is the macOS/dtrace intermediate.
+/flamegraph.svg
+cargo-flamegraph.stacks
+perf.data
+perf.data.old
+
+# ------------------------------------------------------------------------- Go
+# Compiled test binaries (`go test -c`).
+*.test
+# Delve / VS Code Go debug binaries.
+__debug_bin
+__debug_bin*
+# Core dumps from crashed Go-side oracle/tooling runs.
+/go/core.*
+# Air / reflex hot-reload scratch (config .air.toml itself stays tracked).
+air.log
+.air.toml.local
+# Go 1.20+ integration-coverage output (GOCOVERDIR). Prefer pointing GOCOVERDIR
+# outside the tree in CI; these anchor the common in-repo names defensively.
+/covdata/
+/coverdata/
+# In-tree lint/build caches only if a non-default config places them here.
+.gocache/
+.golangci-cache/
+# NOTE: go.work AND go.work.sum are TRACKED for this monorepo (stable relative
+# paths). Uncomment ONLY if CI builds each module against its own go.sum:
+# go.work.sum
+# NOTE: vendor/ is left TRACKED (commit it if you adopt `go mod vendor`).
+# Uncomment ONLY if you rely on the module cache/proxy instead of vendoring:
+# vendor/
+
+# ------------------------------------------------------ Shared compiled artifacts
+# Emitted by BOTH Rust (cdylib/dylib, MSVC .pdb) and Go — listed once.
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# ----------------------------------------------------------- Shared build output
+# Root-anchored so nested source dirs (cmd/<x>/, internal/<x>/, src/) are safe.
+/bin/
+/dist/
+/build/
+/out/
+
+# --------------------------------------------------------- Coverage (both langs)
+# Root-anchored + deduped. testdata golden files are NOT touched (no bare *.out).
+/coverage/
+/coverage.out
+/coverage.txt
+/coverage.html
+/lcov.info
+*.lcov
+/cobertura.xml
+/codecov.json
+tarpaulin-report.html
+# Rust LLVM source-based coverage raw files spilled into cwd.
+*.profraw
+*.profdata
+# gcov-style tooling.
+*.gcov
+*.gcno
+*.gcda
+
+# ----------------------------------------------------------------- Secrets / env
+# Never commit real secrets. Templates are re-included.
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!.env.*.example
+# direnv (frequently holds inline secrets / secret-loading commands).
+.envrc
+.direnv/
+# Keys, certs, plaintext credential files.
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+credentials.json
+.netrc
+.pgpass
+.my.cnf
+secrets.yaml
+secrets.yml
+/secrets/
+id_rsa
+id_ed25519
+id_ecdsa
+*.gpg
+# SOPS/age: commit the ENCRYPTED artifact + .sops.yaml (git add -f); ignore
+# decrypted leftovers + key material.
+*.dec
+*.decrypted
+age.key
+*.age
+
+# ------------------------------------------------------------- Logs / temp / cache
+*.log
+*.log.*
+/logs/
+*.tmp
+*.temp
+*.pid
+.cache/
+# Air/tmp scratch — anchored (repo root + per-module) so nested tmp/ source is safe.
+/tmp/
+**/tmp/
+
+# ------------------------------------------------------------- AI agent tooling
+# Claude Code: SHARED config is TRACKED — .claude/settings.json and the
+# .claude/agents/, commands/, skills/, rules/ dirs. Do NOT add a blanket
+# `.claude/` line (the #1 mistake — it drops the team's shared config).
+# Only personal/local + runtime state is ignored:
+.claude/settings.local.json
+.claude/*.local.json
+.claude/.credentials.json
+.claude/todos/
+.claude/shell-snapshots/
+CLAUDE.local.md
+AGENTS.local.md
+# Agent scratchpad — ignore the CONTENTS (not the dir) so the README re-includes.
+# (git cannot re-include a file whose parent DIR is excluded — `/.planning/`
+#  would silently swallow the README; `/.planning/*` keeps git descending.)
+/.planning/*
+!/.planning/README.md
+
+# ------------------------------------------------------------- Editors / IDEs
+# VS Code — ignore per-user state, keep shared workspace config. Uses the glob
+# `.vscode/*` (NOT `.vscode/`) so the negations below actually take effect.
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+.history/
+*.code-workspace
+# JetBrains (RustRover/GoLand/CLion) — track .idea, ignore only high-churn state.
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/contentModel.xml
+.idea/**/dataSources/
+.idea/**/dataSources.local.xml
+.idea/**/dynamic.xml
+.idea/caches/
+.idea/httpRequests/
+.idea/sonarlint/
+*.iml
+*.iws
+cmake-build-*/
+# Zed.
+.zed/
+# Vim / Neovim.
+*.swp
+*.swo
+*.swn
+.*.sw[a-p]
+[._]*.un~
+Session.vim
+.netrwhist
+# ctags / etags index files. The `!tags/` + `!TAGS/` negations keep directories
+# of those names from being ignored, and the pairing survives case-insensitive
+# macOS filesystems (where `TAGS` would otherwise re-clobber `tags/`).
+tags
+!tags/
+TAGS
+!TAGS/
+# Emacs.
+\#*\#
+.\#*
+*.elc
+auto-save-list/
+# Generic editor backups / merge leftovers.
+*~
+*.bak
+*.orig
+*.save
+
+# ------------------------------------------------------------- OS junk
+# macOS (primary dev)
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+.apdisk
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.stackdump
+*.lnk
+# Linux
+.directory
+.Trash-*
+.fuse_hidden*
+.nfs*
+
+# ------------------------------------------------------------- Misc dev tooling
+# Node (docs site / JS-based tooling / git hooks).
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.eslintcache
+# Containers / IaC (track docker-compose.yml; ignore the local override layer).
+docker-compose.override.yml
+*.tfstate
+*.tfstate.*
+.terraform/

@@ -1,0 +1,7 @@
+<alarms xmlns="urn:operations-notification-interleaved-siblings">
+  <count>5</count>
+  <threshold>10</threshold>
+  <summary>
+    <last>2026-06-15T12:00:00Z</last>
+  </summary>
+</alarms>

@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "rust/cambium", "rust/cambium-core", "rust/cambium-libyang-sys",
+    "rust/cambium-codegen", "rust/cambium-cli", "rust/conformance-runner",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "BSD-3-Clause"
+repository = "https://github.com/signalbreak-labs/cambium"
+authors = ["signalbreak-labs"]
+rust-version = "1.85"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"

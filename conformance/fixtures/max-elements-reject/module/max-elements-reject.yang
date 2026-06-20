@@ -1,0 +1,12 @@
+module max-elements-reject {
+  yang-version 1;
+  namespace "urn:max-elements-reject";
+  prefix mxer;
+  revision 2026-06-14;
+
+  leaf-list servers {
+    type string;
+    min-elements 2;
+    max-elements 4;
+  }
+}

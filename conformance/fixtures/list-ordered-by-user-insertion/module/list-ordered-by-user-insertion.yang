@@ -1,0 +1,14 @@
+module list-ordered-by-user-insertion {
+  namespace "urn:list-ordered-by-user-insertion";
+  prefix loui;
+  revision 2026-06-15;
+
+  container top {
+    list rule {
+      ordered-by user;
+      key name;
+      leaf name { type string; }
+      leaf action { type string; }
+    }
+  }
+}

@@ -1,0 +1,3372 @@
+# Shared conformance corpus manifest.
+#
+# Each case loads the YANG modules in `module`, parses `input`, and asserts that
+# Cambium serializes to every file listed in `expected` byte-for-byte. When
+# `oracle = true` the runner also checks the output against an independent
+# `yanglint` invocation.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Cases with tier = "schema-ir" are pure-Go schema IR fixtures: they have no
+# data input and assert structural schema properties instead of serialized
+# bytes. Backend runners must skip them.
+
+[[case]]
+name = "schema-cross-kind-order"
+tier = "schema-ir"
+module = "fixtures/schema-cross-kind-order/module"
+expected-ir = "fixtures/schema-cross-kind-order/expected-ir.json"
+
+[[case]]
+name = "schema-uses-site-order"
+tier = "schema-ir"
+module = "fixtures/schema-uses-site-order/module"
+expected-ir = "fixtures/schema-uses-site-order/expected-ir.json"
+
+[[case]]
+name = "schema-augment-order"
+tier = "schema-ir"
+module = "fixtures/schema-augment-order/module"
+expected-ir = "fixtures/schema-augment-order/expected-ir.json"
+
+[[case]]
+name = "schema-choice-case-order"
+tier = "schema-ir"
+module = "fixtures/schema-choice-case-order/module"
+expected-ir = "fixtures/schema-choice-case-order/expected-ir.json"
+
+[[case]]
+name = "schema-import-prefix"
+tier = "schema-ir"
+module = "fixtures/schema-import-prefix/module"
+expected-ir = "fixtures/schema-import-prefix/expected-ir.json"
+
+[[case]]
+name = "schema-identity-derived"
+tier = "schema-ir"
+module = "fixtures/schema-identity-derived/module"
+expected-ir = "fixtures/schema-identity-derived/expected-ir.json"
+
+[[case]]
+name = "schema-leafref-path"
+tier = "schema-ir"
+module = "fixtures/schema-leafref-path/module"
+expected-ir = "fixtures/schema-leafref-path/expected-ir.json"
+
+[[case]]
+name = "scrambled-children"
+module = "fixtures/scrambled-children/module"
+input = "fixtures/scrambled-children/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/scrambled-children/output.xml"
+json = "golden/scrambled-children/output.json"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "keys-first"
+module = "fixtures/keys-first/module"
+input = "fixtures/keys-first/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/keys-first/output.xml"
+json = "golden/keys-first/output.json"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "ordered-user"
+module = "fixtures/ordered-user/module"
+input = "fixtures/ordered-user/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/ordered-user/output.xml"
+json = "golden/ordered-user/output.json"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "rpc-order"
+module = "fixtures/rpc-order/module"
+input = "fixtures/rpc-order/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-order/output.xml"
+json = "golden/rpc-order/output.json"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "system-list-canonical"
+module = "fixtures/system-list-canonical/module"
+input = "fixtures/system-list-canonical/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/system-list-canonical/output.xml"
+json = "golden/system-list-canonical/output.json"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "ietf-interfaces"
+module = "corpus/ietf-interfaces"
+input = "fixtures/ietf-interfaces/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/ietf-interfaces/output.xml"
+json = "golden/ietf-interfaces/output.json"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-int-int8-range"
+module = "fixtures/types-int-int8-range/module"
+input = "fixtures/types-int-int8-range/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-int-int8-range/output.xml"
+json = "golden/types-int-int8-range/output.json"
+json_ietf = "golden/types-int-int8-range/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-int-int16-range"
+module = "fixtures/types-int-int16-range/module"
+input = "fixtures/types-int-int16-range/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-int-int16-range/output.xml"
+json = "golden/types-int-int16-range/output.json"
+json_ietf = "golden/types-int-int16-range/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-int-int32-range-multipart"
+module = "fixtures/types-int-int32-range-multipart/module"
+input = "fixtures/types-int-int32-range-multipart/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-int-int32-range-multipart/output.xml"
+json = "golden/types-int-int32-range-multipart/output.json"
+json_ietf = "golden/types-int-int32-range-multipart/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-int-int64-range-quoted"
+module = "fixtures/types-int-int64-range-quoted/module"
+input = "fixtures/types-int-int64-range-quoted/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-int-int64-range-quoted/output.xml"
+json = "golden/types-int-int64-range-quoted/output.json"
+json_ietf = "golden/types-int-int64-range-quoted/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-uint-uint8-range"
+module = "fixtures/types-uint-uint8-range/module"
+input = "fixtures/types-uint-uint8-range/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-uint-uint8-range/output.xml"
+json = "golden/types-uint-uint8-range/output.json"
+json_ietf = "golden/types-uint-uint8-range/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-uint-uint16-range-port"
+module = "fixtures/types-uint-uint16-range-port/module"
+input = "fixtures/types-uint-uint16-range-port/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-uint-uint16-range-port/output.xml"
+json = "golden/types-uint-uint16-range-port/output.json"
+json_ietf = "golden/types-uint-uint16-range-port/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-uint-uint32-range-multi"
+module = "fixtures/types-uint-uint32-range-multi/module"
+input = "fixtures/types-uint-uint32-range-multi/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-uint-uint32-range-multi/output.xml"
+json = "golden/types-uint-uint32-range-multi/output.json"
+json_ietf = "golden/types-uint-uint32-range-multi/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-uint-uint64-range-quoted"
+module = "fixtures/types-uint-uint64-range-quoted/module"
+input = "fixtures/types-uint-uint64-range-quoted/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-uint-uint64-range-quoted/output.xml"
+json = "golden/types-uint-uint64-range-quoted/output.json"
+json_ietf = "golden/types-uint-uint64-range-quoted/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-decimal64-fraction1-range"
+module = "fixtures/types-decimal64-fraction1-range/module"
+input = "fixtures/types-decimal64-fraction1-range/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-decimal64-fraction1-range/output.xml"
+json = "golden/types-decimal64-fraction1-range/output.json"
+json_ietf = "golden/types-decimal64-fraction1-range/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-decimal64-fraction2-canonical-round"
+module = "fixtures/types-decimal64-fraction2-canonical-round/module"
+input = "fixtures/types-decimal64-fraction2-canonical-round/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-decimal64-fraction2-canonical-round/output.xml"
+json = "golden/types-decimal64-fraction2-canonical-round/output.json"
+json_ietf = "golden/types-decimal64-fraction2-canonical-round/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-decimal64-fraction3-and-6"
+module = "fixtures/types-decimal64-fraction3-and-6/module"
+input = "fixtures/types-decimal64-fraction3-and-6/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-decimal64-fraction3-and-6/output.xml"
+json = "golden/types-decimal64-fraction3-and-6/output.json"
+json_ietf = "golden/types-decimal64-fraction3-and-6/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-decimal64-fraction9-negative"
+module = "fixtures/types-decimal64-fraction9-negative/module"
+input = "fixtures/types-decimal64-fraction9-negative/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-decimal64-fraction9-negative/output.xml"
+json = "golden/types-decimal64-fraction9-negative/output.json"
+json_ietf = "golden/types-decimal64-fraction9-negative/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-decimal64-fraction18-max-magnitude"
+module = "fixtures/types-decimal64-fraction18-max-magnitude/module"
+input = "fixtures/types-decimal64-fraction18-max-magnitude/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-decimal64-fraction18-max-magnitude/output.xml"
+json = "golden/types-decimal64-fraction18-max-magnitude/output.json"
+json_ietf = "golden/types-decimal64-fraction18-max-magnitude/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-empty-leaf-null-json"
+module = "fixtures/types-empty-leaf-null-json/module"
+input = "fixtures/types-empty-leaf-null-json/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-empty-leaf-null-json/output.xml"
+json = "golden/types-empty-leaf-null-json/output.json"
+json_ietf = "golden/types-empty-leaf-null-json/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-enumeration-explicit-values-sparse"
+module = "fixtures/types-enumeration-explicit-values-sparse/module"
+input = "fixtures/types-enumeration-explicit-values-sparse/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-enumeration-explicit-values-sparse/output.xml"
+json = "golden/types-enumeration-explicit-values-sparse/output.json"
+json_ietf = "golden/types-enumeration-explicit-values-sparse/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-enumeration-zero-value-disabled"
+module = "fixtures/types-enumeration-zero-value-disabled/module"
+input = "fixtures/types-enumeration-zero-value-disabled/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-enumeration-zero-value-disabled/output.xml"
+json = "golden/types-enumeration-zero-value-disabled/output.json"
+json_ietf = "golden/types-enumeration-zero-value-disabled/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-enum-bits-auto-position"
+module = "fixtures/types-enum-bits-auto-position/module"
+input = "fixtures/types-enum-bits-auto-position/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-enum-bits-auto-position/output.xml"
+json = "golden/types-enum-bits-auto-position/output.json"
+json_ietf = "golden/types-enum-bits-auto-position/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-bits-explicit-positions-gaps"
+module = "fixtures/types-bits-explicit-positions-gaps/module"
+input = "fixtures/types-bits-explicit-positions-gaps/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-bits-explicit-positions-gaps/output.xml"
+json = "golden/types-bits-explicit-positions-gaps/output.json"
+json_ietf = "golden/types-bits-explicit-positions-gaps/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-binary-length-base64"
+module = "fixtures/types-binary-length-base64/module"
+input = "fixtures/types-binary-length-base64/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-binary-length-base64/output.xml"
+json = "golden/types-binary-length-base64/output.json"
+json_ietf = "golden/types-binary-length-base64/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-boolean-default-false"
+module = "fixtures/types-boolean-default-false/module"
+input = "fixtures/types-boolean-default-false/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-boolean-default-false/output.xml"
+json = "golden/types-boolean-default-false/output.json"
+json_ietf = "golden/types-boolean-default-false/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-string-pattern-modifier-invert-match"
+module = "fixtures/types-string-pattern-modifier-invert-match/module"
+input = "fixtures/types-string-pattern-modifier-invert-match/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-string-pattern-modifier-invert-match/output.xml"
+json = "golden/types-string-pattern-modifier-invert-match/output.json"
+json_ietf = "golden/types-string-pattern-modifier-invert-match/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-string-multiple-patterns-conjunction"
+module = "fixtures/types-string-multiple-patterns-conjunction/module"
+input = "fixtures/types-string-multiple-patterns-conjunction/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-string-multiple-patterns-conjunction/output.xml"
+json = "golden/types-string-multiple-patterns-conjunction/output.json"
+json_ietf = "golden/types-string-multiple-patterns-conjunction/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-string-length-pattern-anchor-posix"
+module = "fixtures/types-string-length-pattern-anchor-posix/module"
+input = "fixtures/types-string-length-pattern-anchor-posix/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-string-length-pattern-anchor-posix/output.xml"
+json = "golden/types-string-length-pattern-anchor-posix/output.json"
+json_ietf = "golden/types-string-length-pattern-anchor-posix/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "constraints-range-length-reject"
+module = "fixtures/constraints-range-length-reject/module"
+input = "fixtures/constraints-range-length-reject/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-range-length-reject/output.xml"
+json = "golden/constraints-range-length-reject/output.json"
+json_ietf = "golden/constraints-range-length-reject/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-range-length-min-max-keywords"
+module = "fixtures/types-range-length-min-max-keywords/module"
+input = "fixtures/types-range-length-min-max-keywords/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-range-length-min-max-keywords/output.xml"
+json = "golden/types-range-length-min-max-keywords/output.json"
+json_ietf = "golden/types-range-length-min-max-keywords/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "json-ietf-decimal64-no-exponent"
+module = "fixtures/json-ietf-decimal64-no-exponent/module"
+input = "fixtures/json-ietf-decimal64-no-exponent/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-decimal64-no-exponent/output.xml"
+json = "golden/json-ietf-decimal64-no-exponent/output.json"
+json_ietf = "golden/json-ietf-decimal64-no-exponent/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-simple-base"
+module = "fixtures/types-typedef-simple-base/module"
+input = "fixtures/types-typedef-simple-base/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-simple-base/output.xml"
+json = "golden/types-typedef-simple-base/output.json"
+json_ietf = "golden/types-typedef-simple-base/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-chain-2deep"
+module = "fixtures/types-typedef-chain-2deep/module"
+input = "fixtures/types-typedef-chain-2deep/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-chain-2deep/output.xml"
+json = "golden/types-typedef-chain-2deep/output.json"
+json_ietf = "golden/types-typedef-chain-2deep/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-chain-3deep"
+module = "fixtures/types-typedef-chain-3deep/module"
+input = "fixtures/types-typedef-chain-3deep/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-chain-3deep/output.xml"
+json = "golden/types-typedef-chain-3deep/output.json"
+json_ietf = "golden/types-typedef-chain-3deep/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-restriction-narrowing"
+module = "fixtures/types-typedef-restriction-narrowing/module"
+input = "fixtures/types-typedef-restriction-narrowing/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-restriction-narrowing/output.xml"
+json = "golden/types-typedef-restriction-narrowing/output.json"
+json_ietf = "golden/types-typedef-restriction-narrowing/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-default-inheritance"
+module = "fixtures/types-typedef-default-inheritance/module"
+input = "fixtures/types-typedef-default-inheritance/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-default-inheritance/output.xml"
+json = "golden/types-typedef-default-inheritance/output.json"
+json_ietf = "golden/types-typedef-default-inheritance/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-union-composition"
+module = "fixtures/types-typedef-union-composition/module"
+input = "fixtures/types-typedef-union-composition/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-union-composition/output.xml"
+json = "golden/types-typedef-union-composition/output.json"
+json_ietf = "golden/types-typedef-union-composition/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-typedef-submodule-cross-file"
+module = "fixtures/types-typedef-submodule-cross-file/module"
+input = "fixtures/types-typedef-submodule-cross-file/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-typedef-submodule-cross-file/output.xml"
+json = "golden/types-typedef-submodule-cross-file/output.json"
+json_ietf = "golden/types-typedef-submodule-cross-file/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-heterogeneous-members-quoting"
+module = "fixtures/types-union-heterogeneous-members-quoting/module"
+input = "fixtures/types-union-heterogeneous-members-quoting/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-heterogeneous-members-quoting/output.xml"
+json = "golden/types-union-heterogeneous-members-quoting/output.json"
+json_ietf = "golden/types-union-heterogeneous-members-quoting/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-scalar-all-members"
+module = "fixtures/types-union-scalar-all-members/module"
+input = "fixtures/types-union-scalar-all-members/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-scalar-all-members/output.xml"
+json = "golden/types-union-scalar-all-members/output.json"
+json_ietf = "golden/types-union-scalar-all-members/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-member-resolution-order"
+module = "fixtures/types-union-member-resolution-order/module"
+input = "fixtures/types-union-member-resolution-order/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-member-resolution-order/output.xml"
+json = "golden/types-union-member-resolution-order/output.json"
+json_ietf = "golden/types-union-member-resolution-order/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-nested-typedef-chain"
+module = "fixtures/types-union-nested-typedef-chain/module"
+input = "fixtures/types-union-nested-typedef-chain/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-nested-typedef-chain/output.xml"
+json = "golden/types-union-nested-typedef-chain/output.json"
+json_ietf = "golden/types-union-nested-typedef-chain/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-leafref-member"
+module = "fixtures/types-union-leafref-member/module"
+input = "fixtures/types-union-leafref-member/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-leafref-member/output.xml"
+json = "golden/types-union-leafref-member/output.json"
+json_ietf = "golden/types-union-leafref-member/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-identityref-member"
+module = "fixtures/types-union-identityref-member/module"
+input = "fixtures/types-union-identityref-member/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-identityref-member/output.xml"
+json = "golden/types-union-identityref-member/output.json"
+json_ietf = "golden/types-union-identityref-member/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-two-identityrefs-distinct-bases"
+module = "fixtures/types-union-two-identityrefs-distinct-bases/module"
+input = "fixtures/types-union-two-identityrefs-distinct-bases/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-two-identityrefs-distinct-bases/output.xml"
+json = "golden/types-union-two-identityrefs-distinct-bases/output.json"
+json_ietf = "golden/types-union-two-identityrefs-distinct-bases/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-union-enum-and-scalar"
+module = "fixtures/types-union-enum-and-scalar/module"
+input = "fixtures/types-union-enum-and-scalar/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-union-enum-and-scalar/output.xml"
+json = "golden/types-union-enum-and-scalar/output.json"
+json_ietf = "golden/types-union-enum-and-scalar/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-absolute-path"
+module = "fixtures/types-leafref-absolute-path/module"
+input = "fixtures/types-leafref-absolute-path/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-absolute-path/output.xml"
+json = "golden/types-leafref-absolute-path/output.json"
+json_ietf = "golden/types-leafref-absolute-path/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-relative-parent-path"
+module = "fixtures/types-leafref-relative-parent-path/module"
+input = "fixtures/types-leafref-relative-parent-path/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-relative-parent-path/output.xml"
+json = "golden/types-leafref-relative-parent-path/output.json"
+json_ietf = "golden/types-leafref-relative-parent-path/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-current-context"
+module = "fixtures/types-leafref-current-context/module"
+input = "fixtures/types-leafref-current-context/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-current-context/output.xml"
+json = "golden/types-leafref-current-context/output.json"
+json_ietf = "golden/types-leafref-current-context/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-to-list-key"
+module = "fixtures/types-leafref-to-list-key/module"
+input = "fixtures/types-leafref-to-list-key/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-to-list-key/output.xml"
+json = "golden/types-leafref-to-list-key/output.json"
+json_ietf = "golden/types-leafref-to-list-key/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-to-leaf-list"
+module = "fixtures/types-leafref-to-leaf-list/module"
+input = "fixtures/types-leafref-to-leaf-list/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-to-leaf-list/output.xml"
+json = "golden/types-leafref-to-leaf-list/output.json"
+json_ietf = "golden/types-leafref-to-leaf-list/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-to-leafref-chain"
+module = "fixtures/types-leafref-to-leafref-chain/module"
+input = "fixtures/types-leafref-to-leafref-chain/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-to-leafref-chain/output.xml"
+json = "golden/types-leafref-to-leafref-chain/output.json"
+json_ietf = "golden/types-leafref-to-leafref-chain/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-require-instance-false"
+module = "fixtures/types-leafref-require-instance-false/module"
+input = "fixtures/types-leafref-require-instance-false/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-require-instance-false/output.xml"
+json = "golden/types-leafref-require-instance-false/output.json"
+json_ietf = "golden/types-leafref-require-instance-false/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-cross-module"
+module = "fixtures/types-leafref-cross-module/module"
+input = "fixtures/types-leafref-cross-module/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-cross-module/output.xml"
+json = "golden/types-leafref-cross-module/output.json"
+json_ietf = "golden/types-leafref-cross-module/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-identityref-single-base"
+module = "fixtures/types-identityref-single-base/module"
+input = "fixtures/types-identityref-single-base/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-identityref-single-base/output.xml"
+json = "golden/types-identityref-single-base/output.json"
+json_ietf = "golden/types-identityref-single-base/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-identityref-multiple-bases"
+module = "fixtures/types-identityref-multiple-bases/module"
+input = "fixtures/types-identityref-multiple-bases/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-identityref-multiple-bases/output.xml"
+json = "golden/types-identityref-multiple-bases/output.json"
+json_ietf = "golden/types-identityref-multiple-bases/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-identityref-derived-hierarchy"
+module = "fixtures/types-identityref-derived-hierarchy/module"
+input = "fixtures/types-identityref-derived-hierarchy/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-identityref-derived-hierarchy/output.xml"
+json = "golden/types-identityref-derived-hierarchy/output.json"
+json_ietf = "golden/types-identityref-derived-hierarchy/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-identityref-foreign-module-prefix"
+module = "fixtures/types-identityref-foreign-module-prefix/module"
+input = "fixtures/types-identityref-foreign-module-prefix/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-identityref-foreign-module-prefix/output.xml"
+json = "golden/types-identityref-foreign-module-prefix/output.json"
+json_ietf = "golden/types-identityref-foreign-module-prefix/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "identityref-iana-if-type-foreign"
+module = "corpus/identityref-iana-if-type-foreign"
+input = "fixtures/identityref-iana-if-type-foreign/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/identityref-iana-if-type-foreign/output.xml"
+json = "golden/identityref-iana-if-type-foreign/output.json"
+json_ietf = "golden/identityref-iana-if-type-foreign/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-instance-identifier-require-default"
+module = "fixtures/types-instance-identifier-require-default/module"
+input = "fixtures/types-instance-identifier-require-default/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-instance-identifier-require-default/output.xml"
+json = "golden/types-instance-identifier-require-default/output.json"
+json_ietf = "golden/types-instance-identifier-require-default/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-instance-identifier-complex-path"
+module = "fixtures/types-instance-identifier-complex-path/module"
+input = "fixtures/types-instance-identifier-complex-path/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-instance-identifier-complex-path/output.xml"
+json = "golden/types-instance-identifier-complex-path/output.json"
+json_ietf = "golden/types-instance-identifier-complex-path/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-instance-identifier-no-require"
+module = "fixtures/types-instance-identifier-no-require/module"
+input = "fixtures/types-instance-identifier-no-require/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-instance-identifier-no-require/output.xml"
+json = "golden/types-instance-identifier-no-require/output.json"
+json_ietf = "golden/types-instance-identifier-no-require/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "types-leafref-deref-function"
+module = "fixtures/types-leafref-deref-function/module"
+input = "fixtures/types-leafref-deref-function/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/types-leafref-deref-function/output.xml"
+json = "golden/types-leafref-deref-function/output.json"
+json_ietf = "golden/types-leafref-deref-function/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "identity-standalone"
+module = "fixtures/identity-standalone/module"
+input = "fixtures/identity-standalone/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/identity-standalone/output.xml"
+json = "golden/identity-standalone/output.json"
+json_ietf = "golden/identity-standalone/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "identity-cross-module-derivation"
+module = "fixtures/identity-cross-module-derivation/module"
+input = "fixtures/identity-cross-module-derivation/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/identity-cross-module-derivation/output.xml"
+json = "golden/identity-cross-module-derivation/output.json"
+json_ietf = "golden/identity-cross-module-derivation/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "identity-multi-base-cross-module"
+module = "fixtures/identity-multi-base-cross-module/module"
+input = "fixtures/identity-multi-base-cross-module/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/identity-multi-base-cross-module/output.xml"
+json = "golden/identity-multi-base-cross-module/output.json"
+json_ietf = "golden/identity-multi-base-cross-module/output.json_ietf"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[[case]]
+name = "identity-hierarchy-with-identityref"
+module = "fixtures/identity-hierarchy-with-identityref/module"
+input = "fixtures/identity-hierarchy-with-identityref/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/identity-hierarchy-with-identityref/output.xml"
+json = "golden/identity-hierarchy-with-identityref/output.json"
+json_ietf = "golden/identity-hierarchy-with-identityref/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-when-must"
+module = "fixtures/constraints-when-must/module"
+input = "fixtures/constraints-when-must/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-when-must/output.xml"
+json = "golden/constraints-when-must/output.json"
+json_ietf = "golden/constraints-when-must/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-when-xpath-functions"
+module = "fixtures/constraints-when-xpath-functions/module"
+input = "fixtures/constraints-when-xpath-functions/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-when-xpath-functions/output.xml"
+json = "golden/constraints-when-xpath-functions/output.json"
+json_ietf = "golden/constraints-when-xpath-functions/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-must-multiple"
+module = "fixtures/constraints-must-multiple/module"
+input = "fixtures/constraints-must-multiple/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-must-multiple/output.xml"
+json = "golden/constraints-must-multiple/output.json"
+json_ietf = "golden/constraints-must-multiple/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-unique-composite"
+module = "fixtures/constraints-unique-composite/module"
+input = "fixtures/constraints-unique-composite/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-unique-composite/output.xml"
+json = "golden/constraints-unique-composite/output.json"
+json_ietf = "golden/constraints-unique-composite/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-unique-violation-reject"
+module = "fixtures/constraints-unique-violation-reject/module"
+input = "fixtures/constraints-unique-violation-reject/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-unique-violation-reject/output.xml"
+json = "golden/constraints-unique-violation-reject/output.json"
+json_ietf = "golden/constraints-unique-violation-reject/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-mandatory-interaction"
+module = "fixtures/constraints-mandatory-interaction/module"
+input = "fixtures/constraints-mandatory-interaction/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-mandatory-interaction/output.xml"
+json = "golden/constraints-mandatory-interaction/output.json"
+json_ietf = "golden/constraints-mandatory-interaction/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-default-types"
+module = "fixtures/constraints-default-types/module"
+input = "fixtures/constraints-default-types/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-default-types/output.xml"
+json = "golden/constraints-default-types/output.json"
+json_ietf = "golden/constraints-default-types/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-feature-iffeature"
+module = "fixtures/constraints-feature-iffeature/module"
+input = "fixtures/constraints-feature-iffeature/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-feature-iffeature/output.xml"
+json = "golden/constraints-feature-iffeature/output.json"
+json_ietf = "golden/constraints-feature-iffeature/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-feature-dependency"
+module = "fixtures/constraints-feature-dependency/module"
+input = "fixtures/constraints-feature-dependency/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-feature-dependency/output.xml"
+json = "golden/constraints-feature-dependency/output.json"
+json_ietf = "golden/constraints-feature-dependency/output.json_ietf"
+
+
+
+
+[[case]]
+name = "constraints-feature-presence"
+module = "fixtures/constraints-feature-presence/module"
+input = "fixtures/constraints-feature-presence/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/constraints-feature-presence/output.xml"
+json = "golden/constraints-feature-presence/output.json"
+json_ietf = "golden/constraints-feature-presence/output.json_ietf"
+
+
+
+
+[[case]]
+name = "container-presence-empty"
+module = "fixtures/container-presence-empty/module"
+input = "fixtures/container-presence-empty/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/container-presence-empty/output.xml"
+json = "golden/container-presence-empty/output.json"
+json_ietf = "golden/container-presence-empty/output.json_ietf"
+
+
+
+
+[[case]]
+name = "container-nested-depth"
+module = "fixtures/container-nested-depth/module"
+input = "fixtures/container-nested-depth/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/container-nested-depth/output.xml"
+json = "golden/container-nested-depth/output.json"
+json_ietf = "golden/container-nested-depth/output.json_ietf"
+
+
+
+
+[[case]]
+name = "list-single-key-string"
+module = "fixtures/list-single-key-string/module"
+input = "fixtures/list-single-key-string/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-single-key-string/output.xml"
+json = "golden/list-single-key-string/output.json"
+json_ietf = "golden/list-single-key-string/output.json_ietf"
+
+
+
+
+[[case]]
+name = "list-single-key-numeric"
+module = "fixtures/list-single-key-numeric/module"
+input = "fixtures/list-single-key-numeric/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-single-key-numeric/output.xml"
+json = "golden/list-single-key-numeric/output.json"
+json_ietf = "golden/list-single-key-numeric/output.json_ietf"
+
+
+
+
+[[case]]
+name = "list-composite-key-two"
+module = "fixtures/list-composite-key-two/module"
+input = "fixtures/list-composite-key-two/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-composite-key-two/output.xml"
+json = "golden/list-composite-key-two/output.json"
+json_ietf = "golden/list-composite-key-two/output.json_ietf"
+
+
+
+
+[[case]]
+name = "list-composite-key-three"
+module = "fixtures/list-composite-key-three/module"
+input = "fixtures/list-composite-key-three/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-composite-key-three/output.xml"
+json = "golden/list-composite-key-three/output.json"
+json_ietf = "golden/list-composite-key-three/output.json_ietf"
+
+
+
+
+[[case]]
+name = "ordering-composite-key-wide"
+module = "fixtures/ordering-composite-key-wide/module"
+input = "fixtures/ordering-composite-key-wide/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/ordering-composite-key-wide/output.xml"
+json = "golden/ordering-composite-key-wide/output.json"
+json_ietf = "golden/ordering-composite-key-wide/output.json_ietf"
+
+
+
+
+[[case]]
+name = "composite-key-with-interleaved-containers"
+module = "fixtures/composite-key-with-interleaved-containers/module"
+input = "fixtures/composite-key-with-interleaved-containers/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/composite-key-with-interleaved-containers/output.xml"
+json = "golden/composite-key-with-interleaved-containers/output.json"
+json_ietf = "golden/composite-key-with-interleaved-containers/output.json_ietf"
+
+
+
+
+[[case]]
+name = "list-keyless-positional"
+module = "fixtures/list-keyless-positional/module"
+input = "fixtures/list-keyless-positional/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-keyless-positional/output.xml"
+json = "golden/list-keyless-positional/output.json"
+json_ietf = "golden/list-keyless-positional/output.json_ietf"
+
+
+
+
+[[case]]
+name = "min-elements-reject"
+module = "fixtures/min-elements-reject/module"
+input = "fixtures/min-elements-reject/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/min-elements-reject/output.xml"
+json = "golden/min-elements-reject/output.json"
+json_ietf = "golden/min-elements-reject/output.json_ietf"
+
+
+
+
+[[case]]
+name = "max-elements-reject"
+module = "fixtures/max-elements-reject/module"
+input = "fixtures/max-elements-reject/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/max-elements-reject/output.xml"
+json = "golden/max-elements-reject/output.json"
+json_ietf = "golden/max-elements-reject/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-multiple-cases-default"
+module = "fixtures/choice-multiple-cases-default/module"
+input = "fixtures/choice-multiple-cases-default/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-multiple-cases-default/output.xml"
+json = "golden/choice-multiple-cases-default/output.json"
+json_ietf = "golden/choice-multiple-cases-default/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-mandatory-reject"
+module = "fixtures/choice-mandatory-reject/module"
+input = "fixtures/choice-mandatory-reject/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-mandatory-reject/output.xml"
+json = "golden/choice-mandatory-reject/output.json"
+json_ietf = "golden/choice-mandatory-reject/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-single-node-case"
+module = "fixtures/choice-single-node-case/module"
+input = "fixtures/choice-single-node-case/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-single-node-case/output.xml"
+json = "golden/choice-single-node-case/output.json"
+json_ietf = "golden/choice-single-node-case/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-nested-in-case"
+module = "fixtures/choice-nested-in-case/module"
+input = "fixtures/choice-nested-in-case/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-nested-in-case/output.xml"
+json = "golden/choice-nested-in-case/output.json"
+json_ietf = "golden/choice-nested-in-case/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-cases-interleaved-siblings"
+module = "fixtures/choice-cases-interleaved-siblings/module"
+input = "fixtures/choice-cases-interleaved-siblings/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-cases-interleaved-siblings/output.xml"
+json = "golden/choice-cases-interleaved-siblings/output.json"
+json_ietf = "golden/choice-cases-interleaved-siblings/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-with-leaflist-branch"
+module = "fixtures/choice-with-leaflist-branch/module"
+input = "fixtures/choice-with-leaflist-branch/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-with-leaflist-branch/output.xml"
+json = "golden/choice-with-leaflist-branch/output.json"
+json_ietf = "golden/choice-with-leaflist-branch/output.json_ietf"
+
+
+
+
+[[case]]
+name = "choice-shorthand-leaflist-list"
+module = "fixtures/choice-shorthand-leaflist-list/module"
+input = "fixtures/choice-shorthand-leaflist-list/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/choice-shorthand-leaflist-list/output.xml"
+json = "golden/choice-shorthand-leaflist-list/output.json"
+json_ietf = "golden/choice-shorthand-leaflist-list/output.json_ietf"
+
+
+
+
+[[case]]
+name = "list-entry-with-choice-schema-order"
+module = "fixtures/list-entry-with-choice-schema-order/module"
+input = "fixtures/list-entry-with-choice-schema-order/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-entry-with-choice-schema-order/output.xml"
+json = "golden/list-entry-with-choice-schema-order/output.json"
+json_ietf = "golden/list-entry-with-choice-schema-order/output.json_ietf"
+
+
+
+
+[[case]]
+name = "container-within-list-schema-order"
+module = "fixtures/container-within-list-schema-order/module"
+input = "fixtures/container-within-list-schema-order/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/container-within-list-schema-order/output.xml"
+json = "golden/container-within-list-schema-order/output.json"
+json_ietf = "golden/container-within-list-schema-order/output.json_ietf"
+
+
+
+
+[[case]]
+name = "leaf-list-within-list-entry"
+module = "fixtures/leaf-list-within-list-entry/module"
+input = "fixtures/leaf-list-within-list-entry/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/leaf-list-within-list-entry/output.xml"
+json = "golden/leaf-list-within-list-entry/output.json"
+json_ietf = "golden/leaf-list-within-list-entry/output.json_ietf"
+
+
+
+
+[[case]]
+name = "config-true-subtree"
+module = "fixtures/config-true-subtree/module"
+input = "fixtures/config-true-subtree/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/config-true-subtree/output.xml"
+json = "golden/config-true-subtree/output.json"
+json_ietf = "golden/config-true-subtree/output.json_ietf"
+
+
+
+
+[[case]]
+name = "config-false-state-subtree"
+module = "fixtures/config-false-state-subtree/module"
+input = "fixtures/config-false-state-subtree/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/config-false-state-subtree/output.xml"
+json = "golden/config-false-state-subtree/output.json"
+json_ietf = "golden/config-false-state-subtree/output.json_ietf"
+
+
+
+
+[[case]]
+name = "mixed-config-state-nested"
+module = "fixtures/mixed-config-state-nested/module"
+input = "fixtures/mixed-config-state-nested/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/mixed-config-state-nested/output.xml"
+json = "golden/mixed-config-state-nested/output.json"
+json_ietf = "golden/mixed-config-state-nested/output.json_ietf"
+
+
+
+[[case]]
+name = "status-current-deprecated-obsolete"
+module = "fixtures/status-current-deprecated-obsolete/module"
+input = "fixtures/status-current-deprecated-obsolete/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/status-current-deprecated-obsolete/output.xml"
+json = "golden/status-current-deprecated-obsolete/output.json"
+json_ietf = "golden/status-current-deprecated-obsolete/output.json_ietf"
+
+
+
+[[case]]
+name = "anydata-untyped-container"
+module = "fixtures/anydata-untyped-container/module"
+input = "fixtures/anydata-untyped-container/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/anydata-untyped-container/output.xml"
+json = "golden/anydata-untyped-container/output.json"
+json_ietf = "golden/anydata-untyped-container/output.json_ietf"
+
+
+
+[[case]]
+name = "anyxml-opaque-passthrough"
+module = "fixtures/anyxml-opaque-passthrough/module"
+input = "fixtures/anyxml-opaque-passthrough/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/anyxml-opaque-passthrough/output.xml"
+json = "golden/anyxml-opaque-passthrough/output.json"
+json_ietf = "golden/anyxml-opaque-passthrough/output.json_ietf"
+
+[[case]]
+name = "anyxml-attributes-namespaced"
+module = "fixtures/anyxml-attributes-namespaced/module"
+input = "fixtures/anyxml-attributes-namespaced/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/anyxml-attributes-namespaced/output.xml"
+
+[[case]]
+name = "list-ordered-by-user-insertion"
+module = "fixtures/list-ordered-by-user-insertion/module"
+input = "fixtures/list-ordered-by-user-insertion/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-ordered-by-user-insertion/output.xml"
+json = "golden/list-ordered-by-user-insertion/output.json"
+json_ietf = "golden/list-ordered-by-user-insertion/output.json_ietf"
+
+[[case]]
+name = "list-ordered-by-system-canonical"
+module = "fixtures/list-ordered-by-system-canonical/module"
+input = "fixtures/list-ordered-by-system-canonical/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/list-ordered-by-system-canonical/output.xml"
+json = "golden/list-ordered-by-system-canonical/output.json"
+json_ietf = "golden/list-ordered-by-system-canonical/output.json_ietf"
+
+[[case]]
+name = "leaflist-ordered-by-user"
+module = "fixtures/leaflist-ordered-by-user/module"
+input = "fixtures/leaflist-ordered-by-user/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/leaflist-ordered-by-user/output.xml"
+json = "golden/leaflist-ordered-by-user/output.json"
+json_ietf = "golden/leaflist-ordered-by-user/output.json_ietf"
+
+[[case]]
+name = "leaflist-ordered-by-system"
+module = "fixtures/leaflist-ordered-by-system/module"
+input = "fixtures/leaflist-ordered-by-system/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/leaflist-ordered-by-system/output.xml"
+json = "golden/leaflist-ordered-by-system/output.json"
+json_ietf = "golden/leaflist-ordered-by-system/output.json_ietf"
+
+[[case]]
+name = "leaflist-with-defaults"
+module = "fixtures/leaflist-with-defaults/module"
+input = "fixtures/leaflist-with-defaults/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/leaflist-with-defaults/output.xml"
+json = "golden/leaflist-with-defaults/output.json"
+json_ietf = "golden/leaflist-with-defaults/output.json_ietf"
+
+[[case]]
+name = "ordering-nested-user-cascading"
+module = "fixtures/ordering-nested-user-cascading/module"
+input = "fixtures/ordering-nested-user-cascading/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/ordering-nested-user-cascading/output.xml"
+json = "golden/ordering-nested-user-cascading/output.json"
+json_ietf = "golden/ordering-nested-user-cascading/output.json_ietf"
+
+[[case]]
+name = "ordered-user-config-false-state"
+module = "fixtures/ordered-user-config-false-state/module"
+input = "fixtures/ordered-user-config-false-state/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/ordered-user-config-false-state/output.xml"
+json = "golden/ordered-user-config-false-state/output.json"
+json_ietf = "golden/ordered-user-config-false-state/output.json_ietf"
+
+[[case]]
+name = "declaration-order-out-of-alphabetical"
+module = "fixtures/declaration-order-out-of-alphabetical/module"
+input = "fixtures/declaration-order-out-of-alphabetical/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/declaration-order-out-of-alphabetical/output.xml"
+json = "golden/declaration-order-out-of-alphabetical/output.json"
+json_ietf = "golden/declaration-order-out-of-alphabetical/output.json_ietf"
+
+[[case]]
+name = "wide-heterogeneous-siblings-all-types"
+module = "fixtures/wide-heterogeneous-siblings-all-types/module"
+input = "fixtures/wide-heterogeneous-siblings-all-types/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/wide-heterogeneous-siblings-all-types/output.xml"
+json = "golden/wide-heterogeneous-siblings-all-types/output.json"
+json_ietf = "golden/wide-heterogeneous-siblings-all-types/output.json_ietf"
+
+[[case]]
+name = "json-object-determinism"
+module = "fixtures/json-object-determinism/module"
+input = "fixtures/json-object-determinism/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-object-determinism/output.xml"
+json = "golden/json-object-determinism/output.json"
+json_ietf = "golden/json-object-determinism/output.json_ietf"
+
+[[case]]
+name = "json-ietf-module-namespace-qualification"
+module = "fixtures/json-ietf-module-namespace-qualification/module"
+input = "fixtures/json-ietf-module-namespace-qualification/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-module-namespace-qualification/output.xml"
+json = "golden/json-ietf-module-namespace-qualification/output.json"
+json_ietf = "golden/json-ietf-module-namespace-qualification/output.json_ietf"
+
+[[case]]
+name = "json-ietf-scalar-quoting-int-spans"
+module = "fixtures/json-ietf-scalar-quoting-int-spans/module"
+input = "fixtures/json-ietf-scalar-quoting-int-spans/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-scalar-quoting-int-spans/output.xml"
+json = "golden/json-ietf-scalar-quoting-int-spans/output.json"
+json_ietf = "golden/json-ietf-scalar-quoting-int-spans/output.json_ietf"
+
+[[case]]
+name = "json-ietf-decimal64-canonical-quoting"
+module = "fixtures/json-ietf-decimal64-canonical-quoting/module"
+input = "fixtures/json-ietf-decimal64-canonical-quoting/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-decimal64-canonical-quoting/output.xml"
+json = "golden/json-ietf-decimal64-canonical-quoting/output.json"
+json_ietf = "golden/json-ietf-decimal64-canonical-quoting/output.json_ietf"
+
+[[case]]
+name = "json-ietf-string-escaping-control-unicode"
+module = "fixtures/json-ietf-string-escaping-control-unicode/module"
+input = "fixtures/json-ietf-string-escaping-control-unicode/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-string-escaping-control-unicode/output.xml"
+json = "golden/json-ietf-string-escaping-control-unicode/output.json"
+json_ietf = "golden/json-ietf-string-escaping-control-unicode/output.json_ietf"
+
+[[case]]
+name = "json-ietf-leaflist-array-user-system"
+module = "fixtures/json-ietf-leaflist-array-user-system/module"
+input = "fixtures/json-ietf-leaflist-array-user-system/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-leaflist-array-user-system/output.xml"
+json = "golden/json-ietf-leaflist-array-user-system/output.json"
+json_ietf = "golden/json-ietf-leaflist-array-user-system/output.json_ietf"
+
+[[case]]
+name = "json-ietf-list-array-keys-first"
+module = "fixtures/json-ietf-list-array-keys-first/module"
+input = "fixtures/json-ietf-list-array-keys-first/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-list-array-keys-first/output.xml"
+json = "golden/json-ietf-list-array-keys-first/output.json"
+json_ietf = "golden/json-ietf-list-array-keys-first/output.json_ietf"
+
+[[case]]
+name = "json-ietf-nested-container-object"
+module = "fixtures/json-ietf-nested-container-object/module"
+input = "fixtures/json-ietf-nested-container-object/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-nested-container-object/output.xml"
+json = "golden/json-ietf-nested-container-object/output.json"
+json_ietf = "golden/json-ietf-nested-container-object/output.json_ietf"
+
+[[case]]
+name = "json-ietf-choice-case-transparency"
+module = "fixtures/json-ietf-choice-case-transparency/module"
+input = "fixtures/json-ietf-choice-case-transparency/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-choice-case-transparency/output.xml"
+json = "golden/json-ietf-choice-case-transparency/output.json"
+json_ietf = "golden/json-ietf-choice-case-transparency/output.json_ietf"
+
+[[case]]
+name = "json-ietf-presence-vs-nonpresence"
+module = "fixtures/json-ietf-presence-vs-nonpresence/module"
+input = "fixtures/json-ietf-presence-vs-nonpresence/input.xml"
+input-format = "xml"
+oracle = false
+[case.expected]
+json_ietf = "golden/json-ietf-presence-vs-nonpresence/output.json_ietf"
+
+[[case]]
+name = "json-ietf-instance-identifier-string"
+module = "fixtures/json-ietf-instance-identifier-string/module"
+input = "fixtures/json-ietf-instance-identifier-string/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-instance-identifier-string/output.xml"
+json = "golden/json-ietf-instance-identifier-string/output.json"
+json_ietf = "golden/json-ietf-instance-identifier-string/output.json_ietf"
+
+[[case]]
+name = "json-ietf-leafref-union-resolved-form"
+module = "fixtures/json-ietf-leafref-union-resolved-form/module"
+input = "fixtures/json-ietf-leafref-union-resolved-form/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-leafref-union-resolved-form/output.xml"
+json = "golden/json-ietf-leafref-union-resolved-form/output.json"
+json_ietf = "golden/json-ietf-leafref-union-resolved-form/output.json_ietf"
+
+[[case]]
+name = "json-ietf-anydata-anyxml-representation"
+module = "fixtures/json-ietf-anydata-anyxml-representation/module"
+input = "fixtures/json-ietf-anydata-anyxml-representation/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-anydata-anyxml-representation/output.xml"
+json = "golden/json-ietf-anydata-anyxml-representation/output.json"
+json_ietf = "golden/json-ietf-anydata-anyxml-representation/output.json_ietf"
+
+[[case]]
+name = "json-ietf-parse-roundtrip"
+module = "fixtures/json-ietf-parse-roundtrip/module"
+input = "fixtures/json-ietf-parse-roundtrip/input.json"
+input-format = "json"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-parse-roundtrip/output.xml"
+json = "golden/json-ietf-parse-roundtrip/output.json"
+json_ietf = "golden/json-ietf-parse-roundtrip/output.json_ietf"
+
+[[case]]
+name = "json-ietf-with-defaults-modes-explicit"
+module = "fixtures/json-ietf-with-defaults-modes/module"
+input = "fixtures/json-ietf-with-defaults-modes/input.xml"
+input-format = "xml"
+serialize-defaults = "explicit"
+oracle = true
+[case.expected]
+json_ietf = "golden/json-ietf-with-defaults-modes-explicit/output.json_ietf"
+
+[[case]]
+name = "json-ietf-with-defaults-modes-trim"
+module = "fixtures/json-ietf-with-defaults-modes/module"
+input = "fixtures/json-ietf-with-defaults-modes/input.xml"
+input-format = "xml"
+serialize-defaults = "trim"
+oracle = true
+[case.expected]
+json_ietf = "golden/json-ietf-with-defaults-modes-trim/output.json_ietf"
+
+[[case]]
+name = "json-ietf-with-defaults-modes-all"
+module = "fixtures/json-ietf-with-defaults-modes/module"
+input = "fixtures/json-ietf-with-defaults-modes/input.xml"
+input-format = "xml"
+serialize-defaults = "all"
+oracle = true
+[case.expected]
+json_ietf = "golden/json-ietf-with-defaults-modes-all/output.json_ietf"
+
+[[case]]
+name = "json-ietf-with-defaults-modes-all-tagged"
+module = "fixtures/json-ietf-with-defaults-modes/module"
+input = "fixtures/json-ietf-with-defaults-modes/input.xml"
+input-format = "xml"
+serialize-defaults = "all-tagged"
+oracle = true
+[case.expected]
+json_ietf = "golden/json-ietf-with-defaults-modes-all-tagged/output.json_ietf"
+
+[[case]]
+name = "json-ietf-cross-module-augment-deviation-when"
+module = "fixtures/json-ietf-cross-module-augment-deviation-when/module"
+input = "fixtures/json-ietf-cross-module-augment-deviation-when/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/json-ietf-cross-module-augment-deviation-when/output.xml"
+json = "golden/json-ietf-cross-module-augment-deviation-when/output.json"
+json_ietf = "golden/json-ietf-cross-module-augment-deviation-when/output.json_ietf"
+
+[[case]]
+name = "idents-keywords-rust"
+module = "fixtures/idents-keywords-rust/module"
+input = "fixtures/idents-keywords-rust/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-keywords-rust/output.xml"
+json = "golden/idents-keywords-rust/output.json"
+json_ietf = "golden/idents-keywords-rust/output.json_ietf"
+
+[[case]]
+name = "idents-keywords-go"
+module = "fixtures/idents-keywords-go/module"
+input = "fixtures/idents-keywords-go/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-keywords-go/output.xml"
+json = "golden/idents-keywords-go/output.json"
+json_ietf = "golden/idents-keywords-go/output.json_ietf"
+
+[[case]]
+name = "idents-collision-hyphen-underscore"
+module = "fixtures/idents-collision-hyphen-underscore/module"
+input = "fixtures/idents-collision-hyphen-underscore/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-collision-hyphen-underscore/output.xml"
+json = "golden/idents-collision-hyphen-underscore/output.json"
+json_ietf = "golden/idents-collision-hyphen-underscore/output.json_ietf"
+
+[[case]]
+name = "idents-enum-value-collision"
+module = "fixtures/idents-enum-value-collision/module"
+input = "fixtures/idents-enum-value-collision/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-enum-value-collision/output.xml"
+json = "golden/idents-enum-value-collision/output.json"
+json_ietf = "golden/idents-enum-value-collision/output.json_ietf"
+
+[[case]]
+name = "idents-container-leaf-collision"
+module = "fixtures/idents-container-leaf-collision/module"
+input = "fixtures/idents-container-leaf-collision/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-container-leaf-collision/output.xml"
+json = "golden/idents-container-leaf-collision/output.json"
+json_ietf = "golden/idents-container-leaf-collision/output.json_ietf"
+
+[[case]]
+name = "idents-long-name"
+module = "fixtures/idents-long-name/module"
+input = "fixtures/idents-long-name/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-long-name/output.xml"
+json = "golden/idents-long-name/output.json"
+json_ietf = "golden/idents-long-name/output.json_ietf"
+
+[[case]]
+name = "idents-unicode-mixed-case"
+module = "fixtures/idents-unicode-mixed-case/module"
+input = "fixtures/idents-unicode-mixed-case/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/idents-unicode-mixed-case/output.xml"
+json = "golden/idents-unicode-mixed-case/output.json"
+json_ietf = "golden/idents-unicode-mixed-case/output.json_ietf"
+
+[[case]]
+name = "metadata-yang-version-units"
+module = "fixtures/metadata-yang-version-units/module"
+input = "fixtures/metadata-yang-version-units/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/metadata-yang-version-units/output.xml"
+json = "golden/metadata-yang-version-units/output.json"
+json_ietf = "golden/metadata-yang-version-units/output.json_ietf"
+
+[[case]]
+name = "extension-definition-and-usage"
+module = "fixtures/extension-definition-and-usage/module"
+input = "fixtures/extension-definition-and-usage/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/extension-definition-and-usage/output.xml"
+json = "golden/extension-definition-and-usage/output.json"
+json_ietf = "golden/extension-definition-and-usage/output.json_ietf"
+
+[[case]]
+name = "extension-yin-element-modes"
+module = "fixtures/extension-yin-element-modes/module"
+input = "fixtures/extension-yin-element-modes/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/extension-yin-element-modes/output.xml"
+json = "golden/extension-yin-element-modes/output.json"
+json_ietf = "golden/extension-yin-element-modes/output.json_ietf"
+
+[[case]]
+name = "vendor-extension-junos-passthrough"
+module = "fixtures/vendor-extension-junos-passthrough/module"
+input = "fixtures/vendor-extension-junos-passthrough/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/vendor-extension-junos-passthrough/output.xml"
+json = "golden/vendor-extension-junos-passthrough/output.json"
+json_ietf = "golden/vendor-extension-junos-passthrough/output.json_ietf"
+
+[[case]]
+name = "extension-and-typedef-collision"
+module = "fixtures/extension-and-typedef-collision/module"
+input = "fixtures/extension-and-typedef-collision/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/extension-and-typedef-collision/output.xml"
+json = "golden/extension-and-typedef-collision/output.json"
+json_ietf = "golden/extension-and-typedef-collision/output.json_ietf"
+
+[[case]]
+name = "metadata-annotation-rfc7952"
+module = "fixtures/metadata-annotation-rfc7952/module"
+input = "fixtures/metadata-annotation-rfc7952/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/metadata-annotation-rfc7952/output.xml"
+json = "golden/metadata-annotation-rfc7952/output.json"
+json_ietf = "golden/metadata-annotation-rfc7952/output.json_ietf"
+
+[[case]]
+name = "rfc6991-inet-yang-types-roundtrip"
+module = "fixtures/rfc6991-inet-yang-types-roundtrip/module"
+input = "fixtures/rfc6991-inet-yang-types-roundtrip/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/rfc6991-inet-yang-types-roundtrip/output.xml"
+json = "golden/rfc6991-inet-yang-types-roundtrip/output.json"
+json_ietf = "golden/rfc6991-inet-yang-types-roundtrip/output.json_ietf"
+
+[[case]]
+name = "linkage-grouping-simple"
+module = "fixtures/linkage-grouping-simple/module"
+input = "fixtures/linkage-grouping-simple/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-grouping-simple/output.xml"
+json = "golden/linkage-grouping-simple/output.json"
+json_ietf = "golden/linkage-grouping-simple/output.json_ietf"
+
+[[case]]
+name = "linkage-grouping-nested-uses"
+module = "fixtures/linkage-grouping-nested-uses/module"
+input = "fixtures/linkage-grouping-nested-uses/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-grouping-nested-uses/output.xml"
+json = "golden/linkage-grouping-nested-uses/output.json"
+json_ietf = "golden/linkage-grouping-nested-uses/output.json_ietf"
+
+[[case]]
+name = "linkage-grouping-config-state"
+module = "fixtures/linkage-grouping-config-state/module"
+input = "fixtures/linkage-grouping-config-state/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-grouping-config-state/output.xml"
+json = "golden/linkage-grouping-config-state/output.json"
+json_ietf = "golden/linkage-grouping-config-state/output.json_ietf"
+
+[[case]]
+name = "linkage-grouping-cross-module"
+module = "fixtures/linkage-grouping-cross-module/module"
+input = "fixtures/linkage-grouping-cross-module/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-grouping-cross-module/output.xml"
+json = "golden/linkage-grouping-cross-module/output.json"
+json_ietf = "golden/linkage-grouping-cross-module/output.json_ietf"
+
+[[case]]
+name = "linkage-refine-mandatory-config"
+module = "fixtures/linkage-refine-mandatory-config/module"
+input = "fixtures/linkage-refine-mandatory-config/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-refine-mandatory-config/output.xml"
+json = "golden/linkage-refine-mandatory-config/output.json"
+json_ietf = "golden/linkage-refine-mandatory-config/output.json_ietf"
+
+[[case]]
+name = "linkage-refine-presence-must"
+module = "fixtures/linkage-refine-presence-must/module"
+input = "fixtures/linkage-refine-presence-must/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-refine-presence-must/output.xml"
+json = "golden/linkage-refine-presence-must/output.json"
+json_ietf = "golden/linkage-refine-presence-must/output.json_ietf"
+
+[[case]]
+name = "linkage-refine-min-max-iffeature"
+module = "fixtures/linkage-refine-min-max-iffeature/module"
+input = "fixtures/linkage-refine-min-max-iffeature/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-refine-min-max-iffeature/output.xml"
+json = "golden/linkage-refine-min-max-iffeature/output.json"
+json_ietf = "golden/linkage-refine-min-max-iffeature/output.json_ietf"
+
+[[case]]
+name = "linkage-augment-intra-module"
+module = "fixtures/linkage-augment-intra-module/module"
+input = "fixtures/linkage-augment-intra-module/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-augment-intra-module/output.xml"
+json = "golden/linkage-augment-intra-module/output.json"
+json_ietf = "golden/linkage-augment-intra-module/output.json_ietf"
+
+[[case]]
+name = "linkage-augment-container-leaf-list"
+module = "fixtures/linkage-augment-container-leaf-list/module"
+input = "fixtures/linkage-augment-container-leaf-list/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-augment-container-leaf-list/output.xml"
+json = "golden/linkage-augment-container-leaf-list/output.json"
+json_ietf = "golden/linkage-augment-container-leaf-list/output.json_ietf"
+
+[[case]]
+name = "linkage-augment-choice-case"
+module = "fixtures/linkage-augment-choice-case/module"
+input = "fixtures/linkage-augment-choice-case/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-augment-choice-case/output.xml"
+json = "golden/linkage-augment-choice-case/output.json"
+json_ietf = "golden/linkage-augment-choice-case/output.json_ietf"
+
+[[case]]
+name = "linkage-augment-nested"
+module = "fixtures/linkage-augment-nested/module"
+input = "fixtures/linkage-augment-nested/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-augment-nested/output.xml"
+json = "golden/linkage-augment-nested/output.json"
+json_ietf = "golden/linkage-augment-nested/output.json_ietf"
+
+[[case]]
+name = "linkage-augment-inter-module"
+module = "fixtures/linkage-augment-inter-module/module"
+input = "fixtures/linkage-augment-inter-module/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-augment-inter-module/output.xml"
+json = "golden/linkage-augment-inter-module/output.json"
+json_ietf = "golden/linkage-augment-inter-module/output.json_ietf"
+
+[[case]]
+name = "augment-cross-module-ident-collision"
+module = "fixtures/augment-cross-module-ident-collision/module"
+input = "fixtures/augment-cross-module-ident-collision/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/augment-cross-module-ident-collision/output.xml"
+json = "golden/augment-cross-module-ident-collision/output.json"
+json_ietf = "golden/augment-cross-module-ident-collision/output.json_ietf"
+
+[[case]]
+name = "augment-when-target-context"
+module = "fixtures/augment-when-target-context/module"
+input = "fixtures/augment-when-target-context/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/augment-when-target-context/output.xml"
+json = "golden/augment-when-target-context/output.json"
+json_ietf = "golden/augment-when-target-context/output.json_ietf"
+
+[[case]]
+name = "linkage-deviation-not-supported"
+module = "fixtures/linkage-deviation-not-supported/module"
+input = "fixtures/linkage-deviation-not-supported/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-deviation-not-supported/output.xml"
+json = "golden/linkage-deviation-not-supported/output.json"
+json_ietf = "golden/linkage-deviation-not-supported/output.json_ietf"
+
+[[case]]
+name = "linkage-deviation-replace-type"
+module = "fixtures/linkage-deviation-replace-type/module"
+input = "fixtures/linkage-deviation-replace-type/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-deviation-replace-type/output.xml"
+json = "golden/linkage-deviation-replace-type/output.json"
+json_ietf = "golden/linkage-deviation-replace-type/output.json_ietf"
+
+[[case]]
+name = "linkage-deviation-add"
+module = "fixtures/linkage-deviation-add/module"
+input = "fixtures/linkage-deviation-add/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-deviation-add/output.xml"
+json = "golden/linkage-deviation-add/output.json"
+json_ietf = "golden/linkage-deviation-add/output.json_ietf"
+
+[[case]]
+name = "linkage-deviation-multi"
+module = "fixtures/linkage-deviation-multi/module"
+input = "fixtures/linkage-deviation-multi/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-deviation-multi/output.xml"
+json = "golden/linkage-deviation-multi/output.json"
+json_ietf = "golden/linkage-deviation-multi/output.json_ietf"
+
+[[case]]
+name = "linkage-import-prefix"
+module = "fixtures/linkage-import-prefix/module"
+input = "fixtures/linkage-import-prefix/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-import-prefix/output.xml"
+json = "golden/linkage-import-prefix/output.json"
+json_ietf = "golden/linkage-import-prefix/output.json_ietf"
+
+[[case]]
+name = "linkage-import-revision-date"
+module = "fixtures/linkage-import-revision-date/module"
+input = "fixtures/linkage-import-revision-date/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-import-revision-date/output.xml"
+json = "golden/linkage-import-revision-date/output.json"
+json_ietf = "golden/linkage-import-revision-date/output.json_ietf"
+
+[[case]]
+name = "linkage-import-multiple"
+module = "fixtures/linkage-import-multiple/module"
+input = "fixtures/linkage-import-multiple/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-import-multiple/output.xml"
+json = "golden/linkage-import-multiple/output.json"
+json_ietf = "golden/linkage-import-multiple/output.json_ietf"
+
+[[case]]
+name = "linkage-submodule-simple"
+module = "fixtures/linkage-submodule-simple/module"
+input = "fixtures/linkage-submodule-simple/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-submodule-simple/output.xml"
+json = "golden/linkage-submodule-simple/output.json"
+json_ietf = "golden/linkage-submodule-simple/output.json_ietf"
+
+[[case]]
+name = "linkage-submodule-multi"
+module = "fixtures/linkage-submodule-multi/module"
+input = "fixtures/linkage-submodule-multi/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-submodule-multi/output.xml"
+json = "golden/linkage-submodule-multi/output.json"
+json_ietf = "golden/linkage-submodule-multi/output.json_ietf"
+
+[[case]]
+name = "linkage-submodule-imports-foreign"
+module = "fixtures/linkage-submodule-imports-foreign/module"
+input = "fixtures/linkage-submodule-imports-foreign/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/linkage-submodule-imports-foreign/output.xml"
+json = "golden/linkage-submodule-imports-foreign/output.json"
+json_ietf = "golden/linkage-submodule-imports-foreign/output.json_ietf"
+
+[[case]]
+name = "linkage-deviation-delete"
+module = "fixtures/linkage-deviation-delete/module"
+input = "fixtures/linkage-deviation-delete/input.xml"
+input-format = "xml"
+serialize-defaults = "all"
+oracle = true
+[case.expected]
+xml = "golden/linkage-deviation-delete/output.xml"
+json = "golden/linkage-deviation-delete/output.json"
+json_ietf = "golden/linkage-deviation-delete/output.json_ietf"
+
+[[case]]
+name = "linkage-refine-default"
+module = "fixtures/linkage-refine-default/module"
+input = "fixtures/linkage-refine-default/input.xml"
+input-format = "xml"
+serialize-defaults = "all"
+oracle = true
+[case.expected]
+xml = "golden/linkage-refine-default/output.xml"
+json = "golden/linkage-refine-default/output.json"
+json_ietf = "golden/linkage-refine-default/output.json_ietf"
+
+[[case]]
+name = "linkage-deviation-replace-default-config"
+module = "fixtures/linkage-deviation-replace-default-config/module"
+input = "fixtures/linkage-deviation-replace-default-config/input.xml"
+input-format = "xml"
+serialize-defaults = "all"
+oracle = true
+[case.expected]
+xml = "golden/linkage-deviation-replace-default-config/output.xml"
+json = "golden/linkage-deviation-replace-default-config/output.json"
+json_ietf = "golden/linkage-deviation-replace-default-config/output.json_ietf"
+
+[[case]]
+name = "rpc-input-only"
+module = "fixtures/rpc-input-only/module"
+input = "fixtures/rpc-input-only/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-input-only/output.xml"
+json = "golden/rpc-input-only/output.json"
+json_ietf = "golden/rpc-input-only/output.json_ietf"
+
+[[case]]
+name = "rpc-output-only"
+module = "fixtures/rpc-output-only/module"
+input = "fixtures/rpc-output-only/input.xml"
+input-format = "xml"
+op-type = "reply"
+oracle = true
+[case.expected]
+xml = "golden/rpc-output-only/output.xml"
+json = "golden/rpc-output-only/output.json"
+json_ietf = "golden/rpc-output-only/output.json_ietf"
+
+[[case]]
+name = "rpc-input-output-interleaved"
+module = "fixtures/rpc-input-output-interleaved/module"
+input = "fixtures/rpc-input-output-interleaved/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-input-output-interleaved/output.xml"
+json = "golden/rpc-input-output-interleaved/output.json"
+json_ietf = "golden/rpc-input-output-interleaved/output.json_ietf"
+
+[[case]]
+name = "rpc-io-heterogeneous-nodes"
+module = "fixtures/rpc-io-heterogeneous-nodes/module"
+input = "fixtures/rpc-io-heterogeneous-nodes/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-io-heterogeneous-nodes/output.xml"
+json = "golden/rpc-io-heterogeneous-nodes/output.json"
+json_ietf = "golden/rpc-io-heterogeneous-nodes/output.json_ietf"
+
+[[case]]
+name = "rpc-io-nested-containers"
+module = "fixtures/rpc-io-nested-containers/module"
+input = "fixtures/rpc-io-nested-containers/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-io-nested-containers/output.xml"
+json = "golden/rpc-io-nested-containers/output.json"
+json_ietf = "golden/rpc-io-nested-containers/output.json_ietf"
+
+[[case]]
+name = "rpc-io-with-anyxml"
+module = "fixtures/rpc-io-with-anyxml/module"
+input = "fixtures/rpc-io-with-anyxml/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-io-with-anyxml/output.xml"
+
+[[case]]
+name = "rpc-io-decimal64-numeric-types"
+module = "fixtures/rpc-io-decimal64-numeric-types/module"
+input = "fixtures/rpc-io-decimal64-numeric-types/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-io-decimal64-numeric-types/output.xml"
+json = "golden/rpc-io-decimal64-numeric-types/output.json"
+json_ietf = "golden/rpc-io-decimal64-numeric-types/output.json_ietf"
+
+[[case]]
+name = "action-container-simple"
+module = "fixtures/action-container-simple/module"
+input = "fixtures/action-container-simple/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/action-container-simple/output.xml"
+json = "golden/action-container-simple/output.json"
+json_ietf = "golden/action-container-simple/output.json_ietf"
+
+[[case]]
+name = "action-list-keys-context"
+module = "fixtures/action-list-keys-context/module"
+input = "fixtures/action-list-keys-context/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/action-list-keys-context/output.xml"
+json = "golden/action-list-keys-context/output.json"
+json_ietf = "golden/action-list-keys-context/output.json_ietf"
+
+[[case]]
+name = "action-nested-containers"
+module = "fixtures/action-nested-containers/module"
+input = "fixtures/action-nested-containers/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/action-nested-containers/output.xml"
+json = "golden/action-nested-containers/output.json"
+json_ietf = "golden/action-nested-containers/output.json_ietf"
+
+[[case]]
+name = "action-io-heterogeneous"
+module = "fixtures/action-io-heterogeneous/module"
+input = "fixtures/action-io-heterogeneous/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/action-io-heterogeneous/output.xml"
+json = "golden/action-io-heterogeneous/output.json"
+json_ietf = "golden/action-io-heterogeneous/output.json_ietf"
+
+[[case]]
+name = "action-container-wide-siblings"
+module = "fixtures/action-container-wide-siblings/module"
+input = "fixtures/action-container-wide-siblings/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/action-container-wide-siblings/output.xml"
+json = "golden/action-container-wide-siblings/output.json"
+json_ietf = "golden/action-container-wide-siblings/output.json_ietf"
+
+[[case]]
+name = "notification-top-level"
+module = "fixtures/notification-top-level/module"
+input = "fixtures/notification-top-level/input.xml"
+input-format = "xml"
+op-type = "notification"
+oracle = true
+[case.expected]
+xml = "golden/notification-top-level/output.xml"
+json = "golden/notification-top-level/output.json"
+json_ietf = "golden/notification-top-level/output.json_ietf"
+
+[[case]]
+name = "notification-nested-container"
+module = "fixtures/notification-nested-container/module"
+input = "fixtures/notification-nested-container/input.xml"
+input-format = "xml"
+op-type = "notification"
+oracle = true
+[case.expected]
+xml = "golden/notification-nested-container/output.xml"
+json = "golden/notification-nested-container/output.json"
+json_ietf = "golden/notification-nested-container/output.json_ietf"
+
+[[case]]
+name = "notification-nested-list"
+module = "fixtures/notification-nested-list/module"
+input = "fixtures/notification-nested-list/input.xml"
+input-format = "xml"
+op-type = "notification"
+oracle = true
+[case.expected]
+xml = "golden/notification-nested-list/output.xml"
+json = "golden/notification-nested-list/output.json"
+json_ietf = "golden/notification-nested-list/output.json_ietf"
+
+[[case]]
+name = "notification-with-container-leaflist"
+module = "fixtures/notification-with-container-leaflist/module"
+input = "fixtures/notification-with-container-leaflist/input.xml"
+input-format = "xml"
+op-type = "notification"
+oracle = true
+[case.expected]
+xml = "golden/notification-with-container-leaflist/output.xml"
+json = "golden/notification-with-container-leaflist/output.json"
+json_ietf = "golden/notification-with-container-leaflist/output.json_ietf"
+
+[[case]]
+name = "notification-interleaved-siblings"
+module = "fixtures/notification-interleaved-siblings/module"
+input = "fixtures/notification-interleaved-siblings/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/notification-interleaved-siblings/output.xml"
+json = "golden/notification-interleaved-siblings/output.json"
+json_ietf = "golden/notification-interleaved-siblings/output.json_ietf"
+
+[[case]]
+name = "rpc-action-notification-coexistence"
+module = "fixtures/rpc-action-notification-coexistence/module"
+input = "fixtures/rpc-action-notification-coexistence/input.xml"
+input-format = "xml"
+op-type = "rpc"
+oracle = true
+[case.expected]
+xml = "golden/rpc-action-notification-coexistence/output.xml"
+json = "golden/rpc-action-notification-coexistence/output.json"
+json_ietf = "golden/rpc-action-notification-coexistence/output.json_ietf"

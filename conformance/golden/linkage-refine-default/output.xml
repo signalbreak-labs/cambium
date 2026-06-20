@@ -1,0 +1,4 @@
+<ntp xmlns="urn:linkage-refine-default">
+  <alg>sha256</alg>
+  <key>secret</key>
+</ntp>

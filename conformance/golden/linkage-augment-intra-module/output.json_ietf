@@ -1,0 +1,11 @@
+{
+  "linkage-augment-intra-module:interfaces": {
+    "interface": [
+      {
+        "name": "eth0",
+        "type": "eth",
+        "speed": 1000
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "vendor-extension-junos-passthrough:config": {
+    "users": {
+      "user": [
+        {
+          "name": "admin",
+          "password": "hunter2"
+        }
+      ]
+    }
+  }
+}

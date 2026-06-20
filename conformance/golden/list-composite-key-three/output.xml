@@ -1,0 +1,7 @@
+<route xmlns="urn:list-composite-key-three">
+  <prefix>192.0.2.0/24</prefix>
+  <nexthop-ip>198.51.100.1</nexthop-ip>
+  <afi>ipv4</afi>
+  <preference>5</preference>
+  <metric>100</metric>
+</route>

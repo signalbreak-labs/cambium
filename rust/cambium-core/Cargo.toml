@@ -1,0 +1,23 @@
+[package]
+name = "cambium-core"
+description = "Safe, order-correct YANG tree core (no libyang types)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = ["bundled"]
+bundled = ["cambium-libyang-sys/bundled"]
+system = ["cambium-libyang-sys/system"]
+
+[dependencies]
+cambium-libyang-sys = { path = "../cambium-libyang-sys" }
+thiserror = "1.0"
+
+[dev-dependencies]
+trybuild = { version = "1.0", features = ["diff"] }
+
+[lints]
+workspace = true

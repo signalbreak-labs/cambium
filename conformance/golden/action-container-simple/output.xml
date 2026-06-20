@@ -1,0 +1,7 @@
+<device xmlns="urn:operations-action-container-simple">
+  <name>d1</name>
+  <restart>
+    <delay-seconds>5</delay-seconds>
+    <force>true</force>
+  </restart>
+</device>

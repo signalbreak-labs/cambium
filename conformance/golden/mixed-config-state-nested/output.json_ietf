@@ -1,0 +1,8 @@
+{
+  "mixed-config-state-nested:system": {
+    "hostname": "core",
+    "state": {
+      "uptime": "123456"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+<interfaces xmlns="urn:linkage-augment-inter-module-base" xmlns:liaim="urn:linkage-augment-inter-module">
+  <interface>
+    <liaim:speed>1000</liaim:speed>
+    <name>eth0</name>
+    <type>eth</type>
+  </interface>
+</interfaces>

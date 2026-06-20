@@ -1,0 +1,29 @@
+module linkage-deviation-replace-default-config-dev {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-replace-default-config-dev";
+  prefix ldrdd;
+
+  import linkage-deviation-replace-default-config-base {
+    prefix ldrdc;
+  }
+
+  revision 2026-06-15;
+
+  deviation "/ldrdc:system/ldrdc:mode" {
+    deviate replace {
+      default "enabled";
+    }
+  }
+
+  deviation "/ldrdc:system/ldrdc:ospf/ldrdc:router-id" {
+    deviate replace {
+      config false;
+    }
+  }
+
+  deviation "/ldrdc:system/ldrdc:ospf" {
+    deviate add {
+      must "../ldrdc:mode = 'enabled'";
+    }
+  }
+}

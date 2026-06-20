@@ -1,0 +1,16 @@
+module idents-collision-hyphen-underscore {
+  namespace "urn:idents-collision-hyphen-underscore";
+  prefix ichu;
+  revision 2026-06-15;
+
+  container top {
+    leaf foo-bar { type string; }
+    leaf foo_bar { type string; }
+    container baz-qux {
+      leaf enabled { type empty; }
+    }
+    container baz_qux {
+      leaf status { type string; }
+    }
+  }
+}

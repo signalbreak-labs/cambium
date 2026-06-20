@@ -1,0 +1,18 @@
+module choice-with-leaflist-branch {
+  yang-version 1;
+  namespace "urn:choice-with-leaflist-branch";
+  prefix cwlb;
+  revision 2026-06-14;
+
+  choice log-dest {
+    case file {
+      leaf-list paths {
+        ordered-by user;
+        type string;
+      }
+    }
+    case syslog {
+      leaf facility { type string; }
+    }
+  }
+}

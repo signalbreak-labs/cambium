@@ -1,0 +1,6 @@
+{
+  "types-int-int16-range:top": {
+    "i16-full": -32768,
+    "i16-range": -500
+  }
+}

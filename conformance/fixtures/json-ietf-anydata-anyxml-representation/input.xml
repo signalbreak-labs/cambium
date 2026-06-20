@@ -1,0 +1,18 @@
+<top xmlns="urn:json-ietf-anydata-anyxml-representation">
+  <config>
+    <metadata>
+      <custom>1</custom>
+      <custom>2</custom>
+      <custom>
+        <nested>true</nested>
+      </custom>
+    </metadata>
+  </config>
+  <payload>
+    <data>
+      <foo>
+        <bar>test</bar>
+      </foo>
+    </data>
+  </payload>
+</top>

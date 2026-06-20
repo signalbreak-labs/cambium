@@ -1,0 +1,9 @@
+<level1 xmlns="urn:container-nested-depth">
+  <a>top</a>
+  <level2>
+    <b>middle</b>
+    <level3>
+      <c>bottom</c>
+    </level3>
+  </level2>
+</level1>

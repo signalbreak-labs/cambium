@@ -1,0 +1,8 @@
+{
+  "types-uint-uint8-range:top": {
+    "u8-min": 0,
+    "u8-mid": 128,
+    "u8-max": 255,
+    "u8-dscp": 63
+  }
+}

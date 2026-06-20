@@ -1,0 +1,18 @@
+module types-instance-identifier-complex-path {
+  namespace "urn:types-instance-identifier-complex-path";
+  prefix typesinstanceidentifiercomplexpath;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  list vlan {
+    key "id name";
+    leaf id { type uint16; }
+    leaf name { type string; }
+    list member {
+      key port;
+      leaf port { type string; }
+    }
+  }
+  leaf selected-member { type instance-identifier; }
+}

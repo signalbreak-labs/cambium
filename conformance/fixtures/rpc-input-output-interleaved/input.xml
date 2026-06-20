@@ -1,0 +1,5 @@
+<configure-interface xmlns="urn:operations-rpc-input-output-interleaved">
+  <mtu>1500</mtu>
+  <name>eth0</name>
+  <mode>auto</mode>
+</configure-interface>

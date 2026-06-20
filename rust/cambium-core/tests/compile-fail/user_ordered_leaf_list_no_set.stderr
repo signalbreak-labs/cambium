@@ -1,0 +1,11 @@
+error[E0599]: no method named `set` found for struct `UserOrderedLeafList<'a, 'ctx>` in the current scope
+ --> tests/compile-fail/user_ordered_leaf_list_no_set.rs:7:10
+  |
+7 |     list.set("x");
+  |          ^^^
+  |
+help: there is a method `get` with a similar name
+  |
+7 -     list.set("x");
+7 +     list.get("x");
+  |

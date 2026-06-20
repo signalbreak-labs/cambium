@@ -1,0 +1,21 @@
+module ordered-user-demo {
+  namespace "urn:ordered-user-demo";
+  prefix oud;
+
+  revision 2026-06-13;
+
+  container config {
+    list entry {
+      ordered-by user;
+      key "name";
+
+      leaf name {
+        type string;
+      }
+
+      leaf value {
+        type string;
+      }
+    }
+  }
+}

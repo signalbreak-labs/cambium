@@ -1,0 +1,24 @@
+Cambium vendored third-party software
+
+This project includes the following third-party components, vendored under
+`third_party/` and statically linked by default.
+
+## libyang
+
+- Location: `third_party/libyang`
+- Upstream: https://github.com/CESNET/libyang
+- License: BSD-3-Clause
+- Copyright: CESNET, 2015-2025
+
+libyang is the RFC 7950 YANG engine used by Cambium. The pinned version is
+recorded in `/VERSIONS`.
+
+## PCRE2
+
+- Location: `third_party/pcre2`
+- Upstream: https://github.com/PCRE2Project/pcre2
+- License: BSD-2-Clause (with JIT compilation support under the same terms)
+- Copyright: University of Cambridge, 1997-2024; Zoltan Herczeg, 2010-2024
+
+PCRE2 is the regular-expression engine required by libyang. The pinned version
+is recorded in `/VERSIONS`.

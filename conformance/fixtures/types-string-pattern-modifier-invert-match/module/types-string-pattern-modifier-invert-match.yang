@@ -1,0 +1,9 @@
+module types-string-pattern-modifier-invert-match {
+  namespace "urn:types-string-pattern-modifier-invert-match";
+  prefix typesstringpatternmodifierinvertmatch;
+
+  yang-version 1.1;
+  revision 2026-06-14;
+
+  leaf name { type string { pattern '[a-z]+' { modifier invert-match; } } }
+}

@@ -1,0 +1,4 @@
+submodule shared-types {
+  belongs-to main { prefix tdsccf; }
+  typedef shared-decimal { type decimal64 { fraction-digits 3; } }
+}

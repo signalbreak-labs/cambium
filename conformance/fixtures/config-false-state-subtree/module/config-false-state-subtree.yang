@@ -1,0 +1,12 @@
+module config-false-state-subtree {
+  yang-version 1;
+  namespace "urn:config-false-state-subtree";
+  prefix cfs;
+  revision 2026-06-14;
+
+  container system {
+    config false;
+    leaf uptime { type uint64; }
+    leaf load-avg { type string; }
+  }
+}

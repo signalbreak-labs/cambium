@@ -1,0 +1,12 @@
+module schema-import-user {
+  namespace "urn:cambium:schema-import-user";
+  prefix siu;
+  yang-version 1.1;
+
+  import schema-import-target {
+    prefix tgt;
+    revision-date 2026-06-16;
+  }
+
+  leaf ref { type identityref { base tgt:imported-base; } }
+}

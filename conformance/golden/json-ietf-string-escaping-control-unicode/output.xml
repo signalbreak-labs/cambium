@@ -1,0 +1,9 @@
+<top xmlns="urn:json-ietf-string-escaping-control-unicode">
+  <with-control>line1
+line2	end</with-control>
+  <with-quote>say "hello"</with-quote>
+  <with-backslash>C:\path</with-backslash>
+  <french>café</french>
+  <emoji>🚀</emoji>
+  <greek>αβγ</greek>
+</top>

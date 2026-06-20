@@ -1,0 +1,7 @@
+{
+  "operations-rpc-input-output-interleaved:configure-interface": {
+    "name": "eth0",
+    "mode": "auto",
+    "mtu": 1500
+  }
+}

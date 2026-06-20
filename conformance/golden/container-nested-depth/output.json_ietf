@@ -1,0 +1,11 @@
+{
+  "container-nested-depth:level1": {
+    "a": "top",
+    "level2": {
+      "b": "middle",
+      "level3": {
+        "c": "bottom"
+      }
+    }
+  }
+}

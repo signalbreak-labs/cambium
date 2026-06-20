@@ -1,0 +1,15 @@
+module ietf-yang-metadata {
+  yang-version 1.1;
+  namespace "urn:ietf:params:xml:ns:yang:ietf-yang-metadata";
+  prefix md;
+  revision 2016-08-05 {
+    description "Initial revision";
+    reference "RFC 7952";
+  }
+
+  extension annotation {
+    argument name {
+      yin-element true;
+    }
+  }
+}

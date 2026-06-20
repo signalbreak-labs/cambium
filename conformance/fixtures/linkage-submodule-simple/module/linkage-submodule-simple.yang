@@ -1,0 +1,13 @@
+module linkage-submodule-simple {
+  yang-version 1.1;
+  namespace "urn:linkage-submodule-simple";
+  prefix lss;
+
+  include linkage-submodule-simple-auth;
+
+  revision 2026-06-15;
+
+  container aaa {
+    uses auth-params;
+  }
+}

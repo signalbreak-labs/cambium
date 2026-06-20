@@ -1,0 +1,3 @@
+<paths xmlns="urn:choice-with-leaflist-branch">/var/log/p3</paths>
+<paths xmlns="urn:choice-with-leaflist-branch">/var/log/p1</paths>
+<paths xmlns="urn:choice-with-leaflist-branch">/var/log/p2</paths>

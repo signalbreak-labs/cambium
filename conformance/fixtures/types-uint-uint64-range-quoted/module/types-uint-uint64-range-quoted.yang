@@ -1,0 +1,9 @@
+module types-uint-uint64-range-quoted {
+  namespace "urn:types-uint-uint64-range-quoted";
+  prefix typesuintuint64rangequoted;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf bytes-sent { type uint64; }
+}

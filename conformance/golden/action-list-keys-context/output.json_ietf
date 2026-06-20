@@ -1,0 +1,11 @@
+{
+  "operations-action-list-keys-context:service": [
+    {
+      "name": "svc1",
+      "reset": {
+        "reset-type": "soft",
+        "preserve-state": true
+      }
+    }
+  ]
+}

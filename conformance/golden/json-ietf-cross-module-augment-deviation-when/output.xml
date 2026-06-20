@@ -1,0 +1,11 @@
+<interfaces xmlns="urn:json-ietf-cross-module-base">
+  <interface>
+    <name>eth0</name>
+    <counter>500</counter>
+    <custom-field xmlns="urn:json-ietf-cross-module-aug">abc</custom-field>
+  </interface>
+</interfaces>
+<system xmlns="urn:json-ietf-cross-module-base">
+  <mode>basic</mode>
+  <secret>shh</secret>
+</system>

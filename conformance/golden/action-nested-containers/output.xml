@@ -1,0 +1,10 @@
+<system xmlns="urn:operations-action-nested-containers">
+  <management>
+    <enabled>true</enabled>
+    <retention-days>30</retention-days>
+    <audit-log>
+      <duration-hours>24</duration-hours>
+      <format>json</format>
+    </audit-log>
+  </management>
+</system>

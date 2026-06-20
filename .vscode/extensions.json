@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    "golang.go",
+    "tamasfe.even-better-toml",
+    "editorconfig.editorconfig"
+  ]
+}

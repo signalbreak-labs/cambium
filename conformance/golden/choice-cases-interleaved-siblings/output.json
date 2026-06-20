@@ -1,0 +1,7 @@
+{
+  "choice-cases-interleaved-siblings:rule": {
+    "id": "r1",
+    "priority": 10,
+    "description": "allow"
+  }
+}

@@ -1,0 +1,9 @@
+module types-uint-uint32-range-multi {
+  namespace "urn:types-uint-uint32-range-multi";
+  prefix typesuintuint32rangemulti;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf as-number { type uint32 { range "1..4199999999"; } }
+}

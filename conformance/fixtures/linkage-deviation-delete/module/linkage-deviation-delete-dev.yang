@@ -1,0 +1,17 @@
+module linkage-deviation-delete-dev {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-delete-dev";
+  prefix lddd;
+
+  import linkage-deviation-delete-base {
+    prefix lddb;
+  }
+
+  revision 2026-06-15;
+
+  deviation "/lddb:c/lddb:flag" {
+    deviate delete {
+      default true;
+    }
+  }
+}

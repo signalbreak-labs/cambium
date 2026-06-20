@@ -1,0 +1,25 @@
+module linkage-augment-intra-module {
+  yang-version 1.1;
+  namespace "urn:linkage-augment-intra-module";
+  prefix laim;
+  revision 2026-06-15;
+
+  container interfaces {
+    list interface {
+      key "name";
+      leaf name {
+        type string;
+      }
+      leaf type {
+        type string;
+      }
+    }
+  }
+
+  augment "/laim:interfaces/laim:interface" {
+    when "type = 'eth'";
+    leaf speed {
+      type uint32;
+    }
+  }
+}

@@ -1,0 +1,4 @@
+<config xmlns="urn:linkage-augment-choice-case">
+  <udp-port>5000</udp-port>
+  <timeout>30</timeout>
+</config>

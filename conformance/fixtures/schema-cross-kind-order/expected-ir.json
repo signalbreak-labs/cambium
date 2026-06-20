@@ -1,0 +1,10 @@
+{
+  "module": "schema-cross-kind-order",
+  "children": {
+    "/schema-cross-kind-order/root": ["a", "b", "c", "g1", "g2", "d", "e"],
+    "/schema-cross-kind-order/root/e": ["one"]
+  },
+  "keys": {
+    "/schema-cross-kind-order/root/d": ["name"]
+  }
+}

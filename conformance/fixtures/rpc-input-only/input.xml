@@ -1,0 +1,5 @@
+<request-status xmlns="urn:operations-rpc-input-only">
+  <check-type>icmp</check-type>
+  <timeout>30</timeout>
+  <interface-name>eth0</interface-name>
+</request-status>

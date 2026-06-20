@@ -1,0 +1,10 @@
+{
+  "types-leafref-current-context:proto": [
+    {
+      "name": "ospf",
+      "state": "up"
+    }
+  ],
+  "types-leafref-current-context:proto-name": "ospf",
+  "types-leafref-current-context:selected": "ospf"
+}

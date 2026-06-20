@@ -1,0 +1,10 @@
+{
+  "types-leafref-relative-parent-path:iface": [
+    {
+      "name": "eth0",
+      "config": {
+        "route-id": "eth0"
+      }
+    }
+  ]
+}

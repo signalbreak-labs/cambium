@@ -1,0 +1,11 @@
+{
+  "operations-action-container-wide-siblings:config": {
+    "setting-a": "a",
+    "setting-b": "b",
+    "setting-c": "c",
+    "setting-d": "d",
+    "validate": {
+      "strict-mode": true
+    }
+  }
+}

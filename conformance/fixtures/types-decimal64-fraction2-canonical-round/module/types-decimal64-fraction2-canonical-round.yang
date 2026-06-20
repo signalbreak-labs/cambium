@@ -1,0 +1,9 @@
+module types-decimal64-fraction2-canonical-round {
+  namespace "urn:types-decimal64-fraction2-canonical-round";
+  prefix typesdecimal64fraction2canonicalround;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf rate { type decimal64 { fraction-digits 2; } }
+}

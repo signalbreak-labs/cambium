@@ -1,0 +1,12 @@
+module types-range-length-min-max-keywords {
+  namespace "urn:types-range-length-min-max-keywords";
+  prefix typesrangelengthminmaxkeywords;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf code { type int32 { range "min..-1 | 1..max"; } }
+    leaf label { type string { length "min..max"; } }
+  }
+}

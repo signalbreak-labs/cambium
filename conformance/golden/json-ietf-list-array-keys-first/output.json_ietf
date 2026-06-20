@@ -1,0 +1,11 @@
+{
+  "json-ietf-list-array-keys-first:top": {
+    "interface": [
+      {
+        "name": "eth0",
+        "protocol": "ip",
+        "mtu": 1500
+      }
+    ]
+  }
+}

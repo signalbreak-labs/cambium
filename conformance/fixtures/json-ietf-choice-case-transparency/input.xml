@@ -1,0 +1,5 @@
+<top xmlns="urn:json-ietf-choice-case-transparency">
+  <priority>7</priority>
+  <reason>policy</reason>
+  <local-level>3</local-level>
+</top>

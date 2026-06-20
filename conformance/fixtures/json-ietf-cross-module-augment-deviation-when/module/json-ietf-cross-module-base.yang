@@ -1,0 +1,26 @@
+module json-ietf-cross-module-base {
+  yang-version 1.1;
+  namespace "urn:json-ietf-cross-module-base";
+  prefix jicmb;
+
+  include json-ietf-cross-module-base-types;
+
+  revision 2026-06-15;
+
+  container interfaces {
+    list interface {
+      key name;
+      leaf name { type string; }
+      leaf counter { type uint64; }
+    }
+  }
+
+  container system {
+    leaf mode { type string; }
+    leaf debug {
+      when "../mode = 'advanced'";
+      type string;
+    }
+    uses secret-group;
+  }
+}

@@ -1,0 +1,11 @@
+module types-typedef-restriction-narrowing {
+  namespace "urn:types-typedef-restriction-narrowing";
+  prefix typestypedefrestrictionnarrowing;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  typedef port-base { type uint16; }
+  typedef ssh-port { type port-base { range "1..1024"; } }
+  leaf ssh { type ssh-port; }
+}

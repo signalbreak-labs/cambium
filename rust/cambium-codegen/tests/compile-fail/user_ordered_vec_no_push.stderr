@@ -1,0 +1,15 @@
+error[E0599]: no method named `push` found for struct `UserOrderedVec<T>` in the current scope
+ --> tests/compile-fail/user_ordered_vec_no_push.rs:7:19
+  |
+7 |     top.statement.push(Default::default());
+  |                   ^^^^ method not found in `UserOrderedVec<OrderingNestedUserCascadingTopStatementEntry>`
+  |
+ ::: tests/compile-fail/_generated_user_ordered_vec.rs
+  |
+  | pub struct UserOrderedVec<T> {
+  | ---------------------------- method `push` not found for this struct
+  |
+help: one of the expressions' fields has a method of the same name
+  |
+7 |     top.statement.items.push(Default::default());
+  |                   ++++++

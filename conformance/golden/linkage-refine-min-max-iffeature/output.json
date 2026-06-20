@@ -1,0 +1,11 @@
+{
+  "linkage-refine-min-max-iffeature:policy": {
+    "tags": [
+      "a",
+      "b"
+    ]
+  },
+  "linkage-refine-min-max-iffeature:service": {
+    "mode": "auto"
+  }
+}

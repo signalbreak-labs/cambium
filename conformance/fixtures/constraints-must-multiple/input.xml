@@ -1,0 +1,5 @@
+<network xmlns="urn:constraints-must-multiple">
+  <mtu>1500</mtu>
+  <payload>1000</payload>
+  <qos>best-effort</qos>
+</network>

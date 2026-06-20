@@ -1,0 +1,14 @@
+module linkage-deviation-delete-base {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-delete-base";
+  prefix lddb;
+  revision 2026-06-15;
+
+  container c {
+    presence "enable c";
+    leaf flag {
+      type boolean;
+      default true;
+    }
+  }
+}

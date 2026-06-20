@@ -1,0 +1,15 @@
+module linkage-import-prefix {
+  yang-version 1.1;
+  namespace "urn:linkage-import-prefix";
+  prefix lipp;
+
+  import linkage-import-prefix-base {
+    prefix remote;
+  }
+
+  revision 2026-06-15;
+
+  leaf port {
+    type remote:port-number;
+  }
+}

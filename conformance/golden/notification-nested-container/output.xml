@@ -1,0 +1,9 @@
+<system xmlns="urn:operations-notification-nested-container">
+  <hostname>core-1</hostname>
+  <error-alarm>
+    <severity>critical</severity>
+    <error-code>42</error-code>
+    <description>overheating</description>
+    <timestamp>2026-06-15T12:00:00Z</timestamp>
+  </error-alarm>
+</system>

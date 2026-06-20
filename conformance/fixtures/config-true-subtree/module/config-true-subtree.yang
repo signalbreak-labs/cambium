@@ -1,0 +1,12 @@
+module config-true-subtree {
+  yang-version 1;
+  namespace "urn:config-true-subtree";
+  prefix cts;
+  revision 2026-06-14;
+
+  container settings {
+    config true;
+    leaf hostname { type string; }
+    leaf debug-level { type uint8; }
+  }
+}

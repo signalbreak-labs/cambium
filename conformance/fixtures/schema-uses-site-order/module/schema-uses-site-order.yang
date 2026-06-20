@@ -1,0 +1,16 @@
+module schema-uses-site-order {
+  namespace "urn:cambium:schema-uses-site-order";
+  prefix suso;
+  yang-version 1.1;
+
+  grouping common {
+    leaf g1 { type string; }
+    leaf g2 { type string; }
+  }
+
+  container root {
+    leaf before { type string; }
+    uses common;
+    leaf after { type string; }
+  }
+}

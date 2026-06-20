@@ -1,0 +1,8 @@
+{
+  "module": "schema-identity-derived",
+  "load": ["schema-identity-derived"],
+  "identityDerived": {
+    "schema-identity-base:base": ["mid", "leaf"],
+    "schema-identity-derived:mid": ["leaf"]
+  }
+}

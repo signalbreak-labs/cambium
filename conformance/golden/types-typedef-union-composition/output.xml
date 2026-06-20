@@ -1,0 +1,4 @@
+<top xmlns="urn:types-typedef-union-composition">
+  <server>example.com</server>
+  <mode>tcp</mode>
+</top>

@@ -1,0 +1,9 @@
+{
+  "operations-action-container-simple:device": {
+    "name": "d1",
+    "restart": {
+      "delay-seconds": 5,
+      "force": true
+    }
+  }
+}

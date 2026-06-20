@@ -1,0 +1,20 @@
+[package]
+name = "cambium"
+description = "Modern, order-correct YANG toolkit (Rust) — libyang-backed."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "../../README.md"
+
+[features]
+default = ["bundled"]
+bundled = ["cambium-core/bundled"]
+system = ["cambium-core/system"]
+
+[dependencies]
+cambium-core = { path = "../cambium-core", version = "0.0.0" }
+
+[package.metadata.docs.rs]
+features = ["bundled"]

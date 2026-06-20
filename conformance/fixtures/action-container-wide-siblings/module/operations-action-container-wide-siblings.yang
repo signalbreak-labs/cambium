@@ -1,0 +1,36 @@
+module operations-action-container-wide-siblings {
+  yang-version 1.1;
+  namespace "urn:operations-action-container-wide-siblings";
+  prefix oroacws;
+  revision 2026-06-15;
+
+  container config {
+    leaf setting-a {
+      type string;
+    }
+    leaf setting-b {
+      type string;
+    }
+    action validate {
+      input {
+        leaf strict-mode {
+          type boolean;
+        }
+      }
+      output {
+        leaf is-valid {
+          type boolean;
+        }
+        leaf errors {
+          type string;
+        }
+      }
+    }
+    leaf setting-c {
+      type string;
+    }
+    leaf setting-d {
+      type string;
+    }
+  }
+}

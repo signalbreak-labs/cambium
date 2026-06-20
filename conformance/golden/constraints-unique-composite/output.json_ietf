@@ -1,0 +1,30 @@
+{
+  "constraints-unique-composite:policy": [
+    {
+      "id": 1,
+      "name": "allow",
+      "priority": 10,
+      "rules": {
+        "rule": [
+          {
+            "rule-id": 100,
+            "src-ip": "10.0.0.0/8"
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name": "deny",
+      "priority": 20,
+      "rules": {
+        "rule": [
+          {
+            "rule-id": 200,
+            "src-ip": "192.168.0.0/16"
+          }
+        ]
+      }
+    }
+  ]
+}

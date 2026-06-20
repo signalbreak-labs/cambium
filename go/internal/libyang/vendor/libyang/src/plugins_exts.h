@@ -1,0 +1,1135 @@
+/**
+ * @file plugins_exts.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief libyang support for YANG extensions implementation.
+ *
+ * Copyright (c) 2015 - 2026 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
+#ifndef LY_PLUGINS_EXTS_H_
+#define LY_PLUGINS_EXTS_H_
+
+#include "log.h"
+#include "parser_data.h"
+#include "plugins.h"
+#include "tree_data.h"
+#include "tree_edit.h"
+#include "tree_schema.h"
+
+struct ly_ctx;
+struct ly_in;
+struct lyd_node;
+struct lysc_ctx;
+struct lysc_ext_substmt;
+struct lysp_ctx;
+struct lyspr_ctx;
+struct lyspr_tree_ctx;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/**
+ * @page howtoPluginsExtensions Extension Plugins
+ *
+ * Note that the part of the libyang API here is available only by including a separated `<libyang/plugins_exts.h>` header
+ * file. Also note that the extension plugins API is versioned separately from libyang itself, so backward incompatible
+ * changes can come even without changing libyang major version.
+ *
+ * YANG extensions are very complex. Usually only its description specifies how it is supposed to behave, what are the
+ * allowed substatements, their cardinality or if the standard YANG statements placed inside the extension differs somehow
+ * in their meaning or behavior. libyang provides the Extension plugins API to implement such extensions and add its support
+ * into libyang itself. However we tried our best, the API is not (and it cannot be) so universal and complete to cover all
+ * possibilities. There are definitely use cases which cannot be simply implemented only with this API.
+ *
+ * libyang implements 3 important extensions: [NACM](https://tools.ietf.org/html/rfc8341), [Metadata](@ref howtoDataMetadata)
+ * and [yang-data](@ref howtoDataYangdata). Despite the core implementation in all three cases is done via extension plugin
+ * API, also other parts of the libyang code had to be extended to cover complete scope of the extensions.
+ *
+ * We believe, that the API is capable to allow implementation of very wide range of YANG extensions. However, if you see
+ * limitations for the particular YANG extension, don't hesitate to contact the project developers to discuss all the
+ * options, including updating the API.
+ *
+ * The plugin's functionality is provided to libyang via a set of callbacks specified as an array of ::lyplg_ext_record
+ * structures using the ::LYPLG_EXTENSIONS macro.
+ *
+ * The most important callbacks are ::lyplg_ext.parse and ::lyplg_ext.compile. They are responsible for parsing and
+ * compiling extension instance. This should include validating all the substatements, their values, or placement of
+ * the extension instance itself. If needed, the processed data can be stored in some form into the compiled schema
+ * representation of the extension instance. To make this task as easy as possible, libyang provides several
+ * [parsing](@ref pluginsExtensionsParse) and [compilation](@ref pluginsExtensionsCompile) helper functions to process
+ * known YANG statements exactly as if they were standard YANG statements.
+ *
+ * The data validation callback ::lyplg_ext.validate is used for additional validation of a data nodes that contains the
+ * connected extension instance directly (as a substatement) or indirectly in case of terminal nodes via their type (no
+ * matter if the extension instance is placed directly in the leaf's/leaf-list's type or in the type of the referenced
+ * typedef).
+ *
+ * The ::lyplg_ext.printer_info callback implement printing the compiled extension instance data when the schema (module) is
+ * being printed in the ::LYS_OUT_YANG_COMPILED (info) format. As for compile callback, there are also
+ * [helper functions](@ref pluginsExtensionsSprinterInfo) to access printer's context and to print standard YANG statements
+ * placed in the extension instance by libyang itself.
+ *
+ * The last callback, ::lyplg_ext.cfree, is supposed to free all the data allocated by the ::lyplg_ext.compile callback.
+ * To free the data created by helper function ::lyplg_ext_compile_extension_instance(), the plugin can used
+ * ::lyplg_ext_cfree_instance_substatements().
+ *
+ * The plugin information contains also the plugin identifier (::lyplg_type.id). This string can serve to identify the
+ * specific plugin responsible to storing data value. In case the user can recognize the id string, it can access the
+ * plugin specific data with the appropriate knowledge of its structure.
+ *
+ * Logging information from an extension plugin is possible via ::lyplg_ext_parse_log() and ::lyplg_ext_compile_log() functions.
+ */
+
+/**
+ * @defgroup pluginsExtensions Plugins: Extensions
+ *
+ * Structures and functions to for libyang plugins implementing specific YANG extensions defined in YANG modules. For more
+ * information, see @ref howtoPluginsTypes.
+ *
+ * This part of libyang API is available by including `<libyang/plugins_ext.h>` header file.
+ *
+ * @{
+ */
+
+/**
+ * @brief Extensions API version
+ */
+#define LYPLG_EXT_API_VERSION 12
+
+/**
+ * @brief Mask for an operation statement.
+ *
+ * This mask matches action and RPC.
+ */
+#define LY_STMT_OP_MASK (LY_STMT_ACTION | LY_STMT_RPC)
+
+/**
+ * @brief Mask for a data node statement.
+ *
+ * This mask matches anydata, anyxml, case, choice, container, leaf, leaf-list, and list.
+ */
+#define LY_STMT_DATA_NODE_MASK (LY_STMT_ANYDATA | LY_STMT_ANYXML | LY_STMT_CASE | LY_STMT_CHOICE | LY_STMT_CONTAINER |\
+        LY_STMT_LEAF | LY_STMT_LEAF_LIST | LY_STMT_LIST)
+
+/**
+ * @brief Mask for a node statement.
+ *
+ * This mask matches notification, input, output, action, RPC, anydata, anyxml, augment, case, choice, container,
+ * grouping, leaf, leaf-list, list, and uses.
+ */
+#define LY_STMT_NODE_MASK 0xFFFF
+
+/**
+ * @brief List of YANG statements
+ *
+ * Their description mentions what types are stored for each statement. Note that extension instance storage
+ * always stores a pointer to the type, not the type itself.
+ */
+enum ly_stmt {
+    LY_STMT_NONE = 0,
+
+    LY_STMT_NOTIFICATION = 0x0001,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_notif *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_notif *` */
+    LY_STMT_INPUT = 0x0002,     /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_action_inout *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_action_inout *` */
+    LY_STMT_OUTPUT = 0x0004,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_action_inout *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_action_inout *` */
+    LY_STMT_ACTION = 0x0008,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_action *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_action *` */
+    LY_STMT_RPC = 0x0010,       /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_action *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_action *` */
+    LY_STMT_ANYDATA = 0x0020,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_anydata *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_anydata *` */
+    LY_STMT_ANYXML = 0x0040,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_anydata *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_anydata *` */
+    LY_STMT_AUGMENT = 0x0080,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_augment *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_CASE = 0x0100,      /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_case *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_case *` */
+    LY_STMT_CHOICE = 0x0200,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_choice *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_choice *` */
+    LY_STMT_CONTAINER = 0x0400, /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_container *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_container *` */
+    LY_STMT_GROUPING = 0x0800,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_grp *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_LEAF = 0x1000,      /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_leaf *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_leaf *` */
+    LY_STMT_LEAF_LIST = 0x2000, /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_leaflist *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_leaflist *` */
+    LY_STMT_LIST = 0x4000,      /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_list *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node_list *` */
+    LY_STMT_USES = 0x8000,      /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_node_uses *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_node *` */
+
+    LY_STMT_ARGUMENT = 0x10000, /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_ext *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_ext *` */
+    LY_STMT_BASE = 0x20000,     /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char **`[]
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_ident *` */
+    LY_STMT_BELONGS_TO = 0x30000,   /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_submodule *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_BIT = 0x40000,      /**< ::lysp_ext_substmt.storage - `struct lysp_type_enum *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_type_enum *`
+                                     ::lysc_ext_substmt.storage - `struct lysc_type_bitenum_item *`[]
+                                     ::lysc_ext_instance.parent - `struct lysc_type_bitenum_item *` */
+    LY_STMT_CONFIG = 0x50000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `uint16_t *`
+                                     ::lysc_ext_substmt.storage - `uint16_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_CONTACT = 0x60000,  /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_(sub)module *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_DEFAULT = 0x70000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_qname *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_node *`, `struct lysc_type *` (typedef) */
+    LY_STMT_DESCRIPTION = 0x80000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - compiled parent statement */
+    LY_STMT_DEVIATE = 0x90000,  /**< ::lysp_ext_substmt.storage - `struct lysp_deviate *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_deviate *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - not compiled */
+    LY_STMT_DEVIATION = 0xA0000,    /**< ::lysp_ext_substmt.storage - `struct lysp_deviation *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_deviation *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_ENUM = 0xB0000,     /**< ::lysp_ext_substmt.storage - `struct lysp_type_enum *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_type_enum *`
+                                     ::lysc_ext_substmt.storage - `struct lysc_type_bitenum_item *`[]
+                                     ::lysc_ext_instance.parent - `struct lysc_type_bitenum_item *` */
+    LY_STMT_ERROR_APP_TAG = 0xC0000,    /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - compiled restriction structure */
+    LY_STMT_ERROR_MESSAGE = 0xD0000,    /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - compiled restriction structure */
+    LY_STMT_EXTENSION = 0xE0000,    /**< ::lysp_ext_substmt.storage - `struct lysp_ext *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_ext *`
+                                     ::lysc_ext_substmt.storage - not compiled explicitly
+                                     ::lysc_ext_instance.parent - `struct lysc_ext *` */
+    LY_STMT_EXTENSION_INSTANCE = 0xF0000,   /**< ::lysp_ext_substmt.storage - `struct lysp_ext_instance *`[]
+                                     ::lysc_ext_substmt.storage - `struct lysc_ext_instance *`[] */
+    LY_STMT_FEATURE = 0x100000, /**< ::lysp_ext_substmt.storage - `struct lysp_feature *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_feature *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - not compiled */
+    LY_STMT_FRACTION_DIGITS = 0x110000, /**< ::lysp_ext_substmt.storage - `uint8_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_type *`
+                                     ::lysc_ext_substmt.storage - `uint8_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_type *` */
+    LY_STMT_IDENTITY = 0x120000,    /**< ::lysp_ext_substmt.storage - `struct lysp_ident *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_ident *`
+                                     ::lysc_ext_substmt.storage - `struct lysc_ident *`[]
+                                     ::lysc_ext_instance.parent - `struct lysc_ident *` */
+    LY_STMT_IF_FEATURE = 0x130000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_qname *`[]
+                                     ::lysc_ext_substmt.storage - no storage, evaluated when compiled
+                                     ::lysc_ext_instance.parent - compiled parent statement */
+    LY_STMT_IMPORT = 0x140000,  /**< ::lysp_ext_substmt.storage - `struct lysp_import *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_import *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - not compiled */
+    LY_STMT_INCLUDE = 0x150000, /**< ::lysp_ext_substmt.storage - `struct lysp_include *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_include *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - not compiled */
+    LY_STMT_KEY = 0x160000,     /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_node_list *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node_list *` */
+    LY_STMT_LENGTH = 0x170000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_range *` */
+    LY_STMT_MANDATORY = 0x180000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `uint16_t *`
+                                     ::lysc_ext_substmt.storage - `uint16_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_MAX_ELEMENTS = 0x190000,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `uint32_t *`
+                                     ::lysc_ext_substmt.storage - `uint32_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node_list *` */
+    LY_STMT_MIN_ELEMENTS = 0x1A0000,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `uint32_t *`
+                                     ::lysc_ext_substmt.storage - `uint32_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node_list *` */
+    LY_STMT_MODIFIER = 0x1B0000,    /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_pattern *` */
+    LY_STMT_MODULE = 0x1C0000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_module *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_MUST = 0x1D0000,    /**< ::lysp_ext_substmt.storage - `struct lysp_restr *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage - `struct lysc_must *`[]
+                                     ::lysc_ext_instance.parent - `struct lysc_must *` */
+    LY_STMT_NAMESPACE = 0x1E0000,   /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_module *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_ORDERED_BY = 0x1F0000,  /**< ::lysp_ext_substmt.storage - `uint16_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_node *`
+                                     ::lysc_ext_substmt.storage - `uint16_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_ORGANIZATION = 0x200000,    /**< ::lysp_ext_substmt.storage - `const char *`
+                                     ::lysp_ext_instance.parent - `struct lysp_(sub)module *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_PATH = 0x210000,    /**< ::lysp_ext_substmt.storage - `struct lyxp_expr *`
+                                     ::lysp_ext_instance.parent - `struct lysp_type *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_type *` */
+    LY_STMT_PATTERN = 0x220000, /**< ::lysp_ext_substmt.storage - `struct lysp_restr *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage - `struct lysc_pattern **`[]
+                                     ::lysc_ext_instance.parent - `struct lysc_pattern *` */
+    LY_STMT_POSITION = 0x230000,    /**< ::lysp_ext_substmt.storage - `int64_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_type_enum *`
+                                     ::lysc_ext_substmt.storage - `int64_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_type_bitenum_item *` */
+    LY_STMT_PREFIX = 0x240000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_PRESENCE = 0x250000,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node_container *` */
+    LY_STMT_RANGE = 0x260000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_restr *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_range *` */
+    LY_STMT_REFERENCE = 0x270000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - compiled parent statement */
+    LY_STMT_REFINE = 0x280000,  /**< ::lysp_ext_substmt.storage - `struct lysp_refine *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_refine *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_node *` */
+    LY_STMT_REQUIRE_INSTANCE = 0x290000,    /**< ::lysp_ext_substmt.storage - `uint8_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_type *`
+                                     ::lysc_ext_substmt.storage - `uint8_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_type *` */
+    LY_STMT_REVISION = 0x2A0000,    /**< ::lysp_ext_substmt.storage - `struct lysp_revision *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_revision *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - not compiled */
+    LY_STMT_REVISION_DATE = 0x2B0000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - not compiled */
+    LY_STMT_STATUS = 0x2C0000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `uint16_t *`
+                                     ::lysc_ext_substmt.storage - `uint16_t *`
+                                     ::lysc_ext_instance.parent - compiled parent statement */
+    LY_STMT_SUBMODULE = 0x2D0000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_submodule *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_TYPE = 0x2E0000,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_type *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_type *` */
+    LY_STMT_TYPEDEF = 0x2F0000, /**< ::lysp_ext_substmt.storage - `struct lysp_tpdf *`[]
+                                     ::lysp_ext_instance.parent - `struct lysp_tpdf *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_type *` */
+    LY_STMT_UNIQUE = 0x300000,  /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_qname *`[]
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_node_list *` */
+    LY_STMT_UNITS = 0x310000,   /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `const char *`
+                                     ::lysc_ext_substmt.storage - `const char *`
+                                     ::lysc_ext_instance.parent - `struct lysc_node *`, `struct lysc_type *` (typedef) */
+    LY_STMT_VALUE = 0x320000,   /**< ::lysp_ext_substmt.storage - `int64_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_type_enum *`
+                                     ::lysc_ext_substmt.storage - `int64_t *`
+                                     ::lysc_ext_instance.parent - `struct lysc_type_bitenum_item *` */
+    LY_STMT_WHEN = 0x330000,    /**< ::lysp_ext_substmt.storage and ::lysp_ext_instance.parent - `struct lysp_when *`
+                                     ::lysc_ext_substmt.storage and ::lysc_ext_instance.parent - `struct lysc_when *` */
+    LY_STMT_YANG_VERSION = 0x340000,    /**< ::lysp_ext_substmt.storage - `uint8_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_(sub)module *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_module *` */
+    LY_STMT_YIN_ELEMENT = 0x350000, /**< ::lysp_ext_substmt.storage - `uint16_t *`
+                                     ::lysp_ext_instance.parent - `struct lysp_ext *`
+                                     ::lysc_ext_substmt.storage - not compiled
+                                     ::lysc_ext_instance.parent - `struct lysc_ext *` */
+
+    /* separated from the list of statements
+     * the following tokens are part of the syntax and parsers have to work
+     * with them, but they are not a standard YANG statements
+     */
+    LY_STMT_SYNTAX_SEMICOLON,
+    LY_STMT_SYNTAX_LEFT_BRACE,
+    LY_STMT_SYNTAX_RIGHT_BRACE,
+
+    /*
+     * YIN-specific tokens, still they are part of the syntax, but not the standard statements
+     */
+    LY_STMT_ARG_TEXT,
+    LY_STMT_ARG_VALUE
+};
+
+/**
+ * @brief Structure representing a generic parsed YANG substatement in an extension instance.
+ */
+struct lysp_stmt {
+    const char *stmt;                /**< identifier of the statement */
+    const char *arg;                 /**< statement's argument */
+    LY_VALUE_FORMAT format;          /**< prefix format of the identifier/argument (::LY_VALUE_XML is YIN format) */
+    void *prefix_data;               /**< Format-specific data for prefix resolution (see ly_resolve_prefix()) */
+
+    struct lysp_stmt *next;          /**< link to the next statement */
+    struct lysp_stmt *child;         /**< list of the statement's substatements (linked list) */
+    uint16_t flags;                  /**< statement flags, can be set to LYS_YIN_ATTR */
+    enum ly_stmt kw;                 /**< numeric respresentation of the stmt value */
+};
+
+/**
+ * @brief Structure representing a parsed known YANG substatement in an extension instance.
+ */
+struct lysp_ext_substmt {
+    enum ly_stmt stmt;  /**< parsed substatement */
+    void **storage_p;   /**< pointer to the parsed storage of the statement according to the specific
+                             lys_ext_substmt::stmt */
+};
+
+/**
+ * @brief YANG extension parsed instance.
+ */
+struct lysp_ext_instance {
+    const char *name;                       /**< extension identifier, including possible prefix */
+    const char *argument;                   /**< optional value of the extension's argument */
+    LY_VALUE_FORMAT format;                 /**< prefix format of the extension name/argument (::LY_VALUE_XML is YIN format) */
+    void *prefix_data;                      /**< format-specific data for prefix resolution (see ly_resolve_prefix()) */
+    uintptr_t plugin_ref;                   /**< reference to extension plugin, use ::lysc_get_ext_plugin() to get the plugin */
+
+    void *parent;                           /**< pointer to the parent statement holding the extension instance(s), use
+                                                 ::lysp_ext_instance#parent_stmt to access the value/structure */
+    enum ly_stmt parent_stmt;               /**< type of the parent statement */
+    LY_ARRAY_COUNT_TYPE parent_stmt_index;  /**< index of the stamenet in case the parent does not point to the parent
+                                                 statement directly and it is an array */
+    uint16_t flags;                         /**< ::LYS_INTERNAL value and ::LYS_SINGLEQUOTED or ::LYS_DOUBLEQUOTED
+                                                 describing the argument (@ref snodeflags) */
+
+    struct lysp_ext_substmt *substmts;      /**< list of supported known YANG statements with the pointer to their
+                                                 parsed data ([sized array](@ref sizedarrays)) */
+    void *parsed;                           /**< private plugin parsed data */
+    struct lysp_stmt *child;                /**< list of generic (unknown) YANG statements */
+    struct lysp_ext_instance *exts;         /**< list of the extension instances ([sized array](@ref sizedarrays)) */
+};
+
+/**
+ * @brief Structure representing a compiled known YANG substatement in an extension instance.
+ */
+struct lysc_ext_substmt {
+    enum ly_stmt stmt;  /**< compiled substatement */
+    void **storage_p;   /**< pointer to the compiled storage of the statement according to the specific
+                             lys_ext_substmt::stmt */
+};
+
+/**
+ * @brief YANG extension compiled instance.
+ */
+struct lysc_ext_instance {
+    struct lysc_ext *def;               /**< pointer to the extension definition */
+    const char *argument;               /**< optional value of the extension's argument */
+    struct lys_module *module;          /**< module where the extension instantiated is defined */
+    struct lysc_ext_instance *exts;     /**< list of the extension instances ([sized array](@ref sizedarrays)) */
+
+    void *parent;                       /**< pointer to the parent element holding the extension instance(s), use
+                                             ::lysc_ext_instance#parent_stmt to access the value/structure */
+    enum ly_stmt parent_stmt;           /**< type of the parent statement */
+    LY_ARRAY_COUNT_TYPE parent_stmt_index;  /**< index of the stamenet in case the parent does not point to the parent
+                                                 statement directly and it is an array */
+
+    struct lysc_ext_substmt *substmts;  /**< list of supported known YANG statements with the pointer to their
+                                             compiled data ([sized array](@ref sizedarrays)) */
+    void *compiled;                     /**< private plugin compiled data */
+};
+
+/**
+ * @brief Macro to define plugin information in external plugins
+ *
+ * Use as follows:
+ * LYPLG_EXTENSIONS = {{<filled information of ::lyplg_ext_record>}, ..., {0}};
+ */
+#define LYPLG_EXTENSIONS \
+    uint32_t plugins_extensions_apiver__ = LYPLG_EXT_API_VERSION; \
+    const struct lyplg_ext_record plugins_extensions__[]
+
+/**
+ * @defgroup pluginsExtensionsParse Plugins: Extensions parsing support
+ * @ingroup pluginsExtensions
+ *
+ * Implementing extension plugin parse callback.
+ *
+ * @{
+ */
+
+/**
+ * @brief Callback for parsing extension instance substatements.
+ *
+ * All known YANG substatements can easily be parsed using ::lyplg_ext_parse_extension_instance.
+ *
+ * @param[in] pctx Parse context.
+ * @param[in,out] ext Parsed extension instance data.
+ * @return LY_SUCCESS on success.
+ * @return LY_ENOT if the extension instance is not supported and should be removed.
+ * @return LY_ERR error on error.
+ */
+typedef LY_ERR (*lyplg_ext_parse_clb)(struct lysp_ctx *pctx, struct lysp_ext_instance *ext);
+
+/**
+ * @brief Log a message from an extension plugin using the parsed extension instance.
+ *
+ * @param[in] pctx Parse context to use.
+ * @param[in] ext Parsed extensiopn instance.
+ * @param[in] level Log message level (error, warning, etc.)
+ * @param[in] err Error type code.
+ * @param[in] format Format string to print.
+ * @param[in] ... Format variable parameters.
+ */
+LIBYANG_API_DECL void lyplg_ext_parse_log(const struct lysp_ctx *pctx, const struct lysp_ext_instance *ext,
+        LY_LOG_LEVEL level, LY_ERR err, const char *format, ...);
+
+/**
+ * @brief Get current parsed module from a parse context.
+ *
+ * @param[in] pctx Parse context.
+ * @return Current (local) parse mod.
+ */
+LIBYANG_API_DECL const struct lysp_module *lyplg_ext_parse_get_cur_pmod(const struct lysp_ctx *pctx);
+
+/**
+ * @brief Parse substatements of an extension instance.
+ *
+ * Uses standard libyang schema compiler to transform YANG statements into the parsed schema structures. The plugins are
+ * supposed to use this function when the extension instance's substatements can be parsed in a standard way.
+ *
+ * @param[in] pctx Parse context.
+ * @param[in,out] ext Parsed extension instance with the prepared ::lysp_ext_instance.substmts array, which will be
+ * updated by storing the parsed data.
+ * @return LY_SUCCESS on success.
+ * @return LY_ERR error on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_parse_extension_instance(struct lysp_ctx *pctx, struct lysp_ext_instance *ext);
+
+/** @} pluginsExtensionsParse */
+
+/**
+ * @defgroup pluginsExtensionsCompile Plugins: Extensions compilation support
+ * @ingroup pluginsExtensions
+ *
+ * Implementing extension plugin compile callback.
+ *
+ * @{
+ */
+
+/**
+ * @defgroup scflags Schema compile flags
+ *
+ * Flags to modify schema compilation process and change the way how the particular statements are being compiled. *
+ * @{
+ */
+#define LYS_COMPILE_GROUPING        0x01            /**< Compiling (validation) of a non-instantiated grouping.
+                                                      In this case not all the restrictions are checked since they can
+                                                      be valid only in the real placement of the grouping. This is
+                                                      the case of any restriction that needs to look out of the statements
+                                                      themselves, since the context is not known. */
+#define LYS_COMPILE_DISABLED        0x02            /**< Compiling a disabled subtree (by its if-features). Meaning
+                                                      it will be removed at the end of compilation and should not be
+                                                      added to any unres sets. */
+#define LYS_COMPILE_NO_CONFIG       0x04            /**< ignore config statements, neither inherit config value */
+#define LYS_COMPILE_NO_DISABLED     0x08            /**< ignore if-feature statements */
+
+#define LYS_COMPILE_RPC_INPUT       (LYS_IS_INPUT | LYS_COMPILE_NO_CONFIG)  /**< Internal option when compiling schema tree of RPC/action input */
+#define LYS_COMPILE_RPC_OUTPUT      (LYS_IS_OUTPUT | LYS_COMPILE_NO_CONFIG) /**< Internal option when compiling schema tree of RPC/action output */
+#define LYS_COMPILE_NOTIFICATION    (LYS_IS_NOTIF | LYS_COMPILE_NO_CONFIG)  /**< Internal option when compiling schema tree of Notification */
+
+/** @} scflags */
+
+/**
+ * @brief Callback to compile extension from the lysp_ext_instance to the lysc_ext_instance. The later structure is generally prepared
+ * and only the extension specific data are supposed to be added (if any).
+ *
+ * The parsed generic statements can be processed by the callback on its own or the ::lyplg_ext_compile_extension_instance()
+ * function can be used to let the compilation to libyang following the standard rules for processing the YANG statements.
+ *
+ * @param[in] cctx Current compile context.
+ * @param[in] extp Parsed extension instance data.
+ * @param[in,out] ext Prepared compiled extension instance structure where an addition, extension-specific, data are
+ * supposed to be placed for later use (data validation or use of external tool).
+ * @return LY_SUCCESS in case of success.
+ * @return LY_ENOT in case the extension instance is not supported and should be removed.
+ * @return LY_ERR error on error.
+ */
+typedef LY_ERR (*lyplg_ext_compile_clb)(struct lysc_ctx *cctx, const struct lysp_ext_instance *extp,
+        struct lysc_ext_instance *ext);
+
+/**
+ * @brief Log a message from an extension plugin using the compiled extension instance.
+ *
+ * @param[in] cctx Optional compile context to generate the path from.
+ * @param[in] ext Compiled extension instance.
+ * @param[in] level Log message level (error, warning, etc.)
+ * @param[in] err Error type code.
+ * @param[in] format Format string to print.
+ */
+LIBYANG_API_DECL void lyplg_ext_compile_log(const struct lysc_ctx *cctx, const struct lysc_ext_instance *ext,
+        LY_LOG_LEVEL level, LY_ERR err, const char *format, ...);
+
+/**
+ * @brief Log a message from an extension plugin using the compiled extension instance with an explicit error path.
+ *
+ * @param[in] path Log error schema path to use.
+ * @param[in] ext Compiled extension instance.
+ * @param[in] level Log message level (error, warning, etc.)
+ * @param[in] err Error type code.
+ * @param[in] format Format string to print.
+ */
+LIBYANG_API_DECL void lyplg_ext_compile_log_path(const char *path, const struct lysc_ext_instance *ext,
+        LY_LOG_LEVEL level, LY_ERR err, const char *format, ...);
+
+/**
+ * @brief Log a message from an extension plugin using the compiled extension instance and a generated error item.
+ *
+ * @param[in] eitem Error item to log.
+ * @param[in] ext Compiled extension instance.
+ */
+LIBYANG_API_DEF void lyplg_ext_compile_log_err(const struct ly_err_item *eitem, const struct lysc_ext_instance *ext);
+
+/**
+ * @brief YANG schema compilation context getter for libyang context.
+ *
+ * @param[in] ctx YANG schema compilation context.
+ * @return libyang context connected with the compilation context.
+ */
+LIBYANG_API_DECL struct ly_ctx *lyplg_ext_compile_get_ctx(const struct lysc_ctx *ctx);
+
+/**
+ * @brief YANG schema compilation context getter for compilation options.
+ *
+ * @param[in] ctx YANG schema compilation context.
+ * @return pointer to the compilation options to allow modifying them with @ref scflags values.
+ */
+LIBYANG_API_DECL uint32_t *lyplg_ext_compile_get_options(const struct lysc_ctx *ctx);
+
+/**
+ * @brief YANG schema compilation context getter for current module.
+ *
+ * @param[in] ctx YANG schema compilation context.
+ * @return current module.
+ */
+LIBYANG_API_DECL const struct lys_module *lyplg_ext_compile_get_cur_mod(const struct lysc_ctx *ctx);
+
+/**
+ * @brief YANG schema compilation context getter for currently processed module.
+ *
+ * @param[in] ctx YANG schema compilation context.
+ * @return Currently processed module.
+ */
+LIBYANG_API_DECL struct lysp_module *lyplg_ext_compile_get_pmod(const struct lysc_ctx *ctx);
+
+/**
+ * @brief Compile substatements of an extension instance.
+ *
+ * Uses standard libyang schema compiler to transform YANG statements into the compiled schema structures. The plugins are
+ * supposed to use this function when the extension instance's substatements are supposed to be compiled in a standard way
+ * (or if just the @ref scflags are enough to modify the compilation process).
+ *
+ * @param[in] ctx Compile context.
+ * @param[in] extp Parsed representation of the extension instance being processed.
+ * @param[in,out] ext Compiled extension instance with the prepared ::lysc_ext_instance.substmts array, which will be updated
+ * by storing the compiled data.
+ * @param[in] parent Optional parent of all the compiled schema nodes.
+ * @return LY_SUCCESS on success.
+ * @return LY_EVALID if compilation of the substatements fails.
+ * @return LY_ENOT if the extension is disabled (by if-feature) and should be ignored.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_compile_extension_instance(struct lysc_ctx *ctx, const struct lysp_ext_instance *extp,
+        struct lysc_ext_instance *ext, struct lysc_node *parent);
+
+/**
+ * @brief Compile augments for a specific node in an extension instance.
+ *
+ * May be useful for cases when there are virtual nodes that cannot be compiled using
+ * ::lyplg_ext_compile_extension_instance().
+ *
+ * @param[in] ctx Compile context.
+ * @param[in] ext Compiled extension instance.
+ * @param[in,out] node Compiled schema node to apply any matching augments for.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_compiled_node_augments(struct lysc_ctx *ctx, struct lysc_ext_instance *ext,
+        struct lysc_node *node);
+
+/** @} pluginsExtensionsCompile */
+
+/**
+ * @defgroup pluginsExtensionsSprinterInfo Plugins: Extensions schema info printer support
+ * @ingroup pluginsExtensions
+ *
+ * Implementing extension plugin schema info printer callback.
+ *
+ * @{
+ */
+
+/**
+ * @brief Callback to print the compiled extension instance's private data in the INFO format.
+ *
+ * @param[in] ctx YANG printer context to provide output handler and other information for printing.
+ * @param[in] ext The compiled extension instance, mainly to access the extensions.
+ * @param[in,out] flag Flag to be shared with the caller regarding the opening brackets - 0 if the '{' not yet printed,
+ * 1 otherwise.
+ * @return LY_SUCCESS when everything was fine, other LY_ERR values in case of failure
+ */
+typedef LY_ERR (*lyplg_ext_sprinter_info_clb)(struct lyspr_ctx *ctx, struct lysc_ext_instance *ext, ly_bool *flag);
+
+/**
+ * @brief YANG printer context getter for output handler.
+ *
+ * @param[in] ctx YANG printer context.
+ * @return Output handler where the data are being printed. Note that the address of the handler pointer in the context is
+ * returned to allow to modify the handler.
+ */
+LIBYANG_API_DECL struct ly_out **lyplg_ext_print_get_out(const struct lyspr_ctx *ctx);
+
+/**
+ * @brief YANG printer context getter for printer options.
+ *
+ * @param[in] ctx YANG printer context.
+ * @return pointer to the printer options to allow modifying them with @ref schemaprinterflags values.
+ */
+LIBYANG_API_DECL uint32_t *lyplg_ext_print_get_options(const struct lyspr_ctx *ctx);
+
+/**
+ * @brief YANG printer context getter for printer indentation level.
+ *
+ * @param[in] ctx YANG printer context.
+ * @return pointer to the printer's indentation level to allow modifying its value.
+ */
+LIBYANG_API_DECL uint16_t *lyplg_ext_print_get_level(const struct lyspr_ctx *ctx);
+
+/**
+ * @brief Print substatements of an extension instance in info format (compiled YANG).
+ *
+ * Generic function to access YANG printer functions from the extension plugins (::lyplg_ext_sprinter_info_clb).
+ *
+ * @param[in] ctx YANG printer context to provide output handler and other information for printing.
+ * @param[in] ext The compiled extension instance to access the extensions and substatements data.
+ * @param[in,out] flag Flag to be shared with the caller regarding the opening brackets - 0 if the '{' not yet printed,
+ * 1 otherwise.
+ */
+LIBYANG_API_DECL void lyplg_ext_print_info_extension_instance(struct lyspr_ctx *ctx, const struct lysc_ext_instance *ext,
+        ly_bool *flag);
+
+/** @} pluginsExtensionsSprinterInfo */
+
+/*
+ * node xpath
+ */
+
+/**
+ * @brief Callback for getting the first child data node of an XPath document root of the extension instance.
+ *
+ * @param[in] ext Compiled extension instance.
+ * @param[in] cur_node Current (original context) node.
+ * @param[out] node First XPath document root child node, if any.
+ */
+typedef void (*lyplg_ext_node_xpath_clb)(struct lysc_ext_instance *ext, const struct lyd_node *cur_node,
+        const struct lyd_node **node);
+
+/*
+ * snode xpath
+ */
+
+/**
+ * @brief Callback for getting the first child schema node of an XPath document root of the extension instance.
+ *
+ * @param[in] ext Compiled extension instance.
+ * @param[in] prefix Node prefix, if any.
+ * @param[in] prefix_len Length of @p prefix.
+ * @param[in] format Format of @p prefix.
+ * @param[in] prefix_data Format-specific prefix data.
+ * @param[in] name Node name.
+ * @param[in] name_len Length of @p name.
+ * @param[out] snode First XPath document root child schema node, if any.
+ */
+typedef LY_ERR (*lyplg_ext_snode_xpath_clb)(struct lysc_ext_instance *ext, const char *prefix, uint32_t prefix_len,
+        LY_VALUE_FORMAT format, void *prefix_data, const char *name, uint32_t name_len, const struct lysc_node **snode);
+
+/*
+ * data snode
+ */
+
+/**
+ * @brief Callback for getting a schema node for new YANG instance data described by an extension instance.
+ *
+ * If this callback is defined, ::lyplg_ext_data_validate_clb must also be defined for validating the data node subtrees
+ * parsed using this callback.
+ *
+ * 1) Schema nodes are compiled and connected to each other:
+ *    - this callback is NOT called;
+ *    - storage of a data-def-stmt is retrieved from the ext-inst and the nodes connected to it.
+ *
+ * 2) YANG instance data is being parsed:
+ *    - this callback is called;
+ *    - schema node that can be instantiated in data should be returned (matching any set parameters);
+ *    - if this callback is not defined, the same process as in 1) is used.
+ *
+ * @param[in] ext Compiled extension instance.
+ * @param[in] parent Parsed parent data node.
+ * @param[in] sparent Schema parent node.
+ * @param[in] prefix Node prefix, if any.
+ * @param[in] prefix_len Length of @p prefix.
+ * @param[in] format Format of @p prefix.
+ * @param[in] prefix_data Format-specific prefix data.
+ * @param[in] name Node name.
+ * @param[in] name_len Length of @p name.
+ * @param[out] snode Schema node to use for parsing the node.
+ * @return LY_SUCCESS on success.
+ * @return LY_ENOT if the data are not described by @p ext.
+ * @return LY_ERR on error.
+ */
+typedef LY_ERR (*lyplg_ext_data_snode_clb)(struct lysc_ext_instance *ext, const struct lyd_node *parent,
+        const struct lysc_node *sparent, const char *prefix, uint32_t prefix_len, LY_VALUE_FORMAT format, void *prefix_data,
+        const char *name, uint32_t name_len, const struct lysc_node **snode);
+
+/*
+ * data validate
+ */
+
+/**
+ * @brief Callback for validating parsed YANG instance data described by an extension instance.
+ *
+ * This callback is called in 2 distinct cases:
+ * 1) For data nodes created by ::lyplg_ext_data_snode_clb with @p node flag ::LYD_EXT set. If this callback is
+ *    defined, the whole subtree is validated by this callback;
+ * 2) For any data nodes whose a) schema node or b) their type has the extension instance. These nodes are also always
+ *    validated according to the standard YANG node validation rules.
+ *
+ * @param[in] ext Compiled extension instance.
+ * @param[in] node Node/subtree to validate.
+ * @param[in] dep_tree Tree to be used for validating references from the operation subtree, if operation.
+ * @param[in] data_type Validated data type, can be ::LYD_TYPE_DATA_YANG, ::LYD_TYPE_RPC_YANG, ::LYD_TYPE_NOTIF_YANG,
+ * or ::LYD_TYPE_REPLY_YANG.
+ * @param[in] val_opts Validation options, see @ref datavalidationoptions.
+ * @param[out] diff Optional diff with any changes made by the validation.
+ * @return LY_SUCCESS on success.
+ * @return LY_ENOT if @p node are not data matching this extension instance.
+ * @return LY_ERR on error.
+ */
+typedef LY_ERR (*lyplg_ext_data_validate_clb)(struct lysc_ext_instance *ext, struct lyd_node *node,
+        const struct lyd_node *dep_tree, enum lyd_type data_type, uint32_t val_opts, struct lyd_node **diff);
+
+/*
+ * parse free
+ */
+
+/**
+ * @brief Callback to free the extension-specific data created by its parsing.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in,out] ext Parsed extension structure to free.
+ */
+typedef void (*lyplg_ext_parse_free_clb)(const struct ly_ctx *ctx, struct lysp_ext_instance *ext);
+
+/**
+ * @brief Free the extension instance's data parsed with ::lyplg_ext_parse_extension_instance().
+ *
+ * @param[in] ctx libyang context
+ * @param[in] substmts Extension instance substatements to free.
+ */
+LIBYANG_API_DECL void lyplg_ext_pfree_instance_substatements(const struct ly_ctx *ctx, struct lysp_ext_substmt *substmts);
+
+/*
+ * compile free
+ */
+
+/**
+ * @brief Callback to free the extension-specific data created by its compilation.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in,out] ext Compiled extension structure to free.
+ */
+typedef void (*lyplg_ext_compile_free_clb)(const struct ly_ctx *ctx, struct lysc_ext_instance *ext);
+
+/**
+ * @brief Free the extension instance's data compiled with ::lyplg_ext_compile_extension_instance().
+ *
+ * @param[in] ctx libyang context
+ * @param[in] substmts Extension instance substatements to free.
+ */
+LIBYANG_API_DECL void lyplg_ext_cfree_instance_substatements(const struct ly_ctx *ctx, struct lysc_ext_substmt *substmts);
+
+/*
+ * compiled size
+ */
+
+/**
+ * @brief Alignment of all the printed data, ensures all memory access is aligned to this number (B)
+ */
+#define LY_CTXP_MEM_ALIGN 8
+
+/**
+ * @brief Adjust data size to an aligned size to make sure the following data is aligned.
+ *
+ * @param[in,out] SIZE Data size that is adjusted.
+ */
+#define LY_CTXP_MEM_SIZE(SIZE) ((SIZE) + ((~(SIZE) + 1) & (LY_CTXP_MEM_ALIGN - 1)))
+
+/**
+ * @brief Callback to return the size of the custom compiled structure and substmts array. If there are none, do not
+ * define this callback.
+ *
+ * @param[in] ext Compiled extension structure.
+ * @param[in,out] addr_ht Hash table with addresses of shared structures that were already accounted for, can be added to.
+ * @return Total size of the custom compiled structures and the substmts array. Always use ::LY_CTXP_MEM_SIZE when
+ * adding to the size for correct alignment.
+ * @return -1 on error.
+ */
+typedef int (*lyplg_ext_compiled_size_clb)(const struct lysc_ext_instance *ext, struct ly_ht *addr_ht);
+
+/**
+ * @brief Get the size of the compiled substatements storage.
+ *
+ * @param[in] substmts Compiled extension instance substatements array.
+ * @param[in,out] addr_ht Hash table with addresses of shared structures that were already accounted for, can be added to.
+ * @return Total size of the subtmts storage;
+ * @return -1 on error.
+ */
+LIBYANG_API_DECL int lyplg_ext_compiled_stmts_storage_size(const struct lysc_ext_substmt *substmts, struct ly_ht *addr_ht);
+
+/*
+ * compiled print
+ */
+
+/**
+ * @brief Callback to print (serialize) the custom compiled structure and substmts array storage.
+ *
+ * @param[in] orig_ext Compiled extension structure to print.
+ * @param[in,out] ext Printed extension structure to modify.
+ * @param[in,out] mem Memory chunk of the size returned by ::lyplg_ext_compiled_size_clb() to print into, is moved
+ * after all the printed data. Always use ::LY_CTXP_MEM_SIZE when moving @p mem for correct alignment.
+ * @param[in,out] ptr_set Set with pointers to set to printed addresses.
+ * @param[in,out] addr_ht Hash table with pairs of addresses of shared structures to be printed and their printed
+ * addresses, can be added to.
+ * @return LY_SUCCESS on success.
+ * @return LY_ERR on error.
+ */
+typedef LY_ERR (*lyplg_ext_compiled_print_clb)(const struct lysc_ext_instance *orig_ext, struct lysc_ext_instance *ext,
+        struct ly_ht *addr_ht, struct ly_set *ptr_set, void **mem);
+
+/**
+ * @brief Print the substatements array storage and assign it to the serialized extension instance substatements array.
+ *
+ * @param[in] orig_substmts Extension instance substatements to print.
+ * @param[in,out] substmts Serialized extension structure substatements whose storage to modify.
+ * @param[in,out] addr_ht Hash table with pairs of addresses of shared structures to be printed and their printed
+ * addresses, can be added to.
+ * @param[in,out] ptr_set Set with pointers to set to printed addresses.
+ * @param[in,out] mem Memory chunk to print into, is moved after all the printed data.
+ * @return LY_SUCCESS on success;
+ * @return LY_ERR on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_compiled_stmts_storage_print(const struct lysc_ext_substmt *orig_substmts,
+        struct lysc_ext_substmt *substmts, struct ly_ht *addr_ht, struct ly_set *ptr_set, void **mem);
+
+/**
+ * @brief Get the printed address of a shared structure, in case it has already been printed.
+ *
+ * @param[in] addr_ht Hash table with all the printed addresses of shared structures.
+ * @param[in] addr Address of the original shared structure to be printed.
+ * @return Address of the printed shared structure;
+ * @return NULL if the address was not found.
+ */
+LIBYANG_API_DECL void *lyplg_ext_compiled_print_get_addr(const struct ly_ht *addr_ht, const void *addr);
+
+/**
+ * @brief Add a printed address of a shared structure to be reused by later prints.
+ *
+ * @param[in,out] addr_ht Hash table with pairs of addresses of shared structures to be printed and their printed
+ * addresses, is added to.
+ * @param[in] orig_addr Address of the original shared structure that was printed.
+ * @param[in] addr Address of the printed structure to be reused.
+ * @return LY_SUCCESS on success;
+ * @return LY_ERR on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_compiled_print_add_addr(struct ly_ht *addr_ht, const void *orig_addr,
+        const void *addr);
+
+/**
+ * @brief Extension plugin implementing various aspects of a YANG extension.
+ *
+ * Every plugin should have at least either ::parse() or ::compile() callback defined but other than that **all**
+ * the callbacks are **optional**.
+ */
+struct lyplg_ext {
+    const char *id;                         /**< plugin identification (mainly for distinguish incompatible versions
+                                                 of the plugins for external tools) */
+    lyplg_ext_parse_clb parse;              /**< callback to parse the extension instance substatements */
+    lyplg_ext_compile_clb compile;          /**< callback to compile extension instance from the parsed data */
+    lyplg_ext_sprinter_info_clb printer_info;   /**< callback to print the compiled content (info format) */
+    lyplg_ext_node_xpath_clb node_xpath;    /**< callback to get first XPath document root data child node */
+    lyplg_ext_snode_xpath_clb snode_xpath;  /**< callback to get first XPath document root schema child node */
+    lyplg_ext_data_snode_clb snode;         /**< callback to get schema node in various use-cases */
+    lyplg_ext_data_validate_clb validate;   /**< callback to validate parsed data instances */
+
+    lyplg_ext_parse_free_clb pfree;         /**< free the extension-specific data created by its parsing */
+    lyplg_ext_compile_free_clb cfree;       /**< free the extension-specific data created by its compilation */
+    lyplg_ext_compiled_size_clb compiled_size;  /**< callback to get size of the custom compiled structure and substmts */
+    lyplg_ext_compiled_print_clb compiled_print;    /**< callback to print the compiled structure into a pre-allocated
+                                                         memory chunk */
+};
+
+struct lyplg_ext_record {
+    /* plugin identification */
+    const char *module;          /**< name of the module where the extension is defined */
+    const char *revision;        /**< optional module revision - if not specified, the plugin applies to any revision,
+                                      which is not an optimal approach due to a possible future revisions of the module.
+                                      Instead, there should be defined multiple items in the plugins list, each with the
+                                      different revision, but all with the same pointer to the plugin functions. The
+                                      only valid use case for the NULL revision is the case the module has no revision. */
+    const char *name;            /**< YANG name of the extension */
+
+    /* runtime data */
+    struct lyplg_ext plugin;     /**< data to utilize plugin implementation */
+};
+
+/**
+ * @brief Stringify statement identifier.
+ *
+ * @param[in] stmt The statement identifier to stringify.
+ * @return Constant string representation of the given @p stmt.
+ */
+LIBYANG_API_DECL const char *lyplg_ext_stmt2str(enum ly_stmt stmt);
+
+/**
+ * @brief Convert nodetype to statement identifier
+ *
+ * @param[in] nodetype Nodetype to convert.
+ * @return Statement identifier representing the given @p nodetype.
+ */
+LIBYANG_API_DECL enum ly_stmt lyplg_ext_nodetype2stmt(uint16_t nodetype);
+
+/**
+ * @brief Get compiled ext instance storage for a specific statement.
+ *
+ * @param[in] ext Compiled ext instance.
+ * @param[in] stmt Compiled statement. Can be a mask when the first match is returned, it is expected the storage is
+ * the same for all the masked statements.
+ * @param[in] storage_size Size of the value at @p storage address (dereferenced).
+ * @param[out] storage Compiled ext instance substatement storage, NULL if was not compiled.
+ * @return LY_SUCCESS on success.
+ * @return LY_ENOT if the substatement is not supported.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_get_storage(const struct lysc_ext_instance *ext, int stmt, uint32_t storage_size,
+        const void **storage);
+
+/**
+ * @brief Get parsed ext instance storage for a specific statement.
+ *
+ * @param[in] ext Compiled ext instance.
+ * @param[in] stmt Parsed statement. Can be a mask when the first match is returned, it is expected the storage is
+ * the same for all the masked statements.
+ * @param[in] storage_size Size of the value at @p storage address (dereferenced).
+ * @param[out] storage Parsed ext instance substatement storage, NULL if was not parsed.
+ * @return LY_SUCCESS on success.
+ * @return LY_ENOT if the substatement is not supported.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_parsed_get_storage(const struct lysc_ext_instance *ext, int stmt,
+        uint32_t storage_size, const void **storage);
+
+/**
+ * @brief Get specific run-time extension instance data from a callback set by ::ly_ctx_set_ext_data_clb().
+ *
+ * @param[in] ctx Context with the callback.
+ * @param[in] ext Compiled extension instance.
+ * @param[in] parent Data parent node instance of a schema node with @p ext instance.
+ * @param[out] ext_data Provided extension instance data.
+ * @param[out] ext_data_free Whether the extension instance should free @p ext_data or not.
+ * @return LY_SUCCESS on success.
+ * @return LY_ERR on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_get_data(const struct ly_ctx *ctx, const struct lysc_ext_instance *ext,
+        const struct lyd_node *parent, void **ext_data, ly_bool *ext_data_free);
+
+/**
+ * @brief Set parent context of a context. Errors and callbacks of the parent context will then always be used.
+ *
+ * @param[in] ctx Context to change.
+ * @param[in] parent_ctx Parent context to set.
+ * @return LY_SUCCESS on success.
+ * @return LY_ERR on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_set_parent_ctx(struct ly_ctx *ctx, const struct ly_ctx *parent_ctx);
+
+/**
+ * @brief Expand parent-reference xpath expressions
+ *
+ * @param[in] ext Context allocated for extension.
+ * @param[in] parent Data parent node instance of a schema node with @p ext instance.
+ * @param[out] refs Set of schema node matching parent-reference XPaths.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_schema_mount_get_parent_ref(const struct lysc_ext_instance *ext,
+        const struct lyd_node *parent, struct ly_set **refs);
+
+/**
+ * @brief Allocate a new context for a particular instance of the yangmnt:mount-point extension.
+ * Caller is responsible for **freeing** the created context.
+ *
+ * @param[in] ext Compiled extension instance.
+ * @param[in] parent Data parent node instance of a schema node with @p ext instance.
+ * @param[out] ctx Context with modules loaded from the list found in the extension data.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_ext_schema_mount_create_context(const struct lysc_ext_instance *ext,
+        const struct lyd_node *parent, struct ly_ctx **ctx);
+
+/**
+ * @brief Create a shared schema mount context for a schema mount point.
+ *
+ * Does nothing if the mount point is not shared or if the context already exists.
+ *
+ * For printed contexts (read-only), all shared contexts must be created beforehand
+ * by calling this function as they cannot be created once the context is printed.
+ *
+ * @param[in] ext Compiled extension instance of a schema mount point.
+ * @param[in] ext_data ietf-yang-schema-mount and ietf-yang-library YANG data for the @p ext mount point.
+ * @return LY_ENOT if @p ext mount point data was not found in @p ext_data, other LY_ERR value otherwise.
+*/
+LIBYANG_API_DECL LY_ERR lyplg_ext_schema_mount_create_shared_context(struct lysc_ext_instance *ext,
+        const struct lyd_node *ext_data);
+
+/**
+ * @brief Destroy all the shared schema mount contexts for a given libyang context.
+ *
+ * For standard contexts this is done automatically when the context is destroyed.
+ *
+ * For printed contexts (read-only), all shared contexts must be destroyed
+ * by calling this function as otherwise they will be lost once the original context is destroyed.
+ *
+ * @param[in] ext Compiled extension instance of a schema mount point. All the shared schema mount
+ * contexts that belong to the same libyang context as @p ext will be destroyed.
+ */
+LIBYANG_API_DECL void lyplg_ext_schema_mount_destroy_shared_contexts(struct lysc_ext_instance *ext);
+
+/**
+ * @brief Destroy all the inline contexts for a given libyang context.
+ *
+ * For standard contexts this is done automatically when the context is destroyed.
+ * Useful when using a long-lived libyang context for cleaning up memory after completing
+ * operations with schema mount extension data that require inline contexts.
+ *
+ * Inline contexts are currently not supported in printed contexts.
+ *
+ * @param[in] ext Compiled extension instance of a schema mount point. All the inline schema mount
+ * contexts that belong to the same libyang context as @p ext will be destroyed.
+ */
+LIBYANG_API_DECL void lyplg_ext_schema_mount_destroy_inline_contexts(struct lysc_ext_instance *ext);
+
+/** @} pluginsExtensions */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* LY_PLUGINS_EXTS_H_ */

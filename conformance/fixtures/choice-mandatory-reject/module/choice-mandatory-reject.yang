@@ -1,0 +1,16 @@
+module choice-mandatory-reject {
+  yang-version 1;
+  namespace "urn:choice-mandatory-reject";
+  prefix cmr;
+  revision 2026-06-14;
+
+  choice tunnel-mode {
+    mandatory true;
+    case gre {
+      leaf remote { type string; }
+    }
+    case mpls {
+      leaf label { type uint32; }
+    }
+  }
+}

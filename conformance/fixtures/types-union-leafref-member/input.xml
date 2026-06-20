@@ -1,0 +1,4 @@
+<interface xmlns="urn:types-union-leafref-member">
+  <name>eth0</name>
+</interface>
+<primary-or-static xmlns="urn:types-union-leafref-member">eth0</primary-or-static>

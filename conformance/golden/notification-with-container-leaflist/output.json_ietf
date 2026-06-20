@@ -1,0 +1,11 @@
+{
+  "operations-notification-with-container-leaflist:backup-complete": {
+    "backup-id": "bk-1",
+    "summary": {
+      "duration": "PT5M",
+      "files-backed": "42",
+      "status": "success"
+    },
+    "timestamp": "2026-06-15T12:00:00Z"
+  }
+}

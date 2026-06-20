@@ -1,0 +1,11 @@
+module types-empty-leaf-null-json {
+  namespace "urn:types-empty-leaf-null-json";
+  prefix typesemptyleafnulljson;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf enabled { type empty; }
+  }
+}

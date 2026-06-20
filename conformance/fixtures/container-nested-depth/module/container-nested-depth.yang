@@ -1,0 +1,16 @@
+module container-nested-depth {
+  yang-version 1;
+  namespace "urn:container-nested-depth";
+  prefix cnd;
+  revision 2026-06-14;
+
+  container level1 {
+    leaf a { type string; }
+    container level2 {
+      leaf b { type string; }
+      container level3 {
+        leaf c { type string; }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+<service-id xmlns="urn:constraints-when-xpath-functions">next-gen-firewall</service-id>
+<fw-rules xmlns="urn:constraints-when-xpath-functions">
+  <rule-count>10</rule-count>
+</fw-rules>
+<hostname xmlns="urn:constraints-when-xpath-functions">prod-router-1</hostname>
+<regex-cfg xmlns="urn:constraints-when-xpath-functions">
+  <region>us-east</region>
+</regex-cfg>
+<tags xmlns="urn:constraints-when-xpath-functions">red</tags>
+<tag-cfg xmlns="urn:constraints-when-xpath-functions">
+  <tag-count>1</tag-count>
+</tag-cfg>

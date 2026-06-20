@@ -1,0 +1,12 @@
+<action xmlns="urn:ietf:params:xml:ns:yang:1">
+  <system xmlns="urn:operations-action-nested-containers">
+    <management>
+      <enabled>true</enabled>
+      <audit-log>
+        <format>json</format>
+        <duration-hours>24</duration-hours>
+      </audit-log>
+      <retention-days>30</retention-days>
+    </management>
+  </system>
+</action>

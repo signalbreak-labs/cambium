@@ -1,0 +1,21 @@
+module types-union-scalar-all-members {
+  namespace "urn:types-union-scalar-all-members";
+  prefix typesunionscalarallmembers;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf s { type union { type string; } }
+    leaf b { type union { type boolean; } }
+    leaf i8 { type union { type int8; } }
+    leaf u16 { type union { type uint16; } }
+    leaf i64 { type union { type int64; } }
+    leaf u64 { type union { type uint64; } }
+    leaf d { type union { type decimal64 { fraction-digits 2; } } }
+    leaf e { type union { type enumeration { enum alpha; enum beta; } } }
+    leaf bits { type union { type bits { bit flag1 { position 0; } bit flag2 { position 1; } } } }
+    leaf bin { type union { type binary { length "4"; } } }
+    leaf iid { type union { type instance-identifier; } }
+  }
+}

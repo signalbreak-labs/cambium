@@ -1,0 +1,9 @@
+<config xmlns="urn:operations-action-container-wide-siblings">
+  <setting-a>a</setting-a>
+  <setting-b>b</setting-b>
+  <setting-c>c</setting-c>
+  <setting-d>d</setting-d>
+  <validate>
+    <strict-mode>true</strict-mode>
+  </validate>
+</config>

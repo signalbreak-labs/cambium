@@ -1,0 +1,11 @@
+error[E0599]: no method named `set` found for struct `UserOrderedList<'a, 'ctx>` in the current scope
+ --> tests/compile-fail/user_ordered_list_no_set.rs:8:10
+  |
+8 |     list.set(entry);
+  |          ^^^
+  |
+help: there is a method `get` with a similar name
+  |
+8 -     list.set(entry);
+8 +     list.get(entry);
+  |

@@ -1,0 +1,4 @@
+<bound-if xmlns="urn:types-leafref-cross-module">eth0</bound-if>
+<interface xmlns="urn:types-leafref-cross-module-base">
+  <name>eth0</name>
+</interface>

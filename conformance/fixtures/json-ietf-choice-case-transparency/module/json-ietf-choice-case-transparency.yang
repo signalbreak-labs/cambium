@@ -1,0 +1,22 @@
+module json-ietf-choice-case-transparency {
+  namespace "urn:json-ietf-choice-case-transparency";
+  prefix jicct;
+  revision 2026-06-15;
+
+  container top {
+    leaf priority { type uint8; }
+    choice action-type {
+      case deny {
+        leaf reason { type string; }
+        choice log-target {
+          case local {
+            leaf local-level { type uint8; }
+          }
+        }
+      }
+      case allow {
+        leaf log { type boolean; }
+      }
+    }
+  }
+}

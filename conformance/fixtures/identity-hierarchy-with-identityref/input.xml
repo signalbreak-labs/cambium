@@ -1,0 +1,2 @@
+<primary xmlns="urn:identity-hierarchy-with-identityref">rsvp-tunnel</primary>
+<backup xmlns="urn:identity-hierarchy-with-identityref">rsvp-tunnel</backup>

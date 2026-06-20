@@ -1,0 +1,7 @@
+{
+  "choice-with-leaflist-branch:paths": [
+    "/var/log/p3",
+    "/var/log/p1",
+    "/var/log/p2"
+  ]
+}

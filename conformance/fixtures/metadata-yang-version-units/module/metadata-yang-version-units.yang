@@ -1,0 +1,28 @@
+module metadata-yang-version-units {
+  yang-version 1.1;
+  namespace "urn:metadata-yang-version-units";
+  prefix myvu;
+  organization "Cambium Conformance";
+  contact "conformance@example.com";
+  revision 2026-06-15 {
+    description "Metadata round-trip fixture";
+    reference "RFC 7950";
+  }
+
+  container performance {
+    leaf cpu-usage {
+      type decimal64 { fraction-digits 2; }
+      units "percent";
+      status current;
+    }
+    leaf memory-free {
+      type uint64;
+      units "bytes";
+      status deprecated;
+    }
+    action reset-metrics {
+      input { leaf force { type boolean; } }
+      output { leaf result { type string; } }
+    }
+  }
+}

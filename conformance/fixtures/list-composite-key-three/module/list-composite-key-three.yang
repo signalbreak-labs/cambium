@@ -1,0 +1,15 @@
+module list-composite-key-three {
+  yang-version 1;
+  namespace "urn:list-composite-key-three";
+  prefix lck3;
+  revision 2026-06-14;
+
+  list route {
+    key "prefix nexthop-ip afi";
+    leaf preference { type uint8; }
+    leaf prefix { type string; }
+    leaf nexthop-ip { type string; }
+    leaf metric { type uint32; }
+    leaf afi { type string; }
+  }
+}

@@ -1,0 +1,6 @@
+<device xmlns="urn:container-within-list-schema-order">
+  <id>d1</id>
+  <config>
+    <enabled>true</enabled>
+  </config>
+</device>

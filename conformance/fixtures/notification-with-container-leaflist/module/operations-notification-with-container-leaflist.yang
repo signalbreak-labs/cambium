@@ -1,0 +1,41 @@
+module operations-notification-with-container-leaflist {
+  yang-version 1.1;
+  namespace "urn:operations-notification-with-container-leaflist";
+  prefix oronwcl;
+  revision 2026-06-15;
+
+  notification backup-complete {
+    leaf backup-id {
+      type string;
+    }
+    container summary {
+      leaf duration {
+        type string;
+      }
+      leaf files-backed {
+        type uint64;
+      }
+      leaf status {
+        type enumeration {
+          enum success;
+          enum failure;
+        }
+      }
+    }
+    leaf timestamp {
+      type string;
+    }
+  }
+
+  notification log-rotation {
+    leaf rotation-time {
+      type string;
+    }
+    leaf-list archived-files {
+      type string;
+    }
+    leaf total-size {
+      type uint64;
+    }
+  }
+}

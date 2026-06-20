@@ -1,0 +1,9 @@
+{
+  "operations-notification-interleaved-siblings:alarms": {
+    "count": 5,
+    "threshold": 10,
+    "summary": {
+      "last": "2026-06-15T12:00:00Z"
+    }
+  }
+}

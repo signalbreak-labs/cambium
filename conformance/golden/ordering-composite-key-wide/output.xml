@@ -1,0 +1,9 @@
+<edges xmlns="urn:ordering-composite-key-wide">
+  <src-type>fpc</src-type>
+  <src-slot>1</src-slot>
+  <src-pfe>0</src-pfe>
+  <dst-type>fpc</dst-type>
+  <dst-slot>2</dst-slot>
+  <dst-pfe>1</dst-pfe>
+  <weight>100</weight>
+</edges>

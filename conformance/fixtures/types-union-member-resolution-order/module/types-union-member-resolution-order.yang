@@ -1,0 +1,14 @@
+module types-union-member-resolution-order {
+  namespace "urn:types-union-member-resolution-order";
+  prefix typesunionmemberresolutionorder;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf code {
+    type union {
+      type enumeration { enum five { value 5; } }
+      type uint32;
+    }
+  }
+}

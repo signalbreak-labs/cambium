@@ -1,0 +1,18 @@
+{
+  "ordered-user-config-false-state:state": {
+    "event": [
+      {
+        "seq": 3,
+        "msg": "first"
+      },
+      {
+        "seq": 1,
+        "msg": "second"
+      },
+      {
+        "seq": 2,
+        "msg": "third"
+      }
+    ]
+  }
+}

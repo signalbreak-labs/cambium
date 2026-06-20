@@ -1,0 +1,11 @@
+{
+  "json-object-determinism:top": {
+    "zebra": "z",
+    "alpha": "a",
+    "mid": {
+      "nine": 9,
+      "one": 1
+    },
+    "middle": "m"
+  }
+}

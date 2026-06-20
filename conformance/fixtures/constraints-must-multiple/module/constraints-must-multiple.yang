@@ -1,0 +1,23 @@
+module constraints-must-multiple {
+  yang-version 1;
+  namespace "urn:constraints-must-multiple";
+  prefix cmm;
+  revision 2026-06-14;
+
+  container network {
+    leaf mtu {
+      type uint16 { range "512..65535"; }
+    }
+    leaf payload { type uint16; }
+    must "payload < mtu" {
+      error-app-tag "payload-check";
+    }
+    must "mtu <= 9000" {
+      error-app-tag "mtu-limit";
+    }
+    leaf qos { type string; }
+    must "qos != 'strict' or mtu >= 1000" {
+      error-app-tag "qos-rule";
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "constraints-mandatory-interaction:hostname": "router1",
+  "constraints-mandatory-interaction:domain": "example.com",
+  "constraints-mandatory-interaction:mode": "operational",
+  "constraints-mandatory-interaction:services": {
+    "primary-server": "10.0.0.1"
+  },
+  "constraints-mandatory-interaction:auth": {
+    "username": "admin",
+    "password": "unset"
+  }
+}

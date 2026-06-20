@@ -1,0 +1,7 @@
+{
+  "operations-rpc-output-only:get-version": {
+    "version-string": "1.2.3",
+    "build-date": "2026-06-15",
+    "revision-id": "r42"
+  }
+}

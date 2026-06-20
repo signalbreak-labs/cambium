@@ -1,0 +1,11 @@
+{
+  "composite-key-with-interleaved-containers:route": [
+    {
+      "dest-prefix": "10.0.0.0/8",
+      "next-hop-ip": "192.0.2.1",
+      "metrics": {
+        "distance": 10
+      }
+    }
+  ]
+}

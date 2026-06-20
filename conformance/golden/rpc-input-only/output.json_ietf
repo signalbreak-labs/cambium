@@ -1,0 +1,7 @@
+{
+  "operations-rpc-input-only:request-status": {
+    "interface-name": "eth0",
+    "check-type": "icmp",
+    "timeout": 30
+  }
+}

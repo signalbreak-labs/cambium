@@ -1,0 +1,6 @@
+<hostname xmlns="urn:constraints-default-types">localhost</hostname>
+<port xmlns="urn:constraints-default-types">8080</port>
+<enabled xmlns="urn:constraints-default-types">true</enabled>
+<nameserver xmlns="urn:constraints-default-types">8.8.8.8</nameserver>
+<nameserver xmlns="urn:constraints-default-types">8.8.4.4</nameserver>
+<facility xmlns="urn:constraints-default-types">local0</facility>

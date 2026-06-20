@@ -1,0 +1,15 @@
+module json-ietf-leaflist-array-user-system {
+  namespace "urn:json-ietf-leaflist-array-user-system";
+  prefix jillasu;
+  revision 2026-06-15;
+
+  container top {
+    leaf-list priorities {
+      ordered-by user;
+      type uint8;
+    }
+    leaf-list ports {
+      type uint16;
+    }
+  }
+}

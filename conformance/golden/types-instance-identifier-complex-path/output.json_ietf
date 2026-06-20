@@ -1,0 +1,14 @@
+{
+  "types-instance-identifier-complex-path:vlan": [
+    {
+      "id": 100,
+      "name": "mgmt",
+      "member": [
+        {
+          "port": "eth0"
+        }
+      ]
+    }
+  ],
+  "types-instance-identifier-complex-path:selected-member": "/types-instance-identifier-complex-path:vlan[id='100'][name='mgmt']/member[port='eth0']"
+}

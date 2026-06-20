@@ -1,0 +1,4 @@
+<aaa xmlns="urn:linkage-submodule-imports-foreign">
+  <secret>shared</secret>
+  <server>192.0.2.1</server>
+</aaa>

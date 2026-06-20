@@ -1,0 +1,12 @@
+{
+  "operations-notification-nested-list:interface": [
+    {
+      "name": "eth0",
+      "mtu": 1500,
+      "mtu-exceeded": {
+        "packet-size": 2000,
+        "action-taken": "drop"
+      }
+    }
+  ]
+}

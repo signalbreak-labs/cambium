@@ -1,0 +1,33 @@
+module operations-action-container-simple {
+  yang-version 1.1;
+  namespace "urn:operations-action-container-simple";
+  prefix oroacs;
+  revision 2026-06-15;
+
+  container device {
+    leaf name {
+      type string;
+    }
+    action restart {
+      input {
+        leaf delay-seconds {
+          type uint32;
+        }
+        leaf force {
+          type boolean;
+        }
+      }
+      output {
+        leaf status {
+          type enumeration {
+            enum ok;
+            enum fail;
+          }
+        }
+        leaf message {
+          type string;
+        }
+      }
+    }
+  }
+}

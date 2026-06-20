@@ -1,0 +1,13 @@
+module types-int-int8-range {
+  namespace "urn:types-int-int8-range";
+  prefix typesintint8range;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf i8-min { type int8; }
+    leaf i8-zero { type int8; }
+    leaf i8-max { type int8; }
+  }
+}

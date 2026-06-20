@@ -1,0 +1,27 @@
+module operations-notification-nested-list {
+  yang-version 1.1;
+  namespace "urn:operations-notification-nested-list";
+  prefix oronnl;
+  revision 2026-06-15;
+
+  list interface {
+    key "name";
+    leaf name {
+      type string;
+    }
+    leaf mtu {
+      type uint32;
+    }
+    notification mtu-exceeded {
+      leaf packet-size {
+        type uint32;
+      }
+      leaf action-taken {
+        type enumeration {
+          enum drop;
+          enum fragment;
+        }
+      }
+    }
+  }
+}

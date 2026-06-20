@@ -1,0 +1,19 @@
+module idents-keywords-go {
+  namespace "urn:idents-keywords-go";
+  prefix ikg;
+  revision 2026-06-15;
+
+  container top {
+    leaf func { type string; }
+    leaf range { type string; }
+    leaf chan { type string; }
+    leaf map { type string; }
+    leaf select { type string; }
+    leaf go { type string; }
+    leaf defer { type string; }
+    container interface {
+      leaf enabled { type empty; }
+    }
+    leaf package { type string; }
+  }
+}

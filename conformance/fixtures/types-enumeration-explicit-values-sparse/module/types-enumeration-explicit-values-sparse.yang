@@ -1,0 +1,9 @@
+module types-enumeration-explicit-values-sparse {
+  namespace "urn:types-enumeration-explicit-values-sparse";
+  prefix typesenumerationexplicitvaluessparse;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf ip-version { type enumeration { enum unknown { value 0; } enum ipv4 { value 4; } enum ipv6 { value 6; } } }
+}

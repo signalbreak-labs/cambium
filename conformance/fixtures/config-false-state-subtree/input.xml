@@ -1,0 +1,4 @@
+<system xmlns="urn:config-false-state-subtree">
+  <uptime>123456</uptime>
+  <load-avg>0.42</load-avg>
+</system>

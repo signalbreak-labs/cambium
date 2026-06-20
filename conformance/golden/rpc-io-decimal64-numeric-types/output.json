@@ -1,0 +1,7 @@
+{
+  "operations-rpc-io-decimal64-numeric-types:compute-aggregate": {
+    "samples-count": "10",
+    "offset": "-5",
+    "scale-factor": "1.5"
+  }
+}

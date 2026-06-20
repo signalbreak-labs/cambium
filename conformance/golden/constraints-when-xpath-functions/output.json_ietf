@@ -1,0 +1,16 @@
+{
+  "constraints-when-xpath-functions:service-id": "next-gen-firewall",
+  "constraints-when-xpath-functions:fw-rules": {
+    "rule-count": 10
+  },
+  "constraints-when-xpath-functions:hostname": "prod-router-1",
+  "constraints-when-xpath-functions:regex-cfg": {
+    "region": "us-east"
+  },
+  "constraints-when-xpath-functions:tags": [
+    "red"
+  ],
+  "constraints-when-xpath-functions:tag-cfg": {
+    "tag-count": 1
+  }
+}

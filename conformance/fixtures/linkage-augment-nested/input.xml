@@ -1,0 +1,7 @@
+<dev xmlns="urn:linkage-augment-nested">
+  <status>
+    <timestamp>2026-06-15T00:00:00Z</timestamp>
+    <ready>true</ready>
+  </status>
+  <id>dev-1</id>
+</dev>

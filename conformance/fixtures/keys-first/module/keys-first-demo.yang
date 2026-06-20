@@ -1,0 +1,23 @@
+module keys-first-demo {
+  namespace "urn:keys-first-demo";
+  prefix kfd;
+
+  revision 2026-06-13;
+
+  list server {
+    key "name class";
+
+    // Non-key leaf declared *before* keys in the schema text.
+    leaf description {
+      type string;
+    }
+
+    leaf name {
+      type string;
+    }
+
+    leaf class {
+      type string;
+    }
+  }
+}

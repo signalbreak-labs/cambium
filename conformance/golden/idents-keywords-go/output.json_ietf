@@ -1,0 +1,15 @@
+{
+  "idents-keywords-go:top": {
+    "func": "f",
+    "range": "r",
+    "chan": "c",
+    "map": "m",
+    "select": "s",
+    "go": "g",
+    "defer": "d",
+    "interface": {
+      "enabled": [null]
+    },
+    "package": "p"
+  }
+}

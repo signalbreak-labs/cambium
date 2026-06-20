@@ -1,0 +1,24 @@
+module json-ietf-leafref-union-resolved-form {
+  namespace "urn:json-ietf-leafref-union-resolved-form";
+  prefix jilurf;
+  revision 2026-06-15;
+
+  container top {
+    list iface {
+      key name;
+      leaf name { type string; }
+    }
+    leaf primary-iface {
+      type leafref { path "/top/iface/name"; }
+    }
+    leaf value {
+      type union {
+        type int64;
+        type boolean;
+      }
+    }
+    leaf selected-value {
+      type leafref { path "/top/value"; }
+    }
+  }
+}

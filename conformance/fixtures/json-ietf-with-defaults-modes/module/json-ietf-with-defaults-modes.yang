@@ -1,0 +1,11 @@
+module json-ietf-with-defaults-modes {
+  namespace "urn:json-ietf-with-defaults-modes";
+  prefix jidwm;
+  revision 2026-06-15;
+
+  container settings {
+    leaf timeout { type uint32; default 30; }
+    leaf retries { type uint8; default 3; }
+    leaf name { type string; }
+  }
+}

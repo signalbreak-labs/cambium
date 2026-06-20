@@ -1,0 +1,7 @@
+<top xmlns="urn:json-ietf-list-array-keys-first">
+  <interface>
+    <name>eth0</name>
+    <protocol>ip</protocol>
+    <mtu>1500</mtu>
+  </interface>
+</top>

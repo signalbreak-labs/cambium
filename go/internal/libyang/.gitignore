@@ -1,0 +1,2 @@
+# Locally-built static engine (libyang + PCRE2). Regenerate with build.sh.
+.build*/

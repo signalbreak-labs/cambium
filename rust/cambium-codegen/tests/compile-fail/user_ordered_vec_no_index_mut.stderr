@@ -1,0 +1,5 @@
+error[E0608]: cannot index into a value of type `UserOrderedVec<OrderingNestedUserCascadingTopStatementEntry>`
+ --> tests/compile-fail/user_ordered_vec_no_index_mut.rs:7:18
+  |
+7 |     top.statement[0] = Default::default();
+  |                  ^^^

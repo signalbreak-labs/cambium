@@ -1,0 +1,7 @@
+{
+  "types-int-int8-range:top": {
+    "i8-min": -128,
+    "i8-zero": 0,
+    "i8-max": 127
+  }
+}

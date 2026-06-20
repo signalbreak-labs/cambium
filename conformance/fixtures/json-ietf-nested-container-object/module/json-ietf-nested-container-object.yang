@@ -1,0 +1,13 @@
+module json-ietf-nested-container-object {
+  namespace "urn:json-ietf-nested-container-object";
+  prefix jinco;
+  revision 2026-06-15;
+
+  container top {
+    container middle {
+      container deep {
+        leaf value { type string; }
+      }
+    }
+  }
+}

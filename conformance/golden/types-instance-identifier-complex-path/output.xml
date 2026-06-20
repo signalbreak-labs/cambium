@@ -1,0 +1,8 @@
+<vlan xmlns="urn:types-instance-identifier-complex-path">
+  <id>100</id>
+  <name>mgmt</name>
+  <member>
+    <port>eth0</port>
+  </member>
+</vlan>
+<selected-member xmlns="urn:types-instance-identifier-complex-path" xmlns:typesinstanceidentifiercomplexpath="urn:types-instance-identifier-complex-path">/typesinstanceidentifiercomplexpath:vlan[typesinstanceidentifiercomplexpath:id='100'][typesinstanceidentifiercomplexpath:name='mgmt']/typesinstanceidentifiercomplexpath:member[typesinstanceidentifiercomplexpath:port='eth0']</selected-member>

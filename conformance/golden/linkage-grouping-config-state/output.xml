@@ -1,0 +1,11 @@
+<intf xmlns="urn:linkage-grouping-config-state">
+  <name>eth0</name>
+  <config>
+    <ip>192.0.2.1</ip>
+    <mask>24</mask>
+  </config>
+  <state>
+    <ip>192.0.2.1</ip>
+    <mask>24</mask>
+  </state>
+</intf>

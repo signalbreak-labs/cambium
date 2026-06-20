@@ -1,0 +1,14 @@
+module json-ietf-list-array-keys-first {
+  namespace "urn:json-ietf-list-array-keys-first";
+  prefix jilakf;
+  revision 2026-06-15;
+
+  container top {
+    list interface {
+      key "name protocol";
+      leaf protocol { type string; }
+      leaf mtu { type uint16; }
+      leaf name { type string; }
+    }
+  }
+}

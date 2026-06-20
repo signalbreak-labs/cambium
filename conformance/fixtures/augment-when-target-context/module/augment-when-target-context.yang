@@ -1,0 +1,18 @@
+module augment-when-target-context {
+  yang-version 1.1;
+  namespace "urn:augment-when-target-context";
+  prefix awtca;
+
+  import augment-when-target-context-base {
+    prefix awtc;
+  }
+
+  revision 2026-06-15;
+
+  augment "/awtc:system/awtc:ospf" {
+    when "../awtc:mode = 'enabled'";
+    leaf area {
+      type string;
+    }
+  }
+}

@@ -1,0 +1,17 @@
+module linkage-deviation-add-dev {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-add-dev";
+  prefix ldad;
+
+  import linkage-deviation-add-base {
+    prefix ldab;
+  }
+
+  revision 2026-06-15;
+
+  deviation "/ldab:c/ldab:optional-name" {
+    deviate add {
+      mandatory true;
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "json-ietf-nested-container-object:top": {
+    "middle": {
+      "deep": {
+        "value": "bottom"
+      }
+    }
+  }
+}

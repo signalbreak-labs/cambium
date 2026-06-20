@@ -1,0 +1,15 @@
+{
+  "list-keyless-positional:state": {
+    "sample": [
+      {
+        "reading": "300"
+      },
+      {
+        "reading": "100"
+      },
+      {
+        "reading": "200"
+      }
+    ]
+  }
+}

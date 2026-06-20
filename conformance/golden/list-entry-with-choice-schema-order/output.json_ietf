@@ -1,0 +1,8 @@
+{
+  "list-entry-with-choice-schema-order:vlan": [
+    {
+      "vlan-id": 10,
+      "untag": [null]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+<top xmlns="urn:json-ietf-nested-container-object">
+  <middle>
+    <deep>
+      <value>bottom</value>
+    </deep>
+  </middle>
+</top>

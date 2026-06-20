@@ -1,0 +1,14 @@
+module types-leafref-to-leafref-chain {
+  namespace "urn:types-leafref-to-leafref-chain";
+  prefix typesleafreftoleafrefchain;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  list device {
+    key name;
+    leaf name { type string; }
+  }
+  leaf primary-device { type leafref { path "/device/name"; } }
+  leaf active-alias { type leafref { path "/primary-device"; } }
+}

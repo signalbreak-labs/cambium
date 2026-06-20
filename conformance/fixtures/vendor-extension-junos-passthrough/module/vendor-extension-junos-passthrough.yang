@@ -1,0 +1,25 @@
+module vendor-extension-junos-passthrough {
+  yang-version 1.1;
+  namespace "urn:vendor-extension-junos-passthrough";
+  prefix vejp;
+
+  import junos-extensions {
+    prefix jx;
+  }
+
+  revision 2026-06-15;
+
+  container config {
+    jx:annotate "/vejp:config/users";
+    container users {
+      list user {
+        key name;
+        leaf name { type string; }
+        leaf password {
+          jx:secret;
+          type string;
+        }
+      }
+    }
+  }
+}

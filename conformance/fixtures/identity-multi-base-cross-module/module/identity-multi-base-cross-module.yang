@@ -1,0 +1,14 @@
+module identity-multi-base-cross-module {
+  yang-version 1.1;
+  namespace "urn:identity-multi-base-cross-module";
+  prefix imbc;
+  import identity-multi-base-cross-module-a { prefix a; }
+  import identity-multi-base-cross-module-b { prefix b; }
+  revision 2026-06-14;
+
+  identity high-speed-interface {
+    base a:interface-role;
+    base b:hardware-feature;
+  }
+  leaf type { type identityref { base a:interface-role; } }
+}

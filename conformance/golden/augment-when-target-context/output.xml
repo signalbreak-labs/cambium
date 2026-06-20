@@ -1,0 +1,7 @@
+<system xmlns="urn:augment-when-target-context-base">
+  <mode>enabled</mode>
+  <ospf>
+    <router-id>1.1.1.1</router-id>
+    <area xmlns="urn:augment-when-target-context">0</area>
+  </ospf>
+</system>

@@ -1,0 +1,23 @@
+module json-ietf-cross-module-aug {
+  yang-version 1.1;
+  namespace "urn:json-ietf-cross-module-aug";
+  prefix jicma;
+
+  import json-ietf-cross-module-base {
+    prefix b;
+  }
+
+  revision 2026-06-15;
+
+  augment "/b:interfaces/b:interface" {
+    leaf custom-field { type string; }
+  }
+
+  deviation "/b:interfaces/b:interface/b:counter" {
+    deviate replace {
+      type uint32 {
+        range "0..1000";
+      }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+<device xmlns="urn:linkage-submodule-multi">
+  <id>dev-1</id>
+  <online>true</online>
+</device>

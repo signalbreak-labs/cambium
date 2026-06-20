@@ -1,0 +1,20 @@
+{
+  "ordering-nested-user-cascading:top": {
+    "statement": [
+      {
+        "name": "s2",
+        "actions": [
+          "b",
+          "a"
+        ]
+      },
+      {
+        "name": "s1",
+        "actions": [
+          "b",
+          "a"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+module anyxml-opaque-passthrough {
+  yang-version 1;
+  namespace "urn:anyxml-opaque-passthrough";
+  prefix aop;
+  revision 2026-06-14;
+
+  container rpc-reply {
+    anyxml data;
+  }
+}

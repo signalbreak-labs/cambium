@@ -1,0 +1,12 @@
+module list-single-key-numeric {
+  yang-version 1;
+  namespace "urn:list-single-key-numeric";
+  prefix lskn;
+  revision 2026-06-14;
+
+  list vlan {
+    key vlan-id;
+    leaf vlan-id { type uint16; }
+    leaf description { type string; }
+  }
+}

@@ -1,0 +1,39 @@
+module operations-action-io-heterogeneous {
+  yang-version 1.1;
+  namespace "urn:operations-action-io-heterogeneous";
+  prefix oroaih;
+  revision 2026-06-15;
+
+  container interface {
+    action diagnostic {
+      input {
+        leaf test-type {
+          type string;
+        }
+        leaf-list parameters {
+          type string;
+        }
+        container config {
+          leaf timeout {
+            type uint16;
+          }
+        }
+      }
+      output {
+        container results {
+          leaf-list tests-passed {
+            type string;
+          }
+          leaf summary {
+            type string;
+          }
+        }
+        leaf duration {
+          type decimal64 {
+            fraction-digits 2;
+          }
+        }
+      }
+    }
+  }
+}

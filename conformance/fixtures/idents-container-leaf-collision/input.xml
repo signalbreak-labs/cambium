@@ -1,0 +1,10 @@
+<top xmlns="urn:idents-container-leaf-collision">
+  <config>
+    <enabled/>
+  </config>
+  <config-backup>bak</config-backup>
+  <interface-state>
+    <up>true</up>
+  </interface-state>
+  <interface>eth0</interface>
+</top>

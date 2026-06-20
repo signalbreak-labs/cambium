@@ -1,0 +1,6 @@
+<top xmlns="urn:types-leafref-absolute-path">
+  <iface>
+    <name>eth0</name>
+  </iface>
+</top>
+<primary-iface xmlns="urn:types-leafref-absolute-path">eth0</primary-iface>

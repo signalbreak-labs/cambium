@@ -1,0 +1,9 @@
+{
+  "keys-first-demo:server": [
+    {
+      "name": "s1",
+      "class": "c1",
+      "description": "main"
+    }
+  ]
+}

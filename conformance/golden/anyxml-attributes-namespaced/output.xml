@@ -1,0 +1,7 @@
+<top xmlns="urn:anyxml-attributes-namespaced">
+  <payload>
+    <foo xmlns="urn:x" attr="1">
+      <bar xmlns="urn:anyxml-attributes-namespaced">v</bar>
+    </foo>
+  </payload>
+</top>
