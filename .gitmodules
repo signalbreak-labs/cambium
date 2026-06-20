@@ -1,0 +1,6 @@
+[submodule "third_party/libyang"]
+	path = third_party/libyang
+	url = https://github.com/CESNET/libyang.git
+[submodule "third_party/pcre2"]
+	path = third_party/pcre2
+	url = https://github.com/PCRE2Project/pcre2.git
