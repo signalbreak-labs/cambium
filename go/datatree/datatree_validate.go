@@ -64,8 +64,17 @@ func validateLevel(schema cambium.SchemaChildren, data []*node, path string, out
 			}
 		case sn.IsLeafList():
 			checkElements(sn, len(dn.values), childPath, out)
+			if ti, ok := sn.LeafType(); ok {
+				for i, v := range dn.values {
+					validateLeafValue(ti, v, fmt.Sprintf("%s[%d]", childPath, i), out)
+				}
+			}
 		case sn.IsContainer():
 			validateLevel(sn.DataChildren(true), dn.children, childPath, out)
+		case sn.IsLeaf():
+			if ti, ok := sn.LeafType(); ok {
+				validateLeafValue(ti, dn.value, childPath, out)
+			}
 		}
 	}
 }
