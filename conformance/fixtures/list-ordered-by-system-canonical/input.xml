@@ -1,0 +1,14 @@
+<top xmlns="urn:list-ordered-by-system-canonical">
+  <vlan>
+    <vlan-id>300</vlan-id>
+    <name>lab</name>
+  </vlan>
+  <vlan>
+    <vlan-id>100</vlan-id>
+    <name>mgmt</name>
+  </vlan>
+  <vlan>
+    <vlan-id>200</vlan-id>
+    <name>prod</name>
+  </vlan>
+</top>

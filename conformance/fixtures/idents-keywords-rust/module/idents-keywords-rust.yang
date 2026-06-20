@@ -1,0 +1,23 @@
+module idents-keywords-rust {
+  namespace "urn:idents-keywords-rust";
+  prefix ikrr;
+  revision 2026-06-15;
+
+  container top {
+    leaf type { type string; }
+    leaf match { type string; }
+    leaf ref { type string; }
+    leaf move { type string; }
+    leaf struct { type string; }
+    leaf fn { type string; }
+    leaf impl { type string; }
+    leaf loop { type string; }
+    leaf async { type string; }
+    leaf await { type string; }
+    leaf box { type string; }
+    leaf where { type string; }
+    leaf self { type string; }
+    leaf crate { type string; }
+    leaf super { type string; }
+  }
+}

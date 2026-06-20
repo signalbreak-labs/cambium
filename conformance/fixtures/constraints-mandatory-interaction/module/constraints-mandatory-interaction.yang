@@ -1,0 +1,25 @@
+module constraints-mandatory-interaction {
+  yang-version 1;
+  namespace "urn:constraints-mandatory-interaction";
+  prefix cmi;
+  revision 2026-06-14;
+
+  leaf hostname { type string; mandatory true; }
+  leaf domain { type string; default "example.com"; }
+  leaf mode { type string; }
+  container services {
+    when "../mode = 'operational'";
+    leaf primary-server { type string; mandatory true; }
+  }
+
+  grouping auth-config {
+    leaf username { type string; }
+    leaf password { type string; }
+  }
+  container auth {
+    uses auth-config {
+      refine username { mandatory true; }
+      refine password { default "unset"; }
+    }
+  }
+}

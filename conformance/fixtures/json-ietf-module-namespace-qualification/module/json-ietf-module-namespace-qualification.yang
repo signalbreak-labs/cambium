@@ -1,0 +1,12 @@
+module json-ietf-module-namespace-qualification {
+  namespace "urn:json-ietf-module-namespace-qualification";
+  prefix jimnq;
+  revision 2026-06-15;
+
+  container top {
+    leaf local-leaf { type string; }
+    container nested {
+      leaf inner { type string; }
+    }
+  }
+}

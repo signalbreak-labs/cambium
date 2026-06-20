@@ -1,0 +1,10 @@
+{
+  "types-leafref-deref-function:user": [
+    {
+      "uid": "1001",
+      "home": "/home/alice"
+    }
+  ],
+  "types-leafref-deref-function:logged-in-user": "1001",
+  "types-leafref-deref-function:home-dir": "/home/alice"
+}

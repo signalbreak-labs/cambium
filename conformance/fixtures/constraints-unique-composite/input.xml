@@ -1,0 +1,22 @@
+<policy xmlns="urn:constraints-unique-composite">
+  <id>1</id>
+  <name>allow</name>
+  <priority>10</priority>
+  <rules>
+    <rule>
+      <rule-id>100</rule-id>
+      <src-ip>10.0.0.0/8</src-ip>
+    </rule>
+  </rules>
+</policy>
+<policy xmlns="urn:constraints-unique-composite">
+  <id>2</id>
+  <name>deny</name>
+  <priority>20</priority>
+  <rules>
+    <rule>
+      <rule-id>200</rule-id>
+      <src-ip>192.168.0.0/16</src-ip>
+    </rule>
+  </rules>
+</policy>

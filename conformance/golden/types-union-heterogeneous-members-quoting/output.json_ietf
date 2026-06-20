@@ -1,0 +1,9 @@
+{
+  "types-union-heterogeneous-members-quoting:top": {
+    "text": "text",
+    "flag": true,
+    "big": "9223372036854775807",
+    "huge": "18446744073709551615",
+    "rate": "3.14"
+  }
+}

@@ -1,0 +1,10 @@
+<top xmlns="urn:linkage-augment-container-leaf-list">
+  <tags>red</tags>
+  <tags>blue</tags>
+  <mtu>9000</mtu>
+  <id>node-1</id>
+  <stats>
+    <bytes>4096</bytes>
+    <packets>64</packets>
+  </stats>
+</top>

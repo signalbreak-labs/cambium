@@ -1,0 +1,19 @@
+{
+  "module": "schema-import-user",
+  "load": ["schema-import-user"],
+  "children": {
+    "/schema-import-user": ["ref"]
+  },
+  "imports": {
+    "schema-import-user": [
+      {"prefix": "tgt", "name": "schema-import-target", "revision": "2026-06-16"}
+    ]
+  },
+  "prefixes": {
+    "schema-import-user": {
+      "": "schema-import-user",
+      "siu": "schema-import-user",
+      "tgt": "schema-import-target"
+    }
+  }
+}

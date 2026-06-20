@@ -1,0 +1,12 @@
+{
+  "augment-cross-module-ident-collision-base:top": {
+    "config": {
+      "v": "cfg"
+    },
+    "status": "up",
+    "augment-cross-module-ident-collision:config-extra": {
+      "w": "extra"
+    },
+    "augment-cross-module-ident-collision:config-status": "ok"
+  }
+}

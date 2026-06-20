@@ -1,0 +1,8 @@
+<vlan xmlns="urn:list-single-key-numeric">
+  <vlan-id>100</vlan-id>
+  <description>mgmt</description>
+</vlan>
+<vlan xmlns="urn:list-single-key-numeric">
+  <vlan-id>200</vlan-id>
+  <description>prod</description>
+</vlan>

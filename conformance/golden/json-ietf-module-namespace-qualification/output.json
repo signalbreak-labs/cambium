@@ -1,0 +1,8 @@
+{
+  "json-ietf-module-namespace-qualification:top": {
+    "local-leaf": "one",
+    "nested": {
+      "inner": "two"
+    }
+  }
+}

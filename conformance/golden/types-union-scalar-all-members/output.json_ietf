@@ -1,0 +1,15 @@
+{
+  "types-union-scalar-all-members:top": {
+    "s": "str",
+    "b": false,
+    "i8": -128,
+    "u16": 65000,
+    "i64": "-9223372036854775808",
+    "u64": "18446744073709551615",
+    "d": "-1.5",
+    "e": "beta",
+    "bits": "flag1 flag2",
+    "bin": "SGVsbA==",
+    "iid": "/types-union-scalar-all-members:top/s"
+  }
+}

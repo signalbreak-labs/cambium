@@ -1,0 +1,9 @@
+module types-leafref-cross-module-base {
+  namespace "urn:types-leafref-cross-module-base";
+  prefix tlcb;
+  revision 2026-06-14;
+  list interface {
+    key name;
+    leaf name { type string; }
+  }
+}

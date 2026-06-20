@@ -1,0 +1,10 @@
+module linkage-import-multiple-types2 {
+  yang-version 1.1;
+  namespace "urn:linkage-import-multiple-types2";
+  prefix lim2;
+  revision 2026-06-15;
+
+  typedef name {
+    type string;
+  }
+}

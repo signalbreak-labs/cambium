@@ -1,0 +1,15 @@
+module types-leafref-deref-function {
+  namespace "urn:types-leafref-deref-function";
+  prefix typesleafrefdereffunction;
+
+  yang-version 1.1;
+  revision 2026-06-14;
+
+  list user {
+    key uid;
+    leaf uid { type string; }
+    leaf home { type string; }
+  }
+  leaf logged-in-user { type leafref { path "/user/uid"; } }
+  leaf home-dir { type leafref { path "deref(../logged-in-user)/../home"; } }
+}

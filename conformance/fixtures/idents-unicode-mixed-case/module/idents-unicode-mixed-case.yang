@@ -1,0 +1,12 @@
+module idents-unicode-mixed-case {
+  namespace "urn:idents-unicode-mixed-case";
+  prefix iumc;
+  revision 2026-06-15;
+
+  container top {
+    leaf systemStatus { type string; }
+    leaf ConfigUrl { type string; }
+    leaf port-id { type string; }
+    leaf PortNum { type string; }
+  }
+}

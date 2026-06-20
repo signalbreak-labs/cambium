@@ -1,0 +1,18 @@
+module constraints-feature-presence {
+  yang-version 1.1;
+  namespace "urn:constraints-feature-presence";
+  prefix cfp;
+  revision 2026-06-14;
+
+  feature candidate;
+
+  container ssh {
+    presence "enable ssh";
+    leaf port { type uint16; default 22; }
+  }
+  container candidate-store {
+    if-feature candidate;
+    presence "enable candidate";
+    leaf capacity { type uint32; }
+  }
+}

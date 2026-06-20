@@ -1,0 +1,12 @@
+{
+  "module": "schema-choice-case-order",
+  "children": {
+    "/schema-choice-case-order/root": ["mode"],
+    "/schema-choice-case-order/root/mode": ["primary", "secondary"],
+    "/schema-choice-case-order/root/mode/primary": ["first"],
+    "/schema-choice-case-order/root/mode/secondary": ["second"]
+  },
+  "dataChildrenFlatten": {
+    "/schema-choice-case-order/root": ["first", "second"]
+  }
+}

@@ -1,0 +1,2 @@
+<any-path xmlns="urn:types-instance-identifier-no-require"
+  xmlns:t="urn:types-instance-identifier-no-require">/t:arbitrary/t:path[t:key='value']</any-path>

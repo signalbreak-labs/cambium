@@ -1,0 +1,8 @@
+<top xmlns="urn:json-ietf-leafref-union-resolved-form">
+  <iface>
+    <name>eth0</name>
+  </iface>
+  <primary-iface>eth0</primary-iface>
+  <value>9223372036854775807</value>
+  <selected-value>9223372036854775807</selected-value>
+</top>

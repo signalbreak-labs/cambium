@@ -1,0 +1,3 @@
+<service xmlns="urn:linkage-refine-mandatory-config">
+  <name>demo</name>
+</service>

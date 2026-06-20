@@ -1,0 +1,9 @@
+<top xmlns="urn:json-object-determinism">
+  <zebra>z</zebra>
+  <alpha>a</alpha>
+  <mid>
+    <nine>9</nine>
+    <one>1</one>
+  </mid>
+  <middle>m</middle>
+</top>

@@ -1,0 +1,20 @@
+module rpc-order-demo {
+  namespace "urn:rpc-order-demo";
+  prefix rod;
+
+  revision 2026-06-13;
+
+  rpc reset {
+    input {
+      leaf z {
+        type string;
+      }
+      leaf m {
+        type string;
+      }
+      leaf a {
+        type string;
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+module junos-extensions {
+  yang-version 1.1;
+  namespace "urn:example:junos-extensions";
+  prefix jx;
+  revision 2026-06-15;
+
+  extension annotate {
+    argument path;
+  }
+
+  extension secret;
+}

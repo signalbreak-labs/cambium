@@ -1,0 +1,18 @@
+module types-union-two-identityrefs-distinct-bases {
+  namespace "urn:types-union-two-identityrefs-distinct-bases";
+  prefix typesuniontwoidentityrefsdistinctbases;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  identity hw-component;
+  identity linecard { base hw-component; }
+  identity sw-component;
+  identity driver { base sw-component; }
+  leaf component-type {
+    type union {
+      type identityref { base hw-component; }
+      type identityref { base sw-component; }
+    }
+  }
+}

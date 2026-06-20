@@ -1,0 +1,8 @@
+{
+  "operations-notification-top-level:link-state-change": {
+    "timestamp": "2026-06-15T12:00:00Z",
+    "interface-name": "eth0",
+    "link-state": "up",
+    "reason": "port-up"
+  }
+}

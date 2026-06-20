@@ -1,0 +1,16 @@
+module identity-standalone {
+  yang-version 1;
+  namespace "urn:identity-standalone";
+  prefix is;
+  revision 2026-06-14;
+
+  identity hardware-component {
+    description "Any hardware component";
+  }
+  identity chassis { base hardware-component; }
+  container inventory {
+    leaf component-type {
+      type identityref { base hardware-component; }
+    }
+  }
+}

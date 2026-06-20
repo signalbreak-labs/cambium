@@ -1,0 +1,21 @@
+submodule linkage-submodule-imports-foreign-part {
+  yang-version 1.1;
+  belongs-to linkage-submodule-imports-foreign {
+    prefix lsif;
+  }
+
+  import owned-inet-types {
+    prefix inet;
+  }
+
+  revision 2026-06-15;
+
+  grouping radius-cfg {
+    leaf server {
+      type inet:ip-address;
+    }
+    leaf secret {
+      type string;
+    }
+  }
+}

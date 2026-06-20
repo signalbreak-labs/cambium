@@ -1,0 +1,6 @@
+<intf xmlns="urn:linkage-grouping-simple">
+  <mtu>1500</mtu>
+  <name>eth0</name>
+  <mask>24</mask>
+  <ip>192.0.2.1</ip>
+</intf>

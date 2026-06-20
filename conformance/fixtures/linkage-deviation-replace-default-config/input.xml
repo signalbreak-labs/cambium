@@ -1,0 +1,6 @@
+<system xmlns="urn:linkage-deviation-replace-default-config-base">
+  <ospf>
+    <router-id>1.1.1.1</router-id>
+  </ospf>
+  <mode>enabled</mode>
+</system>

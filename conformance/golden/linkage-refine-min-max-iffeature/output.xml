@@ -1,0 +1,7 @@
+<policy xmlns="urn:linkage-refine-min-max-iffeature">
+  <tags>a</tags>
+  <tags>b</tags>
+</policy>
+<service xmlns="urn:linkage-refine-min-max-iffeature">
+  <mode>auto</mode>
+</service>

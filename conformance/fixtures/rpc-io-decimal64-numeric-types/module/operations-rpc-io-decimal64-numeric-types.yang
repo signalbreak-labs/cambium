@@ -1,0 +1,35 @@
+module operations-rpc-io-decimal64-numeric-types {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-io-decimal64-numeric-types";
+  prefix oriodnt;
+  revision 2026-06-15;
+
+  rpc compute-aggregate {
+    input {
+      leaf samples-count {
+        type uint64;
+      }
+      leaf offset {
+        type int64;
+      }
+      leaf scale-factor {
+        type decimal64 {
+          fraction-digits 2;
+        }
+      }
+    }
+    output {
+      leaf sum {
+        type int64;
+      }
+      leaf average {
+        type decimal64 {
+          fraction-digits 3;
+        }
+      }
+      leaf max-value {
+        type uint64;
+      }
+    }
+  }
+}

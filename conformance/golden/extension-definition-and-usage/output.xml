@@ -1,0 +1,4 @@
+<system xmlns="urn:extension-definition-and-usage">
+  <hostname>r1</hostname>
+  <domain>example.com</domain>
+</system>

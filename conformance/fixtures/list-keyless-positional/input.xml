@@ -1,0 +1,11 @@
+<state xmlns="urn:list-keyless-positional">
+  <sample>
+    <reading>300</reading>
+  </sample>
+  <sample>
+    <reading>100</reading>
+  </sample>
+  <sample>
+    <reading>200</reading>
+  </sample>
+</state>

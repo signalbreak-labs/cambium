@@ -1,0 +1,10 @@
+module types-leafref-to-leaf-list {
+  namespace "urn:types-leafref-to-leaf-list";
+  prefix typesleafreftoleaflist;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf-list tag { type string; }
+  leaf assigned-tag { type leafref { path "/tag"; } }
+}

@@ -1,0 +1,15 @@
+module types-union-heterogeneous-members-quoting {
+  namespace "urn:types-union-heterogeneous-members-quoting";
+  prefix typesunionheterogeneousmembersquoting;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf text { type union { type string; } }
+    leaf flag { type union { type boolean; } }
+    leaf big { type union { type int64; } }
+    leaf huge { type union { type uint64; } }
+    leaf rate { type union { type decimal64 { fraction-digits 2; } } }
+  }
+}

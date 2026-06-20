@@ -1,0 +1,9 @@
+{
+  "linkage-augment-nested:dev": {
+    "id": "dev-1",
+    "status": {
+      "ready": true,
+      "timestamp": "2026-06-15T00:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+module order-demo {
+  namespace "urn:order-demo";
+  prefix od;
+
+  revision 2026-06-13;
+
+  container top {
+    leaf z {
+      type string;
+    }
+    leaf m {
+      type string;
+    }
+    leaf a {
+      type string;
+    }
+  }
+}

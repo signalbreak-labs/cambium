@@ -1,0 +1,14 @@
+module mixed-config-state-nested {
+  yang-version 1;
+  namespace "urn:mixed-config-state-nested";
+  prefix mcsn;
+  revision 2026-06-14;
+
+  container system {
+    leaf hostname { type string; }
+    container state {
+      config false;
+      leaf uptime { type uint64; }
+    }
+  }
+}

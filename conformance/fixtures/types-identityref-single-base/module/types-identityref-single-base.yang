@@ -1,0 +1,12 @@
+module types-identityref-single-base {
+  namespace "urn:types-identityref-single-base";
+  prefix typesidentityrefsinglebase;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  identity transport;
+  identity tcp { base transport; }
+  identity udp { base transport; }
+  leaf proto { type identityref { base transport; } }
+}

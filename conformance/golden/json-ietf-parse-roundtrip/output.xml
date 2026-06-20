@@ -1,0 +1,7 @@
+<top xmlns="urn:json-ietf-parse-roundtrip">
+  <big>9223372036854775807</big>
+  <flag/>
+  <kind>derived-id</kind>
+  <tags>a</tags>
+  <tags>b</tags>
+</top>

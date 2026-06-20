@@ -1,0 +1,19 @@
+module choice-cases-interleaved-siblings {
+  yang-version 1;
+  namespace "urn:choice-cases-interleaved-siblings";
+  prefix ccis;
+  revision 2026-06-14;
+
+  container rule {
+    leaf id { type string; }
+    choice action-type {
+      case accept {
+        leaf priority { type uint8; }
+      }
+      case deny {
+        leaf reason { type string; }
+      }
+    }
+    leaf description { type string; }
+  }
+}

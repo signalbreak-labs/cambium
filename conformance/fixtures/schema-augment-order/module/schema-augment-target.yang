@@ -1,0 +1,10 @@
+module schema-augment-target {
+  namespace "urn:cambium:schema-augment-target";
+  prefix sat;
+  yang-version 1.1;
+
+  container root {
+    leaf a { type string; }
+    leaf b { type string; }
+  }
+}

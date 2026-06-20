@@ -1,0 +1,14 @@
+<config xmlns="urn:ordered-user-demo">
+  <entry>
+    <name>c</name>
+    <value>3</value>
+  </entry>
+  <entry>
+    <name>a</name>
+    <value>1</value>
+  </entry>
+  <entry>
+    <name>b</name>
+    <value>2</value>
+  </entry>
+</config>

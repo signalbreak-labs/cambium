@@ -1,0 +1,20 @@
+<platform xmlns="urn:wide-heterogeneous-siblings-all-types">
+  <timezone>UTC</timezone>
+  <features>vlan</features>
+  <name>r1</name>
+  <dns-servers>8.8.8.8</dns-servers>
+  <state>
+    <uptime>1234</uptime>
+  </state>
+  <hardware>
+    <sku>ABC</sku>
+  </hardware>
+  <services>
+    <enabled>true</enabled>
+  </services>
+  <features>mpls</features>
+  <software>
+    <version>1.0</version>
+  </software>
+  <static-route>0.0.0.0/0</static-route>
+</platform>

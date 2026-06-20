@@ -1,0 +1,9 @@
+{
+  "anyxml-opaque-passthrough:rpc-reply": {
+    "data": {
+      "foo": {
+        "bar": "x"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+<deploy-service xmlns="urn:operations-rpc-io-nested-containers">
+  <config>
+    <timeout>30</timeout>
+    <resource-limits>
+      <memory>512M</memory>
+      <cpu>100m</cpu>
+    </resource-limits>
+    <replica-count>3</replica-count>
+  </config>
+  <service-name>svc</service-name>
+</deploy-service>

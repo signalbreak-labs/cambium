@@ -1,0 +1,5 @@
+<device xmlns="urn:types-leafref-to-list-key">
+  <hostname>router1</hostname>
+  <version>1.0</version>
+</device>
+<primary-device xmlns="urn:types-leafref-to-list-key">router1</primary-device>

@@ -1,0 +1,16 @@
+submodule linkage-submodule-simple-auth {
+  yang-version 1.1;
+  belongs-to linkage-submodule-simple {
+    prefix lss;
+  }
+  revision 2026-06-15;
+
+  grouping auth-params {
+    leaf username {
+      type string;
+    }
+    leaf password {
+      type string;
+    }
+  }
+}

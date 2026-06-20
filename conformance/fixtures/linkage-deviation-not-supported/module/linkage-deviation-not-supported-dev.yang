@@ -1,0 +1,15 @@
+module linkage-deviation-not-supported-dev {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-not-supported-dev";
+  prefix ldnsd;
+
+  import linkage-deviation-not-supported-base {
+    prefix ldnsb;
+  }
+
+  revision 2026-06-15;
+
+  deviation "/ldnsb:c/ldnsb:deprecated-field" {
+    deviate not-supported;
+  }
+}

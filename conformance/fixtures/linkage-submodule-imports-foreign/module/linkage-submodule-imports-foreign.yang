@@ -1,0 +1,13 @@
+module linkage-submodule-imports-foreign {
+  yang-version 1.1;
+  namespace "urn:linkage-submodule-imports-foreign";
+  prefix lsif;
+
+  include linkage-submodule-imports-foreign-part;
+
+  revision 2026-06-15;
+
+  container aaa {
+    uses radius-cfg;
+  }
+}

@@ -1,0 +1,16 @@
+module idents-container-leaf-collision {
+  namespace "urn:idents-container-leaf-collision";
+  prefix iclc;
+  revision 2026-06-15;
+
+  container top {
+    container config {
+      leaf enabled { type empty; }
+    }
+    leaf config-backup { type string; }
+    container interface-state {
+      leaf up { type boolean; }
+    }
+    leaf interface { type string; }
+  }
+}

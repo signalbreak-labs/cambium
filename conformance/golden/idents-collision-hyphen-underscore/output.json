@@ -1,0 +1,12 @@
+{
+  "idents-collision-hyphen-underscore:top": {
+    "foo-bar": "a",
+    "foo_bar": "b",
+    "baz-qux": {
+      "enabled": [null]
+    },
+    "baz_qux": {
+      "status": "ok"
+    }
+  }
+}

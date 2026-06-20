@@ -1,0 +1,6 @@
+{
+  "config-true-subtree:settings": {
+    "hostname": "core",
+    "debug-level": 3
+  }
+}

@@ -1,0 +1,5 @@
+<device xmlns="urn:types-leafref-to-leafref-chain">
+  <name>core1</name>
+</device>
+<primary-device xmlns="urn:types-leafref-to-leafref-chain">core1</primary-device>
+<active-alias xmlns="urn:types-leafref-to-leafref-chain">core1</active-alias>

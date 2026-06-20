@@ -1,0 +1,10 @@
+<hostname xmlns="urn:constraints-mandatory-interaction">router1</hostname>
+<domain xmlns="urn:constraints-mandatory-interaction">example.com</domain>
+<mode xmlns="urn:constraints-mandatory-interaction">operational</mode>
+<services xmlns="urn:constraints-mandatory-interaction">
+  <primary-server>10.0.0.1</primary-server>
+</services>
+<auth xmlns="urn:constraints-mandatory-interaction">
+  <username>admin</username>
+  <password>unset</password>
+</auth>

@@ -1,0 +1,7 @@
+{
+  "json-ietf-decimal64-canonical-quoting:top": {
+    "negative-value": "-3.14",
+    "positive-value": "2.5",
+    "zero-value": "0.0"
+  }
+}

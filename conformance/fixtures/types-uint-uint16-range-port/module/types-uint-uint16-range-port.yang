@@ -1,0 +1,9 @@
+module types-uint-uint16-range-port {
+  namespace "urn:types-uint-uint16-range-port";
+  prefix typesuintuint16rangeport;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf port { type uint16 { range "1..65535"; } }
+}

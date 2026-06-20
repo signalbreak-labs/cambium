@@ -1,0 +1,10 @@
+{
+  "types-leafref-absolute-path:top": {
+    "iface": [
+      {
+        "name": "eth0"
+      }
+    ]
+  },
+  "types-leafref-absolute-path:primary-iface": "eth0"
+}

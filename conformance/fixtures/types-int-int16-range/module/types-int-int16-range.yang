@@ -1,0 +1,12 @@
+module types-int-int16-range {
+  namespace "urn:types-int-int16-range";
+  prefix typesintint16range;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf i16-full { type int16; }
+    leaf i16-range { type int16 { range "-1000..1000"; } }
+  }
+}

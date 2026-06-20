@@ -1,0 +1,7 @@
+module types-leafref-cross-module {
+  namespace "urn:types-leafref-cross-module";
+  prefix tlcm;
+  import types-leafref-cross-module-base { prefix base; }
+  revision 2026-06-14;
+  leaf bound-if { type leafref { path "/base:interface/base:name"; } }
+}

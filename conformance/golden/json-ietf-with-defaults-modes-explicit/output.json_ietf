@@ -1,0 +1,7 @@
+{
+  "json-ietf-with-defaults-modes:settings": {
+    "timeout": 30,
+    "retries": 3,
+    "name": "primary"
+  }
+}

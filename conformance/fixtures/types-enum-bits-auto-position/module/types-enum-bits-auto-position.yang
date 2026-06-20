@@ -1,0 +1,12 @@
+module types-enum-bits-auto-position {
+  namespace "urn:types-enum-bits-auto-position";
+  prefix typesenumbitsautoposition;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf e { type enumeration { enum a { value 5; } enum b; enum c { value 1; } enum d; } }
+    leaf f { type bits { bit x { position 3; } bit y; bit z { position 0; } } }
+  }
+}

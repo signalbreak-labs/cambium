@@ -1,0 +1,8 @@
+module identity-multi-base-cross-module-b {
+  yang-version 1.1;
+  namespace "urn:identity-multi-base-cross-module-b";
+  prefix imbcmb;
+  revision 2026-06-14;
+
+  identity hardware-feature;
+}

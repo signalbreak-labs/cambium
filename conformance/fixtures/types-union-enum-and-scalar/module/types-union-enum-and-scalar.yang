@@ -1,0 +1,14 @@
+module types-union-enum-and-scalar {
+  namespace "urn:types-union-enum-and-scalar";
+  prefix typesunionenumandscalar;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf mode {
+    type union {
+      type enumeration { enum auto; enum manual; }
+      type uint8 { range "0..255"; }
+    }
+  }
+}

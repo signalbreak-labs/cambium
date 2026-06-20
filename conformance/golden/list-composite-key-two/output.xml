@@ -1,0 +1,5 @@
+<edge xmlns="urn:list-composite-key-two">
+  <src-ip>10.0.0.1</src-ip>
+  <dst-ip>10.0.0.2</dst-ip>
+  <metric>10</metric>
+</edge>

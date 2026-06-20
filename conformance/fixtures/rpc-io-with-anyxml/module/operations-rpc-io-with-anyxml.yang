@@ -1,0 +1,24 @@
+module operations-rpc-io-with-anyxml {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-io-with-anyxml";
+  prefix orioax;
+  revision 2026-06-15;
+
+  rpc execute-script {
+    input {
+      leaf script-name {
+        type string;
+      }
+      anyxml parameters;
+      leaf timeout {
+        type uint32;
+      }
+    }
+    output {
+      anyxml result;
+      leaf completion-time {
+        type string;
+      }
+    }
+  }
+}

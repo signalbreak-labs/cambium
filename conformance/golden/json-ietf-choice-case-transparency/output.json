@@ -1,0 +1,7 @@
+{
+  "json-ietf-choice-case-transparency:top": {
+    "priority": 7,
+    "reason": "policy",
+    "local-level": 3
+  }
+}

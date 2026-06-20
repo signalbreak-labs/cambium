@@ -1,0 +1,6 @@
+{
+  "constraints-range-length-reject:top": {
+    "n": 42,
+    "s": "abc"
+  }
+}

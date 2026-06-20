@@ -1,0 +1,7 @@
+module types-identityref-foreign-module-prefix {
+  namespace "urn:types-identityref-foreign-module-prefix";
+  prefix tifmp;
+  import types-identityref-foreign-base { prefix foreign; }
+  revision 2026-06-14;
+  leaf component { type identityref { base foreign:component-type; } }
+}

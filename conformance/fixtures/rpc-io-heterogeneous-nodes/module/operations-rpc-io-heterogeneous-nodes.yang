@@ -1,0 +1,52 @@
+module operations-rpc-io-heterogeneous-nodes {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-io-heterogeneous-nodes";
+  prefix oriohn;
+  revision 2026-06-15;
+
+  rpc query-metrics {
+    input {
+      leaf query-id {
+        type string;
+      }
+      leaf-list metrics {
+        type string;
+      }
+      container filter {
+        leaf pattern {
+          type string;
+        }
+      }
+      choice scope {
+        case node {
+          leaf node-id {
+            type string;
+          }
+        }
+        case network {
+          leaf network-id {
+            type string;
+          }
+        }
+      }
+    }
+    output {
+      container results {
+        leaf count {
+          type uint32;
+        }
+        leaf-list values {
+          type string;
+        }
+      }
+      leaf response-time {
+        type decimal64 {
+          fraction-digits 3;
+        }
+      }
+      leaf-list warnings {
+        type string;
+      }
+    }
+  }
+}

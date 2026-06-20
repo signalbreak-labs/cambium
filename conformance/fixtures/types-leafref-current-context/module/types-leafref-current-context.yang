@@ -1,0 +1,15 @@
+module types-leafref-current-context {
+  namespace "urn:types-leafref-current-context";
+  prefix typesleafrefcurrentcontext;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  list proto {
+    key name;
+    leaf name { type string; }
+    leaf state { type string; }
+  }
+  leaf proto-name { type leafref { path "/proto[name = current()/../selected]/name"; } }
+  leaf selected { type string; }
+}

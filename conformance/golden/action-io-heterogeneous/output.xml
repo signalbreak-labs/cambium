@@ -1,0 +1,10 @@
+<interface xmlns="urn:operations-action-io-heterogeneous">
+  <diagnostic>
+    <test-type>ping</test-type>
+    <parameters>p1</parameters>
+    <parameters>p2</parameters>
+    <config>
+      <timeout>30</timeout>
+    </config>
+  </diagnostic>
+</interface>

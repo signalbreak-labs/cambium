@@ -1,0 +1,6 @@
+{
+  "linkage-grouping-cross-module:intf": {
+    "ip": "192.0.2.1",
+    "mask": 24
+  }
+}

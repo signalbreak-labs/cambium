@@ -1,0 +1,8 @@
+{
+  "types-instance-identifier-require-default:node": [
+    {
+      "id": "x"
+    }
+  ],
+  "types-instance-identifier-require-default:ref": "/types-instance-identifier-require-default:node[id='x']"
+}

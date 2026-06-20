@@ -1,0 +1,14 @@
+<config xmlns="urn:system-list-demo">
+  <server>
+    <name>a</name>
+    <value>1</value>
+  </server>
+  <server>
+    <name>b</name>
+    <value>2</value>
+  </server>
+  <server>
+    <name>c</name>
+    <value>3</value>
+  </server>
+</config>

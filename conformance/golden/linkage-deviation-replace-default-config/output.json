@@ -1,0 +1,8 @@
+{
+  "linkage-deviation-replace-default-config-base:system": {
+    "mode": "enabled",
+    "ospf": {
+      "router-id": "1.1.1.1"
+    }
+  }
+}

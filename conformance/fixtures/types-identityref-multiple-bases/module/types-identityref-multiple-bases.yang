@@ -1,0 +1,12 @@
+module types-identityref-multiple-bases {
+  namespace "urn:types-identityref-multiple-bases";
+  prefix typesidentityrefmultiplebases;
+
+  yang-version 1.1;
+  revision 2026-06-14;
+
+  identity interface-type;
+  identity data-plane;
+  identity ethernet { base interface-type; base data-plane; }
+  leaf class { type identityref { base interface-type; } }
+}

@@ -1,0 +1,17 @@
+<top xmlns="urn:idents-keywords-rust">
+  <type>t</type>
+  <match>m</match>
+  <ref>r</ref>
+  <move>mv</move>
+  <struct>s</struct>
+  <fn>f</fn>
+  <impl>i</impl>
+  <loop>l</loop>
+  <async>a</async>
+  <await>aw</await>
+  <box>b</box>
+  <where>w</where>
+  <self>se</self>
+  <crate>c</crate>
+  <super>su</super>
+</top>

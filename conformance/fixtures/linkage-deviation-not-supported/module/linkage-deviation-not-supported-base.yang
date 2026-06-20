@@ -1,0 +1,15 @@
+module linkage-deviation-not-supported-base {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-not-supported-base";
+  prefix ldnsb;
+  revision 2026-06-15;
+
+  container c {
+    leaf deprecated-field {
+      type string;
+    }
+    leaf active-field {
+      type string;
+    }
+  }
+}

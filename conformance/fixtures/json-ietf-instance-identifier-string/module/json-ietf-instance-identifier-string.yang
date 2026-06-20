@@ -1,0 +1,13 @@
+module json-ietf-instance-identifier-string {
+  namespace "urn:json-ietf-instance-identifier-string";
+  prefix jiiis;
+  revision 2026-06-15;
+
+  container top {
+    list device {
+      key name;
+      leaf name { type string; }
+    }
+    leaf active-device { type instance-identifier; }
+  }
+}

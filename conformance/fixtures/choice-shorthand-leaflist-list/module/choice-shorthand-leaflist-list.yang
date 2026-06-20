@@ -1,0 +1,15 @@
+module choice-shorthand-leaflist-list {
+  yang-version 1;
+  namespace "urn:choice-shorthand-leaflist-list";
+  prefix csll;
+  revision 2026-06-14;
+
+  choice payload {
+    leaf-list tags { type string; }
+    list rows {
+      key id;
+      leaf id { type uint16; }
+      leaf v { type string; }
+    }
+  }
+}

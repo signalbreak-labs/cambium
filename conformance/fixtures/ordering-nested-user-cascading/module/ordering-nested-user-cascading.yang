@@ -1,0 +1,17 @@
+module ordering-nested-user-cascading {
+  namespace "urn:ordering-nested-user-cascading";
+  prefix onuc;
+  revision 2026-06-15;
+
+  container top {
+    list statement {
+      ordered-by user;
+      key name;
+      leaf name { type string; }
+      leaf-list actions {
+        ordered-by user;
+        type string;
+      }
+    }
+  }
+}

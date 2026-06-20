@@ -1,0 +1,9 @@
+module types-decimal64-fraction9-negative {
+  namespace "urn:types-decimal64-fraction9-negative";
+  prefix typesdecimal64fraction9negative;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf delay { type decimal64 { fraction-digits 9; } }
+}

@@ -1,0 +1,29 @@
+module linkage-deviation-multi-dev {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-multi-dev";
+  prefix ldmd;
+
+  import linkage-deviation-multi-base {
+    prefix ldmb;
+  }
+
+  revision 2026-06-15;
+
+  deviation "/ldmb:c/ldmb:legacy" {
+    deviate not-supported;
+  }
+
+  deviation "/ldmb:c/ldmb:maximum" {
+    deviate replace {
+      type uint32 {
+        range "1..1000";
+      }
+    }
+  }
+
+  deviation "/ldmb:c/ldmb:name" {
+    deviate add {
+      mandatory true;
+    }
+  }
+}

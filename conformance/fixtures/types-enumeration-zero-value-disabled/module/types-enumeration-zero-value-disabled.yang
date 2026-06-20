@@ -1,0 +1,9 @@
+module types-enumeration-zero-value-disabled {
+  namespace "urn:types-enumeration-zero-value-disabled";
+  prefix typesenumerationzerovaluedisabled;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf status { type enumeration { enum disabled { value 0; } enum primary { value 1; } enum secondary { value 2; } } }
+}

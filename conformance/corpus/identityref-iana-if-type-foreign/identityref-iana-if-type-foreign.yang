@@ -1,0 +1,8 @@
+module identityref-iana-if-type-foreign {
+  namespace "urn:identityref-iana-if-type-foreign";
+  prefix iiftf;
+  import ietf-interfaces { prefix if; }
+  import iana-if-type { prefix ianaift; }
+  revision 2026-06-14;
+  leaf type { type identityref { base if:interface-type; } }
+}

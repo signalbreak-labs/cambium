@@ -1,0 +1,9 @@
+<action xmlns="urn:ietf:params:xml:ns:yang:1">
+  <service xmlns="urn:operations-action-list-keys-context">
+    <name>svc1</name>
+    <reset>
+      <preserve-state>true</preserve-state>
+      <reset-type>soft</reset-type>
+    </reset>
+  </service>
+</action>

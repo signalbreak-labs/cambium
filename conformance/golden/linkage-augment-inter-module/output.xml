@@ -1,0 +1,7 @@
+<interfaces xmlns="urn:linkage-augment-inter-module-base">
+  <interface>
+    <name>eth0</name>
+    <type>eth</type>
+    <speed xmlns="urn:linkage-augment-inter-module">1000</speed>
+  </interface>
+</interfaces>

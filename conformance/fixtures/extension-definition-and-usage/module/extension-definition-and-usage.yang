@@ -1,0 +1,19 @@
+module extension-definition-and-usage {
+  yang-version 1.1;
+  namespace "urn:extension-definition-and-usage";
+  prefix edu;
+  revision 2026-06-15;
+
+  extension metadata {
+    argument key {
+      yin-element true;
+    }
+  }
+
+  container system {
+    edu:metadata "version";
+    leaf hostname { type string; }
+    edu:metadata "owner";
+    leaf domain { type string; }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "constraints-must-multiple:network": {
+    "mtu": 1500,
+    "payload": 1000,
+    "qos": "best-effort"
+  }
+}

@@ -1,0 +1,23 @@
+module operations-rpc-input-only {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-input-only";
+  prefix orio;
+  revision 2026-06-15;
+
+  rpc request-status {
+    input {
+      leaf interface-name {
+        type string;
+      }
+      leaf check-type {
+        type enumeration {
+          enum arp;
+          enum icmp;
+        }
+      }
+      leaf timeout {
+        type uint32;
+      }
+    }
+  }
+}

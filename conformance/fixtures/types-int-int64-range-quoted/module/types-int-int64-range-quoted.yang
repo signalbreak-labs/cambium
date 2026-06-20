@@ -1,0 +1,9 @@
+module types-int-int64-range-quoted {
+  namespace "urn:types-int-int64-range-quoted";
+  prefix typesintint64rangequoted;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf count { type int64; }
+}

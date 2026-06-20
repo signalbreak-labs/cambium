@@ -1,0 +1,5 @@
+<get-version xmlns="urn:operations-rpc-output-only">
+  <revision-id>r42</revision-id>
+  <build-date>2026-06-15</build-date>
+  <version-string>1.2.3</version-string>
+</get-version>

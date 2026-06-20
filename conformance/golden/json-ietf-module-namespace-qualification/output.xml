@@ -1,0 +1,6 @@
+<top xmlns="urn:json-ietf-module-namespace-qualification">
+  <local-leaf>one</local-leaf>
+  <nested>
+    <inner>two</inner>
+  </nested>
+</top>

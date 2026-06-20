@@ -1,0 +1,31 @@
+module codegen-determinism-range-length {
+  namespace "urn:codegen-determinism-range-length";
+  prefix codegen-determinism-range-length;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf i8 {
+    type int8 {
+      range "-128 .. 127";
+    }
+  }
+
+  leaf u16 {
+    type uint16 {
+      range "0 .. 65535";
+    }
+  }
+
+  leaf label {
+    type string {
+      length "1 .. 32";
+    }
+  }
+
+  leaf code {
+    type string {
+      length "4 .. 16";
+    }
+  }
+}

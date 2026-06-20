@@ -1,0 +1,10 @@
+<entry xmlns="urn:constraints-unique-violation-reject">
+  <id>1</id>
+  <a>x</a>
+  <b>p</b>
+</entry>
+<entry xmlns="urn:constraints-unique-violation-reject">
+  <id>2</id>
+  <a>y</a>
+  <b>q</b>
+</entry>

@@ -1,0 +1,12 @@
+module list-single-key-string {
+  yang-version 1;
+  namespace "urn:list-single-key-string";
+  prefix lsks;
+  revision 2026-06-14;
+
+  list interface {
+    key name;
+    leaf name { type string; }
+    leaf mtu { type uint16; }
+  }
+}

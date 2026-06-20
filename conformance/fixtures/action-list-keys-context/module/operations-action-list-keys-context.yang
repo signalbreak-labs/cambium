@@ -1,0 +1,40 @@
+module operations-action-list-keys-context {
+  yang-version 1.1;
+  namespace "urn:operations-action-list-keys-context";
+  prefix oroalkc;
+  revision 2026-06-15;
+
+  list service {
+    key "name";
+    leaf name {
+      type string;
+    }
+    leaf enabled {
+      type boolean;
+    }
+    action reset {
+      input {
+        leaf reset-type {
+          type enumeration {
+            enum soft;
+            enum hard;
+          }
+        }
+        leaf preserve-state {
+          type boolean;
+        }
+      }
+      output {
+        leaf result {
+          type enumeration {
+            enum success;
+            enum failure;
+          }
+        }
+        leaf details {
+          type string;
+        }
+      }
+    }
+  }
+}

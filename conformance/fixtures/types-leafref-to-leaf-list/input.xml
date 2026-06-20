@@ -1,0 +1,3 @@
+<tag xmlns="urn:types-leafref-to-leaf-list">red</tag>
+<tag xmlns="urn:types-leafref-to-leaf-list">blue</tag>
+<assigned-tag xmlns="urn:types-leafref-to-leaf-list">red</assigned-tag>

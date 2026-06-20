@@ -1,0 +1,6 @@
+{
+  "linkage-submodule-imports-foreign:aaa": {
+    "server": "192.0.2.1",
+    "secret": "shared"
+  }
+}

@@ -1,0 +1,12 @@
+module schema-augment-source {
+  namespace "urn:cambium:schema-augment-source";
+  prefix sas;
+  yang-version 1.1;
+
+  import schema-augment-target { prefix sat; }
+
+  augment "/sat:root" {
+    leaf c { type string; }
+    leaf d { type string; }
+  }
+}

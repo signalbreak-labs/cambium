@@ -1,0 +1,6 @@
+<user xmlns="urn:types-leafref-deref-function">
+  <uid>1001</uid>
+  <home>/home/alice</home>
+</user>
+<logged-in-user xmlns="urn:types-leafref-deref-function">1001</logged-in-user>
+<home-dir xmlns="urn:types-leafref-deref-function">/home/alice</home-dir>

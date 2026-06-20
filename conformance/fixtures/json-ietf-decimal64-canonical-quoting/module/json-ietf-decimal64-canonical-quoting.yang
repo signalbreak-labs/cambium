@@ -1,0 +1,11 @@
+module json-ietf-decimal64-canonical-quoting {
+  namespace "urn:json-ietf-decimal64-canonical-quoting";
+  prefix jidccq;
+  revision 2026-06-15;
+
+  container top {
+    leaf negative-value { type decimal64 { fraction-digits 2; } }
+    leaf positive-value { type decimal64 { fraction-digits 2; } }
+    leaf zero-value { type decimal64 { fraction-digits 2; } }
+  }
+}

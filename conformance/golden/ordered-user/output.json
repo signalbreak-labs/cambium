@@ -1,0 +1,18 @@
+{
+  "ordered-user-demo:config": {
+    "entry": [
+      {
+        "name": "c",
+        "value": "3"
+      },
+      {
+        "name": "a",
+        "value": "1"
+      },
+      {
+        "name": "b",
+        "value": "2"
+      }
+    ]
+  }
+}

@@ -1,0 +1,35 @@
+module linkage-augment-choice-case {
+  yang-version 1.1;
+  namespace "urn:linkage-augment-choice-case";
+  prefix lacc;
+  revision 2026-06-15;
+
+  container config {
+    choice transport {
+      case tcp {
+        leaf tcp-port {
+          type uint16;
+        }
+      }
+      case udp {
+        leaf udp-port {
+          type uint16;
+        }
+      }
+    }
+  }
+
+  augment "/lacc:config/lacc:transport" {
+    case quic {
+      leaf quic-port {
+        type uint16;
+      }
+    }
+  }
+
+  augment "/lacc:config/lacc:transport/lacc:udp" {
+    leaf timeout {
+      type uint32;
+    }
+  }
+}

@@ -1,0 +1,14 @@
+module types-leafref-to-list-key {
+  namespace "urn:types-leafref-to-list-key";
+  prefix typesleafreftolistkey;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  list device {
+    key hostname;
+    leaf hostname { type string; }
+    leaf version { type string; }
+  }
+  leaf primary-device { type leafref { path "/device/hostname"; } }
+}

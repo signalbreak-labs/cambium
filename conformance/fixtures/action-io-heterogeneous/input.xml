@@ -1,0 +1,12 @@
+<action xmlns="urn:ietf:params:xml:ns:yang:1">
+  <interface xmlns="urn:operations-action-io-heterogeneous">
+    <diagnostic>
+      <config>
+        <timeout>30</timeout>
+      </config>
+      <parameters>p1</parameters>
+      <parameters>p2</parameters>
+      <test-type>ping</test-type>
+    </diagnostic>
+  </interface>
+</action>

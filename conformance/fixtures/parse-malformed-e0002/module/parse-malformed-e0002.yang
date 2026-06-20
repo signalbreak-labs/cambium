@@ -1,0 +1,12 @@
+module parse-malformed-e0002 {
+  yang-version 1.1;
+  namespace "urn:parse-malformed-e0002";
+  prefix pme;
+  revision 2026-06-15;
+
+  container top {
+    leaf name {
+      type string;
+    }
+  }
+}

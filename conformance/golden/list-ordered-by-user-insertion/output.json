@@ -1,0 +1,18 @@
+{
+  "list-ordered-by-user-insertion:top": {
+    "rule": [
+      {
+        "name": "c",
+        "action": "drop"
+      },
+      {
+        "name": "a",
+        "action": "accept"
+      },
+      {
+        "name": "b",
+        "action": "reject"
+      }
+    ]
+  }
+}

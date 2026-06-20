@@ -1,0 +1,6 @@
+<intf xmlns="urn:linkage-grouping-nested-uses">
+  <name>eth0</name>
+  <ip>192.0.2.1</ip>
+  <mask>24</mask>
+  <gateway>192.0.2.254</gateway>
+</intf>

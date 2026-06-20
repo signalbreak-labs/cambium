@@ -1,0 +1,13 @@
+<top xmlns="urn:types-union-scalar-all-members">
+  <s>str</s>
+  <b>false</b>
+  <i8>-128</i8>
+  <u16>65000</u16>
+  <i64>-9223372036854775808</i64>
+  <u64>18446744073709551615</u64>
+  <d>-1.5</d>
+  <e>beta</e>
+  <bits>flag1 flag2</bits>
+  <bin>SGVsbA==</bin>
+  <iid xmlns:typesunionscalarallmembers="urn:types-union-scalar-all-members">/typesunionscalarallmembers:top/typesunionscalarallmembers:s</iid>
+</top>

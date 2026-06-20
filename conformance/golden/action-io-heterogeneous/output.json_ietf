@@ -1,0 +1,14 @@
+{
+  "operations-action-io-heterogeneous:interface": {
+    "diagnostic": {
+      "test-type": "ping",
+      "parameters": [
+        "p1",
+        "p2"
+      ],
+      "config": {
+        "timeout": 30
+      }
+    }
+  }
+}

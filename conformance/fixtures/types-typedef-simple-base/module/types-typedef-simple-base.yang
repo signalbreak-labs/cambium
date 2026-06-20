@@ -1,0 +1,12 @@
+module types-typedef-simple-base {
+  namespace "urn:types-typedef-simple-base";
+  prefix typestypedefsimplebase;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  typedef port-number {
+    type uint16 { range "1..65535"; }
+  }
+  leaf port { type port-number; }
+}

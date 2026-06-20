@@ -1,0 +1,6 @@
+<top xmlns="urn:types-uint-uint8-range">
+  <u8-min>0</u8-min>
+  <u8-mid>128</u8-mid>
+  <u8-max>255</u8-max>
+  <u8-dscp>63</u8-dscp>
+</top>

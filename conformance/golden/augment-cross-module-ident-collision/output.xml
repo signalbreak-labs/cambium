@@ -1,0 +1,10 @@
+<top xmlns="urn:augment-cross-module-ident-collision-base">
+  <config>
+    <v>cfg</v>
+  </config>
+  <status>up</status>
+  <config-extra xmlns="urn:augment-cross-module-ident-collision">
+    <w>extra</w>
+  </config-extra>
+  <config-status xmlns="urn:augment-cross-module-ident-collision">ok</config-status>
+</top>

@@ -1,0 +1,7 @@
+<service xmlns="urn:operations-action-list-keys-context">
+  <name>svc1</name>
+  <reset>
+    <reset-type>soft</reset-type>
+    <preserve-state>true</preserve-state>
+  </reset>
+</service>

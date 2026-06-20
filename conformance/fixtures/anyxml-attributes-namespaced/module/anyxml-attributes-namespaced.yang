@@ -1,0 +1,10 @@
+module anyxml-attributes-namespaced {
+  yang-version 1;
+  namespace "urn:anyxml-attributes-namespaced";
+  prefix aan;
+  revision 2026-06-14;
+
+  container top {
+    anyxml payload;
+  }
+}

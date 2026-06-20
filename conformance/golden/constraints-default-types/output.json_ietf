@@ -1,0 +1,10 @@
+{
+  "constraints-default-types:hostname": "localhost",
+  "constraints-default-types:port": 8080,
+  "constraints-default-types:enabled": true,
+  "constraints-default-types:nameserver": [
+    "8.8.4.4",
+    "8.8.8.8"
+  ],
+  "constraints-default-types:facility": "local0"
+}
