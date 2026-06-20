@@ -324,7 +324,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 license = "BSD-3-Clause"
 repository = "https://github.com/signalbreak-labs/cambium"
@@ -351,7 +351,7 @@ bundled = ["cambium-libyang-sys/bundled"]
 system  = ["cambium-libyang-sys/system"]
 
 [dependencies]
-cambium-core = { path = "../cambium-core", version = "0.0.0" }
+cambium-core = { path = "../cambium-core", version = "0.1.0" }
 
 [package.metadata.docs.rs]
 # Doc build compiles no C; relies on committed pre-generated bindings + DOCS_RS guard.

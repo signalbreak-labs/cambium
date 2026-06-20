@@ -53,9 +53,10 @@ time).
 
 ## Publishing workflow
 
-1. Choose the release version. The workspace currently uses `0.0.0`; bump
-   `[workspace.package].version` before publishing crates. The Go submodule tag
-   must use the subdirectory prefix, for example `go/v0.1.0`.
+1. Confirm the release version. The current release candidate is `0.1.0`.
+   Future releases should bump `[workspace.package].version` before publishing
+   crates. The Go submodule tag must use the subdirectory prefix, for example
+   `go/v0.1.0`.
 2. Update `/VERSIONS` if the engine SHA or CMake flags changed.
 3. Open or update a PR to `main` and require GitHub CI to pass. Branch pushes do
    not run the workflow by themselves; CI runs on `pull_request` and `main`

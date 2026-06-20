@@ -14,7 +14,7 @@ bundled = ["cambium-core/bundled"]
 system = ["cambium-core/system"]
 
 [dependencies]
-cambium-core = { path = "../cambium-core", version = "0.0.0" }
+cambium-core = { path = "../cambium-core", version = "0.1.0" }
 
 [package.metadata.docs.rs]
 features = ["bundled"]
