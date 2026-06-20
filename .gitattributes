@@ -1,0 +1,41 @@
+# =============================================================================
+# cambium — normalize line endings across macOS / Linux / Windows-CI.
+# Baseline: treat everything as text, store LF in the repo, check out LF
+# everywhere. This is the single most important anti-CRLF-churn control.
+# =============================================================================
+* text=auto eol=lf
+
+# --- Source: explicit LF. Go is tab-indented by gofmt; never convert tabs. ----
+*.rs    text eol=lf
+*.go    text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+# Makefiles REQUIRE literal tabs — keep LF, never CRLF.
+Makefile text eol=lf
+*.mk     text eol=lf
+
+# --- Windows-only scripts keep CRLF. -----------------------------------------
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# --- Binaries: never munge line endings or attempt text diffs. ---------------
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.wasm  binary
+*.bin   binary
+*.exe   binary
+*.dll   binary
+*.so    binary
+*.dylib binary
+
+# --- Generated lockfiles: collapse diffs in review (still TRACKED). -----------
+Cargo.lock  linguist-generated=true
+go.sum      linguist-generated=true
+go.work.sum linguist-generated=true

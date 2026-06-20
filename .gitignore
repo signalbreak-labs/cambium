@@ -1,0 +1,81 @@
+# Cambium — order-correct, cgo-free Go YANG toolkit (optional libyang cgo backend).
+
+# Go build / test
+*.test
+*.exe
+*.exe~
+*.so
+*.dll
+*.dylib
+__debug_bin
+__debug_bin*
+/go/core.*
+.gocache/
+.golangci-cache/
+# Codegen tests write generated crates/sources here.
+/target/
+**/target/
+
+# Coverage
+/coverage/
+/coverage.out
+/coverage.txt
+/coverage.html
+*.lcov
+/codecov.json
+*.gcov
+
+# Build output
+/bin/
+/dist/
+/build/
+/out/
+
+# Secrets / env (templates re-included)
+.env
+.env.*
+!.env.example
+.envrc
+.direnv/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+.netrc
+/secrets/
+id_rsa
+id_ed25519
+id_ecdsa
+
+# Logs / temp / cache
+*.log
+*.log.*
+/logs/
+*.tmp
+*.temp
+*.pid
+.cache/
+/tmp/
+**/tmp/
+
+# Local dev / agent / editor state — not part of the public repo
+/.claude/
+/.planning/
+/.vscode/
+/.idea/
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+recreate-clean-history.sh
+
+# OS junk
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Node (docs tooling)
+node_modules/

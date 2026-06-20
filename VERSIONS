@@ -1,0 +1,13 @@
+# Single source of truth for the pinned C engine. Bumping ANY value triggers the
+# full conformance + ordering re-run in CI (both languages).
+[libyang]
+repo = "https://github.com/CESNET/libyang"
+tag  = "v5.4.9"
+sha  = "f302d86cd6083c2bfe16fc2122bc6d4be69ce7a2"
+cmake_flags = ["-DBUILD_SHARED_LIBS=OFF", "-DCMAKE_POSITION_INDEPENDENT_CODE=ON", "-DENABLE_LYD_PRIV=OFF"]
+
+[pcre2]
+repo = "https://github.com/PCRE2Project/pcre2"
+tag  = "pcre2-10.44"
+sha  = "6ae58beca071f13ccfed31d03b3f479ab520639b"
+cmake_flags = ["-DBUILD_SHARED_LIBS=OFF", "-DPCRE2_BUILD_PCRE2_8=ON", "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"]
