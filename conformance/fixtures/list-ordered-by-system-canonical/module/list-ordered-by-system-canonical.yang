@@ -1,0 +1,13 @@
+module list-ordered-by-system-canonical {
+  namespace "urn:list-ordered-by-system-canonical";
+  prefix losc;
+  revision 2026-06-15;
+
+  container top {
+    list vlan {
+      key vlan-id;
+      leaf vlan-id { type uint16; }
+      leaf name { type string; }
+    }
+  }
+}

@@ -1,0 +1,4 @@
+{
+  "identity-hierarchy-with-identityref:primary": "rsvp-tunnel",
+  "identity-hierarchy-with-identityref:backup": "rsvp-tunnel"
+}

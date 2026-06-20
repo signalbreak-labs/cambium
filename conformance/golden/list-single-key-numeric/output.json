@@ -1,0 +1,12 @@
+{
+  "list-single-key-numeric:vlan": [
+    {
+      "vlan-id": 100,
+      "description": "mgmt"
+    },
+    {
+      "vlan-id": 200,
+      "description": "prod"
+    }
+  ]
+}

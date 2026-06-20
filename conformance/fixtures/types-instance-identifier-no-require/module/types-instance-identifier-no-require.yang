@@ -1,0 +1,15 @@
+module types-instance-identifier-no-require {
+  namespace "urn:types-instance-identifier-no-require";
+  prefix typesinstanceidentifiernorequire;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container arbitrary {
+    list path {
+      key key;
+      leaf key { type string; }
+    }
+  }
+  leaf any-path { type instance-identifier { require-instance false; } }
+}

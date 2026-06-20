@@ -1,0 +1,12 @@
+module types-typedef-chain-3deep {
+  namespace "urn:types-typedef-chain-3deep";
+  prefix typestypedefchain3deep;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  typedef base-id { type uint32; }
+  typedef session-id { type base-id; }
+  typedef tunnel-session-id { type session-id; }
+  leaf tsid { type tunnel-session-id; }
+}

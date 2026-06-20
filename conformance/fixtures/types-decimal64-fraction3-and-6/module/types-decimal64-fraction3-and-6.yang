@@ -1,0 +1,12 @@
+module types-decimal64-fraction3-and-6 {
+  namespace "urn:types-decimal64-fraction3-and-6";
+  prefix typesdecimal64fraction3and6;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf milli { type decimal64 { fraction-digits 3; } }
+    leaf micro { type decimal64 { fraction-digits 6; } }
+  }
+}

@@ -1,0 +1,9 @@
+<action xmlns="urn:ietf:params:xml:ns:yang:1">
+  <device xmlns="urn:operations-action-container-simple">
+    <name>d1</name>
+    <restart>
+      <force>true</force>
+      <delay-seconds>5</delay-seconds>
+    </restart>
+  </device>
+</action>

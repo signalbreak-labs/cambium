@@ -1,0 +1,24 @@
+module types-typedef-union-composition {
+  namespace "urn:types-typedef-union-composition";
+  prefix typestypedefunioncomposition;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  typedef transport {
+    type union {
+      type enumeration { enum tcp; enum udp; }
+      type uint8;
+    }
+  }
+  typedef endpoint {
+    type union {
+      type string { pattern '[a-z0-9-\.]+'; }
+      type transport;
+    }
+  }
+  container top {
+    leaf server { type endpoint; }
+    leaf mode { type transport; }
+  }
+}

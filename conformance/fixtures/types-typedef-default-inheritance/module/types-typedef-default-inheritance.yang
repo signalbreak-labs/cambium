@@ -1,0 +1,16 @@
+module types-typedef-default-inheritance {
+  namespace "urn:types-typedef-default-inheritance";
+  prefix typestypedefdefaultinheritance;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  typedef pct {
+    type uint8 { range "0..100"; }
+    default 50;
+  }
+  container top {
+    leaf a { type pct; }
+    leaf b { type pct; default 75; }
+  }
+}

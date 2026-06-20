@@ -1,0 +1,8 @@
+{
+  "types-union-leafref-member:interface": [
+    {
+      "name": "eth0"
+    }
+  ],
+  "types-union-leafref-member:primary-or-static": "eth0"
+}

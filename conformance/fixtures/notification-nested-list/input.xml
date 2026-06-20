@@ -1,0 +1,8 @@
+<interface xmlns="urn:operations-notification-nested-list">
+  <mtu>1500</mtu>
+  <name>eth0</name>
+  <mtu-exceeded>
+    <action-taken>drop</action-taken>
+    <packet-size>2000</packet-size>
+  </mtu-exceeded>
+</interface>

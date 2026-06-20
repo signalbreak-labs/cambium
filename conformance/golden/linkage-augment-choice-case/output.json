@@ -1,0 +1,6 @@
+{
+  "linkage-augment-choice-case:config": {
+    "udp-port": 5000,
+    "timeout": 30
+  }
+}

@@ -1,0 +1,9 @@
+module types-decimal64-fraction1-range {
+  namespace "urn:types-decimal64-fraction1-range";
+  prefix typesdecimal64fraction1range;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf temp { type decimal64 { fraction-digits 1; range "-50.0..100.0"; } }
+}

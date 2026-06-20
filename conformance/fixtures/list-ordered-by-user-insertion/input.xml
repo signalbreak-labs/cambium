@@ -1,0 +1,14 @@
+<top xmlns="urn:list-ordered-by-user-insertion">
+  <rule>
+    <name>c</name>
+    <action>drop</action>
+  </rule>
+  <rule>
+    <name>a</name>
+    <action>accept</action>
+  </rule>
+  <rule>
+    <name>b</name>
+    <action>reject</action>
+  </rule>
+</top>

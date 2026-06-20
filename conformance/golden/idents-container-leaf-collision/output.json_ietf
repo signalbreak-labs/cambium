@@ -1,0 +1,12 @@
+{
+  "idents-container-leaf-collision:top": {
+    "config": {
+      "enabled": [null]
+    },
+    "config-backup": "bak",
+    "interface-state": {
+      "up": true
+    },
+    "interface": "eth0"
+  }
+}

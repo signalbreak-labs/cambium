@@ -1,0 +1,12 @@
+module types-boolean-default-false {
+  namespace "urn:types-boolean-default-false";
+  prefix typesbooleandefaultfalse;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf enabled { type boolean; default false; }
+    leaf active { type boolean; default true; }
+  }
+}

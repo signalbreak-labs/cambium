@@ -1,0 +1,29 @@
+module linkage-import-multiple {
+  yang-version 1.1;
+  namespace "urn:linkage-import-multiple";
+  prefix limm;
+
+  import linkage-import-multiple-types1 {
+    prefix m1;
+  }
+  import linkage-import-multiple-types2 {
+    prefix m2;
+  }
+  import linkage-import-multiple-types3 {
+    prefix m3;
+  }
+
+  revision 2026-06-15;
+
+  container obj {
+    leaf id {
+      type m1:id;
+    }
+    leaf name {
+      type m2:name;
+    }
+    leaf mode {
+      type m3:mode;
+    }
+  }
+}

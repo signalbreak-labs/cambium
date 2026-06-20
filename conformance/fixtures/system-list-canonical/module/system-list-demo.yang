@@ -1,0 +1,20 @@
+module system-list-demo {
+  namespace "urn:system-list-demo";
+  prefix sld;
+
+  revision 2026-06-13;
+
+  container config {
+    list server {
+      key "name";
+
+      leaf name {
+        type string;
+      }
+
+      leaf value {
+        type string;
+      }
+    }
+  }
+}

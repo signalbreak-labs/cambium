@@ -1,0 +1,18 @@
+module constraints-when-must {
+  yang-version 1;
+  namespace "urn:constraints-when-must";
+  prefix cwm;
+  revision 2026-06-14;
+
+  leaf kind { type string; }
+  container detail {
+    when "../kind = 'a' or ../kind = 'b'";
+    leaf info {
+      type string;
+      must "string-length(.) > 0" {
+        error-message "info required";
+        error-app-tag "must-violation";
+      }
+    }
+  }
+}

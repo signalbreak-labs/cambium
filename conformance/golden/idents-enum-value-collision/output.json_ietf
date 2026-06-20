@@ -1,0 +1,5 @@
+{
+  "idents-enum-value-collision:top": {
+    "mode": "enable-default"
+  }
+}

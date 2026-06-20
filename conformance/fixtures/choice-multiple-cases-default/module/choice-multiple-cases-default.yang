@@ -1,0 +1,19 @@
+module choice-multiple-cases-default {
+  yang-version 1;
+  namespace "urn:choice-multiple-cases-default";
+  prefix cmcd;
+  revision 2026-06-14;
+
+  choice auth-type {
+    default password;
+    case password {
+      leaf pass-string { type string; }
+    }
+    case public-key {
+      leaf key-data { type string; }
+    }
+    case token {
+      leaf token-value { type string; }
+    }
+  }
+}

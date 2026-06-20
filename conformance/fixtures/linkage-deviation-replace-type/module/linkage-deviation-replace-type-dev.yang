@@ -1,0 +1,19 @@
+module linkage-deviation-replace-type-dev {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-replace-type-dev";
+  prefix ldrd;
+
+  import linkage-deviation-replace-type-base {
+    prefix ldrb;
+  }
+
+  revision 2026-06-15;
+
+  deviation "/ldrb:c/ldrb:count" {
+    deviate replace {
+      type uint32 {
+        range "1..1000";
+      }
+    }
+  }
+}

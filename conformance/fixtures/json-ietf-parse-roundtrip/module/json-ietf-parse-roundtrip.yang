@@ -1,0 +1,16 @@
+module json-ietf-parse-roundtrip {
+  yang-version 1.1;
+  namespace "urn:json-ietf-parse-roundtrip";
+  prefix jiprt;
+  revision 2026-06-15;
+
+  identity base-id;
+  identity derived-id { base base-id; }
+
+  container top {
+    leaf big { type int64; }
+    leaf flag { type empty; }
+    leaf kind { type identityref { base base-id; } }
+    leaf-list tags { type string; }
+  }
+}

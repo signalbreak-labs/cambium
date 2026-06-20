@@ -1,0 +1,12 @@
+{
+  "list-single-key-string:interface": [
+    {
+      "name": "eth0",
+      "mtu": 1500
+    },
+    {
+      "name": "eth1",
+      "mtu": 9000
+    }
+  ]
+}

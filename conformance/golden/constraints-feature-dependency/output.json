@@ -1,0 +1,5 @@
+{
+  "constraints-feature-dependency:top": {
+    "gated": "enabled"
+  }
+}

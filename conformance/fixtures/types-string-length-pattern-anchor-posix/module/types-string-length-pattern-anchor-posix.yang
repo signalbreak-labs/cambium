@@ -1,0 +1,9 @@
+module types-string-length-pattern-anchor-posix {
+  namespace "urn:types-string-length-pattern-anchor-posix";
+  prefix typesstringlengthpatternanchorposix;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf code { type string { length "1..10"; pattern '[[:alnum:]_]*'; } }
+}

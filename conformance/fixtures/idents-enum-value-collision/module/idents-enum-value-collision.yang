@@ -1,0 +1,19 @@
+module idents-enum-value-collision {
+  namespace "urn:idents-enum-value-collision";
+  prefix ievc;
+  revision 2026-06-15;
+
+  typedef enable-mode {
+    type enumeration {
+      enum disabled { value 0; }
+      enum enabled { value 1; }
+      enum ENABLED { value 2; }
+      enum enable-default { value 3; }
+      enum enable_default { value 4; }
+    }
+  }
+
+  container top {
+    leaf mode { type enable-mode; }
+  }
+}

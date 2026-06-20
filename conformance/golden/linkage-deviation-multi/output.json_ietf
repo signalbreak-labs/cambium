@@ -1,0 +1,6 @@
+{
+  "linkage-deviation-multi-base:c": {
+    "maximum": 500,
+    "name": "valid"
+  }
+}

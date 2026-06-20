@@ -1,0 +1,19 @@
+{
+  "idents-keywords-rust:top": {
+    "type": "t",
+    "match": "m",
+    "ref": "r",
+    "move": "mv",
+    "struct": "s",
+    "fn": "f",
+    "impl": "i",
+    "loop": "l",
+    "async": "a",
+    "await": "aw",
+    "box": "b",
+    "where": "w",
+    "self": "se",
+    "crate": "c",
+    "super": "su"
+  }
+}

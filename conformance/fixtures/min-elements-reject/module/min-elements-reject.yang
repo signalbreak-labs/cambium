@@ -1,0 +1,12 @@
+module min-elements-reject {
+  yang-version 1;
+  namespace "urn:min-elements-reject";
+  prefix mer;
+  revision 2026-06-14;
+
+  leaf-list servers {
+    type string;
+    min-elements 2;
+    max-elements 4;
+  }
+}

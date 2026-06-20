@@ -1,0 +1,7 @@
+{
+  "module": "schema-augment-target",
+  "load": ["schema-augment-target", "schema-augment-source"],
+  "children": {
+    "/schema-augment-target/root": ["a", "b", "c", "d"]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "operations-notification-nested-container:system": {
+    "hostname": "core-1",
+    "error-alarm": {
+      "severity": "critical",
+      "error-code": 42,
+      "description": "overheating",
+      "timestamp": "2026-06-15T12:00:00Z"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+<top xmlns="urn:constraints-range-length-reject">
+  <n>42</n>
+  <s>abc</s>
+</top>

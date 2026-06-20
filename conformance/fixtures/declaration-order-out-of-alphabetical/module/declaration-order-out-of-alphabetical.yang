@@ -1,0 +1,12 @@
+module declaration-order-out-of-alphabetical {
+  namespace "urn:declaration-order-out-of-alphabetical";
+  prefix dooa;
+  revision 2026-06-15;
+
+  container system {
+    leaf zebra { type string; }
+    leaf apple { type string; }
+    leaf mango { type string; }
+    leaf banana { type string; }
+  }
+}

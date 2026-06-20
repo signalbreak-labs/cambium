@@ -1,0 +1,11 @@
+<interfaces xmlns="urn:json-ietf-cross-module-base" xmlns:jicma="urn:json-ietf-cross-module-aug">
+  <interface>
+    <name>eth0</name>
+    <counter>500</counter>
+    <jicma:custom-field>abc</jicma:custom-field>
+  </interface>
+</interfaces>
+<system xmlns="urn:json-ietf-cross-module-base">
+  <mode>basic</mode>
+  <secret>shh</secret>
+</system>

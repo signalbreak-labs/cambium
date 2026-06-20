@@ -1,0 +1,14 @@
+module container-presence-empty {
+  yang-version 1;
+  namespace "urn:container-presence-empty";
+  prefix cpe;
+  revision 2026-06-14;
+
+  container enable-ssh {
+    presence "ssh enabled";
+    leaf port { type uint16; default 22; }
+  }
+  container non-presence {
+    leaf status { type string; }
+  }
+}

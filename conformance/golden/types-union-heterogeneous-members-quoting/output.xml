@@ -1,0 +1,7 @@
+<top xmlns="urn:types-union-heterogeneous-members-quoting">
+  <text>text</text>
+  <flag>true</flag>
+  <big>9223372036854775807</big>
+  <huge>18446744073709551615</huge>
+  <rate>3.14</rate>
+</top>

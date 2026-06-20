@@ -1,0 +1,18 @@
+module linkage-deviation-multi-base {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-multi-base";
+  prefix ldmb;
+  revision 2026-06-15;
+
+  container c {
+    leaf legacy {
+      type string;
+    }
+    leaf maximum {
+      type uint64;
+    }
+    leaf name {
+      type string;
+    }
+  }
+}

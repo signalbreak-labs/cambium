@@ -1,0 +1,15 @@
+module choice-single-node-case {
+  yang-version 1;
+  namespace "urn:choice-single-node-case";
+  prefix csnc;
+  revision 2026-06-14;
+
+  choice operation {
+    case create {
+      leaf name { type string; }
+    }
+    case delete {
+      leaf id { type uint32; }
+    }
+  }
+}

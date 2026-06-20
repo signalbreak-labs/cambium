@@ -1,0 +1,12 @@
+module leaflist-ordered-by-user {
+  namespace "urn:leaflist-ordered-by-user";
+  prefix llobu;
+  revision 2026-06-15;
+
+  container top {
+    leaf-list actions {
+      ordered-by user;
+      type string;
+    }
+  }
+}

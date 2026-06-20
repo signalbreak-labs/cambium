@@ -1,0 +1,6 @@
+{
+  "extension-definition-and-usage:system": {
+    "hostname": "r1",
+    "domain": "example.com"
+  }
+}

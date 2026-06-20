@@ -1,0 +1,10 @@
+<top xmlns="urn:augment-cross-module-ident-collision-base" xmlns:acmic="urn:augment-cross-module-ident-collision">
+  <acmic:config-status>ok</acmic:config-status>
+  <config>
+    <v>cfg</v>
+  </config>
+  <acmic:config-extra>
+    <acmic:w>extra</acmic:w>
+  </acmic:config-extra>
+  <status>up</status>
+</top>

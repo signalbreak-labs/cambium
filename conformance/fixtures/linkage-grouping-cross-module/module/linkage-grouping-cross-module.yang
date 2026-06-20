@@ -1,0 +1,15 @@
+module linkage-grouping-cross-module {
+  yang-version 1.1;
+  namespace "urn:linkage-grouping-cross-module";
+  prefix lgcm;
+
+  import linkage-grouping-cross-module-base {
+    prefix lgcmb;
+  }
+
+  revision 2026-06-15;
+
+  container intf {
+    uses lgcmb:shared-addr;
+  }
+}

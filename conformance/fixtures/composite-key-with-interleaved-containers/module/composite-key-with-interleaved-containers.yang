@@ -1,0 +1,15 @@
+module composite-key-with-interleaved-containers {
+  yang-version 1;
+  namespace "urn:composite-key-with-interleaved-containers";
+  prefix ckwic;
+  revision 2026-06-14;
+
+  list route {
+    key "dest-prefix next-hop-ip";
+    leaf dest-prefix { type string; }
+    container metrics {
+      leaf distance { type uint8; }
+    }
+    leaf next-hop-ip { type string; }
+  }
+}

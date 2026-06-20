@@ -1,0 +1,14 @@
+module container-within-list-schema-order {
+  yang-version 1;
+  namespace "urn:container-within-list-schema-order";
+  prefix cwl;
+  revision 2026-06-14;
+
+  list device {
+    key id;
+    leaf id { type string; }
+    container config {
+      leaf enabled { type boolean; }
+    }
+  }
+}

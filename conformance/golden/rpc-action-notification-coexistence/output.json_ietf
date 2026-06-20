@@ -1,0 +1,6 @@
+{
+  "operations-rpc-action-notification-coexistence:global-operation": {
+    "param-a": "a",
+    "param-b": "b"
+  }
+}

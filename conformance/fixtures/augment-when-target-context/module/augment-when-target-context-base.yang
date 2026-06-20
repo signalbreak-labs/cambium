@@ -1,0 +1,17 @@
+module augment-when-target-context-base {
+  yang-version 1.1;
+  namespace "urn:augment-when-target-context-base";
+  prefix awtc;
+  revision 2026-06-15;
+
+  container system {
+    leaf mode {
+      type string;
+    }
+    container ospf {
+      leaf router-id {
+        type string;
+      }
+    }
+  }
+}

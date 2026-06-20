@@ -1,0 +1,9 @@
+module types-string-multiple-patterns-conjunction {
+  namespace "urn:types-string-multiple-patterns-conjunction";
+  prefix typesstringmultiplepatternsconjunction;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf token { type string { pattern '.*[a-z].*'; pattern '.*[0-9].*'; } }
+}

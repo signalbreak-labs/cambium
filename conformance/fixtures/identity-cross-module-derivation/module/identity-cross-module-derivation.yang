@@ -1,0 +1,11 @@
+module identity-cross-module-derivation {
+  yang-version 1;
+  namespace "urn:identity-cross-module-derivation";
+  prefix icmd;
+  import identity-cross-module-derivation-base { prefix base; }
+  revision 2026-06-14;
+
+  identity tcp { base base:transport-protocol; }
+  identity udp { base base:transport-protocol; }
+  leaf proto { type identityref { base base:transport-protocol; } }
+}

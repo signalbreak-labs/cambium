@@ -1,0 +1,19 @@
+module schema-cross-kind-order {
+  namespace "urn:cambium:schema-cross-kind-order";
+  prefix scko;
+  yang-version 1.1;
+
+  grouping g {
+    leaf g1 { type string; }
+    container g2 { leaf nested { type string; } }
+  }
+
+  container root {
+    leaf a { type string; }
+    container b { leaf x { type string; } }
+    leaf-list c { type string; }
+    uses g;
+    list d { key "name"; leaf name { type string; } }
+    choice e { case one { leaf f { type string; } } }
+  }
+}

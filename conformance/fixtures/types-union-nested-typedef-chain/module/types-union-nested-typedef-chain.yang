@@ -1,0 +1,21 @@
+module types-union-nested-typedef-chain {
+  namespace "urn:types-union-nested-typedef-chain";
+  prefix typesunionnestedtypedefchain;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  typedef common-string {
+    type string { pattern '[0-9]+:[0-9]+'; }
+  }
+  typedef community-recv {
+    type union {
+      type common-string;
+      type binary { length "8"; }
+    }
+  }
+  container top {
+    leaf ext-comm { type community-recv; }
+    leaf ext-comm-bin { type community-recv; }
+  }
+}

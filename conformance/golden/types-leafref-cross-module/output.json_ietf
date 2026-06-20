@@ -1,0 +1,8 @@
+{
+  "types-leafref-cross-module:bound-if": "eth0",
+  "types-leafref-cross-module-base:interface": [
+    {
+      "name": "eth0"
+    }
+  ]
+}

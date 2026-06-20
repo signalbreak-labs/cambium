@@ -1,0 +1,5 @@
+<rule xmlns="urn:choice-cases-interleaved-siblings">
+  <id>r1</id>
+  <priority>10</priority>
+  <description>allow</description>
+</rule>

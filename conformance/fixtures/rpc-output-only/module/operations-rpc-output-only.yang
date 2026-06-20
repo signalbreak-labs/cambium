@@ -1,0 +1,20 @@
+module operations-rpc-output-only {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-output-only";
+  prefix oroo;
+  revision 2026-06-15;
+
+  rpc get-version {
+    output {
+      leaf version-string {
+        type string;
+      }
+      leaf build-date {
+        type string;
+      }
+      leaf revision-id {
+        type string;
+      }
+    }
+  }
+}

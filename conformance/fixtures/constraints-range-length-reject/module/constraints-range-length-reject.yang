@@ -1,0 +1,12 @@
+module constraints-range-length-reject {
+  namespace "urn:constraints-range-length-reject";
+  prefix constraintsrangelengthreject;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf n { type int32 { range "1..100"; } }
+    leaf s { type string { length "2..5"; } }
+  }
+}

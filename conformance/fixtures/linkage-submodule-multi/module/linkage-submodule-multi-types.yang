@@ -1,0 +1,11 @@
+submodule linkage-submodule-multi-types {
+  yang-version 1.1;
+  belongs-to linkage-submodule-multi {
+    prefix lsmm;
+  }
+  revision 2026-06-15;
+
+  typedef device-id {
+    type string;
+  }
+}

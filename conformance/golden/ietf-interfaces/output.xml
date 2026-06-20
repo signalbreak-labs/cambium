@@ -1,0 +1,12 @@
+<interfaces xmlns="urn:ietf:params:xml:ns:yang:ietf-interfaces">
+  <interface>
+    <name>eth0</name>
+    <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+    <enabled>true</enabled>
+  </interface>
+  <interface>
+    <name>eth1</name>
+    <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:softwareLoopback</type>
+    <enabled>false</enabled>
+  </interface>
+</interfaces>

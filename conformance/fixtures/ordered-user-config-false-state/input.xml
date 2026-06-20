@@ -1,0 +1,14 @@
+<state xmlns="urn:ordered-user-config-false-state">
+  <event>
+    <seq>3</seq>
+    <msg>first</msg>
+  </event>
+  <event>
+    <seq>1</seq>
+    <msg>second</msg>
+  </event>
+  <event>
+    <seq>2</seq>
+    <msg>third</msg>
+  </event>
+</state>

@@ -1,0 +1,14 @@
+module constraints-unique-violation-reject {
+  yang-version 1;
+  namespace "urn:constraints-unique-violation-reject";
+  prefix cuvr;
+  revision 2026-06-14;
+
+  list entry {
+    key id;
+    leaf id { type uint16; }
+    leaf a { type string; }
+    leaf b { type string; }
+    unique "a b";
+  }
+}

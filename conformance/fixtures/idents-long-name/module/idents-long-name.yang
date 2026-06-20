@@ -1,0 +1,10 @@
+module idents-long-name {
+  namespace "urn:idents-long-name";
+  prefix iln;
+  revision 2026-06-15;
+
+  container top {
+    leaf get-service-accounting-aggregation-source-destination-prefix-information { type string; }
+    leaf very-long-interface-configuration-with-many-policy-and-route-settings-applied { type string; }
+  }
+}

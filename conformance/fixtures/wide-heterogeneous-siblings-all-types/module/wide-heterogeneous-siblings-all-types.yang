@@ -1,0 +1,37 @@
+module wide-heterogeneous-siblings-all-types {
+  namespace "urn:wide-heterogeneous-siblings-all-types";
+  prefix whsat;
+  revision 2026-06-15;
+
+  container platform {
+    container hardware {
+      leaf sku { type string; }
+    }
+    leaf name { type string; }
+    container software {
+      leaf version { type string; }
+    }
+    leaf-list dns-servers {
+      type string;
+    }
+    container services {
+      leaf enabled { type boolean; }
+    }
+    choice routing-protocol {
+      case static {
+        leaf static-route { type string; }
+      }
+      case ospf {
+        leaf ospf-area { type uint32; }
+      }
+    }
+    leaf timezone { type string; }
+    container state {
+      config false;
+      leaf uptime { type uint32; }
+    }
+    leaf-list features {
+      type string;
+    }
+  }
+}

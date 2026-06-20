@@ -1,0 +1,23 @@
+module constraints-unique-composite {
+  yang-version 1;
+  namespace "urn:constraints-unique-composite";
+  prefix cuc;
+  revision 2026-06-14;
+
+  list policy {
+    key id;
+    leaf id { type uint32; }
+    leaf name { type string; }
+    leaf priority { type uint8; }
+    unique "name";
+    unique "priority name";
+    container rules {
+      list rule {
+        key rule-id;
+        leaf rule-id { type uint32; }
+        leaf src-ip { type string; }
+        unique "rule-id";
+      }
+    }
+  }
+}

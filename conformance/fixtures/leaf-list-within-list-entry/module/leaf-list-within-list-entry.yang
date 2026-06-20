@@ -1,0 +1,16 @@
+module leaf-list-within-list-entry {
+  yang-version 1;
+  namespace "urn:leaf-list-within-list-entry";
+  prefix llwle;
+  revision 2026-06-14;
+
+  list policy {
+    ordered-by user;
+    key name;
+    leaf name { type string; }
+    leaf-list actions {
+      ordered-by user;
+      type string;
+    }
+  }
+}

@@ -1,0 +1,15 @@
+module json-ietf-presence-vs-nonpresence {
+  namespace "urn:json-ietf-presence-vs-nonpresence";
+  prefix jipvn;
+  revision 2026-06-15;
+
+  container top {
+    container ssh {
+      presence "enable ssh";
+      leaf port { type uint16; default 22; }
+    }
+    container empty-slot {
+      leaf name { type string; }
+    }
+  }
+}

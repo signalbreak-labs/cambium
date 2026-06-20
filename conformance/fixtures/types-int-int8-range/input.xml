@@ -1,0 +1,5 @@
+<top xmlns="urn:types-int-int8-range">
+  <i8-min>-128</i8-min>
+  <i8-zero>0</i8-zero>
+  <i8-max>127</i8-max>
+</top>

@@ -1,0 +1,16 @@
+module linkage-import-revision-date {
+  yang-version 1.1;
+  namespace "urn:linkage-import-revision-date";
+  prefix lirdm;
+
+  import linkage-import-revision-date-base {
+    prefix lirdb;
+    revision-date 2026-06-14;
+  }
+
+  revision 2026-06-15;
+
+  leaf old-field {
+    type lirdb:old-field-type;
+  }
+}

@@ -1,0 +1,19 @@
+module linkage-deviation-replace-default-config-base {
+  yang-version 1.1;
+  namespace "urn:linkage-deviation-replace-default-config-base";
+  prefix ldrdc;
+  revision 2026-06-15;
+
+  container system {
+    presence "enable system";
+    leaf mode {
+      type string;
+      default "disabled";
+    }
+    container ospf {
+      leaf router-id {
+        type string;
+      }
+    }
+  }
+}

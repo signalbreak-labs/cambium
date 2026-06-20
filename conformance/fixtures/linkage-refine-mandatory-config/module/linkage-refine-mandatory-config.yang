@@ -1,0 +1,26 @@
+module linkage-refine-mandatory-config {
+  yang-version 1.1;
+  namespace "urn:linkage-refine-mandatory-config";
+  prefix lrmc;
+  revision 2026-06-15;
+
+  grouping params {
+    leaf name {
+      type string;
+    }
+    leaf secret {
+      type string;
+    }
+  }
+
+  container service {
+    uses params {
+      refine name {
+        mandatory true;
+      }
+      refine secret {
+        config false;
+      }
+    }
+  }
+}

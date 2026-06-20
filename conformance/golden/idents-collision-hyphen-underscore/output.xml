@@ -1,0 +1,10 @@
+<top xmlns="urn:idents-collision-hyphen-underscore">
+  <foo-bar>a</foo-bar>
+  <foo_bar>b</foo_bar>
+  <baz-qux>
+    <enabled/>
+  </baz-qux>
+  <baz_qux>
+    <status>ok</status>
+  </baz_qux>
+</top>

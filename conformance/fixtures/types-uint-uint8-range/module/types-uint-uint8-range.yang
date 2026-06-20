@@ -1,0 +1,14 @@
+module types-uint-uint8-range {
+  namespace "urn:types-uint-uint8-range";
+  prefix typesuintuint8range;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    leaf u8-min { type uint8; }
+    leaf u8-mid { type uint8; }
+    leaf u8-max { type uint8; }
+    leaf u8-dscp { type uint8 { range "0..63"; } }
+  }
+}

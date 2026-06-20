@@ -1,0 +1,4 @@
+<intf xmlns="urn:linkage-grouping-cross-module">
+  <mask>24</mask>
+  <ip>192.0.2.1</ip>
+</intf>

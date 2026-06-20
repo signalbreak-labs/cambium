@@ -1,0 +1,19 @@
+module metadata-annotation-rfc7952 {
+  yang-version 1.1;
+  namespace "urn:metadata-annotation-rfc7952";
+  prefix mar;
+
+  import ietf-yang-metadata {
+    prefix md;
+  }
+
+  revision 2026-06-15;
+
+  md:annotation last-modified {
+    type string;
+  }
+
+  container top {
+    leaf name { type string; }
+  }
+}

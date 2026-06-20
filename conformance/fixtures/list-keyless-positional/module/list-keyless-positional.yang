@@ -1,0 +1,14 @@
+module list-keyless-positional {
+  yang-version 1;
+  namespace "urn:list-keyless-positional";
+  prefix lkp;
+  revision 2026-06-14;
+
+  container state {
+    config false;
+    list sample {
+      max-elements 8;
+      leaf reading { type uint64; }
+    }
+  }
+}

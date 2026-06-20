@@ -1,0 +1,28 @@
+module operations-notification-interleaved-siblings {
+  yang-version 1.1;
+  namespace "urn:operations-notification-interleaved-siblings";
+  prefix oronis;
+  revision 2026-06-15;
+
+  container alarms {
+    leaf count {
+      type uint32;
+    }
+    notification raised {
+      leaf severity {
+        type string;
+      }
+      leaf resource {
+        type string;
+      }
+    }
+    leaf threshold {
+      type uint32;
+    }
+    container summary {
+      leaf last {
+        type string;
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "linkage-grouping-config-state:intf": {
+    "name": "eth0",
+    "config": {
+      "ip": "192.0.2.1",
+      "mask": 24
+    },
+    "state": {
+      "ip": "192.0.2.1",
+      "mask": 24
+    }
+  }
+}

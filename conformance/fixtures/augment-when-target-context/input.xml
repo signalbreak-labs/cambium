@@ -1,0 +1,7 @@
+<system xmlns="urn:augment-when-target-context-base" xmlns:awtca="urn:augment-when-target-context">
+  <mode>enabled</mode>
+  <ospf>
+    <awtca:area>0</awtca:area>
+    <router-id>1.1.1.1</router-id>
+  </ospf>
+</system>

@@ -1,0 +1,8 @@
+{
+  "linkage-grouping-simple:intf": {
+    "name": "eth0",
+    "ip": "192.0.2.1",
+    "mask": 24,
+    "mtu": 1500
+  }
+}

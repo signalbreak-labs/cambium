@@ -1,0 +1,7 @@
+module main {
+  namespace "urn:types-typedef-submodule-cross-file";
+  prefix tdsccf;
+  include shared-types;
+  revision 2026-06-14;
+  leaf val { type shared-decimal; }
+}

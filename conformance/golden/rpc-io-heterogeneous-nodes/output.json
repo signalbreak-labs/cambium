@@ -1,0 +1,13 @@
+{
+  "operations-rpc-io-heterogeneous-nodes:query-metrics": {
+    "query-id": "q1",
+    "metrics": [
+      "cpu",
+      "memory"
+    ],
+    "filter": {
+      "pattern": ".*"
+    },
+    "node-id": "node-1"
+  }
+}

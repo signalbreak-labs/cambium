@@ -1,0 +1,4 @@
+<vlan xmlns="urn:list-entry-with-choice-schema-order">
+  <vlan-id>10</vlan-id>
+  <untag/>
+</vlan>

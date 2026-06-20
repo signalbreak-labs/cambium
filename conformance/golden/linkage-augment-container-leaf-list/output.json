@@ -1,0 +1,14 @@
+{
+  "linkage-augment-container-leaf-list:top": {
+    "id": "node-1",
+    "stats": {
+      "packets": "64",
+      "bytes": "4096"
+    },
+    "mtu": 9000,
+    "tags": [
+      "blue",
+      "red"
+    ]
+  }
+}

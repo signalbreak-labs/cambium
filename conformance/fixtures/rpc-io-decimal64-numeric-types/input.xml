@@ -1,0 +1,5 @@
+<compute-aggregate xmlns="urn:operations-rpc-io-decimal64-numeric-types">
+  <scale-factor>1.50</scale-factor>
+  <samples-count>10</samples-count>
+  <offset>-5</offset>
+</compute-aggregate>

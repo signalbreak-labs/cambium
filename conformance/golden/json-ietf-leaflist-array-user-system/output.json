@@ -1,0 +1,15 @@
+{
+  "json-ietf-leaflist-array-user-system:top": {
+    "priorities": [
+      100,
+      50,
+      75
+    ],
+    "ports": [
+      22,
+      80,
+      443,
+      8080
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+module list-composite-key-two {
+  yang-version 1;
+  namespace "urn:list-composite-key-two";
+  prefix lckt;
+  revision 2026-06-14;
+
+  list edge {
+    key "src-ip dst-ip";
+    leaf metric { type uint32; }
+    leaf src-ip { type string; }
+    leaf dst-ip { type string; }
+  }
+}

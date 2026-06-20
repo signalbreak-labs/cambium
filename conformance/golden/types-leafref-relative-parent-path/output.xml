@@ -1,0 +1,6 @@
+<iface xmlns="urn:types-leafref-relative-parent-path">
+  <name>eth0</name>
+  <config>
+    <route-id>eth0</route-id>
+  </config>
+</iface>

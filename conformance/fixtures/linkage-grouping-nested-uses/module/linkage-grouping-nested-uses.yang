@@ -1,0 +1,29 @@
+module linkage-grouping-nested-uses {
+  yang-version 1.1;
+  namespace "urn:linkage-grouping-nested-uses";
+  prefix lgnu;
+  revision 2026-06-15;
+
+  grouping base-addr {
+    leaf ip {
+      type string;
+    }
+    leaf mask {
+      type uint8;
+    }
+  }
+
+  grouping extended-addr {
+    uses base-addr;
+    leaf gateway {
+      type string;
+    }
+  }
+
+  container intf {
+    leaf name {
+      type string;
+    }
+    uses extended-addr;
+  }
+}

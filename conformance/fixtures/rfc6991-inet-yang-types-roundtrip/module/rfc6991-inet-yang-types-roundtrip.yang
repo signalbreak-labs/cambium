@@ -1,0 +1,33 @@
+module rfc6991-inet-yang-types-roundtrip {
+  yang-version 1.1;
+  namespace "urn:rfc6991-inet-yang-types-roundtrip";
+  prefix riyt;
+
+  import owned-inet-types {
+    prefix oinet;
+  }
+
+  import owned-yang-types {
+    prefix oyng;
+  }
+
+  revision 2026-06-15;
+
+  container top {
+    leaf addr {
+      type oinet:ip-address;
+    }
+    leaf pfx {
+      type oinet:ipv6-prefix;
+    }
+    leaf mac {
+      type oyng:mac-address;
+    }
+    leaf ts {
+      type oyng:date-and-time;
+    }
+    leaf ctr {
+      type oyng:counter64;
+    }
+  }
+}

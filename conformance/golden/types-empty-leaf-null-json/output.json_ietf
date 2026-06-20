@@ -1,0 +1,5 @@
+{
+  "types-empty-leaf-null-json:top": {
+    "enabled": [null]
+  }
+}

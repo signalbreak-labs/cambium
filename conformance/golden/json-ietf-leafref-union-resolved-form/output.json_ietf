@@ -1,0 +1,12 @@
+{
+  "json-ietf-leafref-union-resolved-form:top": {
+    "iface": [
+      {
+        "name": "eth0"
+      }
+    ],
+    "primary-iface": "eth0",
+    "value": "9223372036854775807",
+    "selected-value": "9223372036854775807"
+  }
+}

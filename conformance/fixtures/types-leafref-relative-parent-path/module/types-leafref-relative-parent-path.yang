@@ -1,0 +1,15 @@
+module types-leafref-relative-parent-path {
+  namespace "urn:types-leafref-relative-parent-path";
+  prefix typesleafrefrelativeparentpath;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  list iface {
+    key name;
+    leaf name { type string; }
+    container config {
+      leaf route-id { type leafref { path "../../name"; } }
+    }
+  }
+}

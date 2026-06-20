@@ -1,0 +1,11 @@
+submodule json-ietf-cross-module-base-types {
+  yang-version 1.1;
+  belongs-to json-ietf-cross-module-base {
+    prefix jicmb;
+  }
+  revision 2026-06-15;
+
+  grouping secret-group {
+    leaf secret { type string; }
+  }
+}

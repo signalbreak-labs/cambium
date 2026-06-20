@@ -1,0 +1,48 @@
+module operations-rpc-action-notification-coexistence {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-action-notification-coexistence";
+  prefix ororanc;
+  revision 2026-06-15;
+
+  rpc global-operation {
+    input {
+      leaf param-a {
+        type string;
+      }
+      leaf param-b {
+        type string;
+      }
+    }
+    output {
+      leaf result {
+        type string;
+      }
+    }
+  }
+
+  container device {
+    leaf id {
+      type string;
+    }
+    action device-action {
+      input {
+        leaf value {
+          type uint32;
+        }
+      }
+      output {
+        leaf ack {
+          type boolean;
+        }
+      }
+    }
+    notification device-event {
+      leaf event-type {
+        type string;
+      }
+      leaf timestamp {
+        type string;
+      }
+    }
+  }
+}

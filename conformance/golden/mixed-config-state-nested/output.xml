@@ -1,0 +1,6 @@
+<system xmlns="urn:mixed-config-state-nested">
+  <hostname>core</hostname>
+  <state>
+    <uptime>123456</uptime>
+  </state>
+</system>

@@ -1,0 +1,13 @@
+module identity-hierarchy-with-identityref {
+  yang-version 1;
+  namespace "urn:identity-hierarchy-with-identityref";
+  prefix ihi;
+  revision 2026-06-14;
+
+  identity tunnel-type;
+  identity mpls-tunnel { base tunnel-type; }
+  identity rsvp-tunnel { base mpls-tunnel; }
+  identity ldp-tunnel { base mpls-tunnel; }
+  leaf primary { type identityref { base mpls-tunnel; } }
+  leaf backup { type identityref { base tunnel-type; } }
+}

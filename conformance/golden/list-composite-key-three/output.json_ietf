@@ -1,0 +1,11 @@
+{
+  "list-composite-key-three:route": [
+    {
+      "prefix": "192.0.2.0/24",
+      "nexthop-ip": "198.51.100.1",
+      "afi": "ipv4",
+      "preference": 5,
+      "metric": 100
+    }
+  ]
+}

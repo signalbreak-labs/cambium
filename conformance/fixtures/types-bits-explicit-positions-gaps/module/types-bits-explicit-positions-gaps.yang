@@ -1,0 +1,9 @@
+module types-bits-explicit-positions-gaps {
+  namespace "urn:types-bits-explicit-positions-gaps";
+  prefix typesbitsexplicitpositionsgaps;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf ops { type bits { bit create { position 0; } bit read { position 1; } bit update { position 2; } bit delete { position 3; } } }
+}

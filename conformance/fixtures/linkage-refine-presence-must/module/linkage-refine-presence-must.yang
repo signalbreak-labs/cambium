@@ -1,0 +1,27 @@
+module linkage-refine-presence-must {
+  yang-version 1.1;
+  namespace "urn:linkage-refine-presence-must";
+  prefix lrpm;
+  revision 2026-06-15;
+
+  grouping shared-container {
+    container opts {
+      leaf val {
+        type uint8;
+      }
+    }
+  }
+
+  container system {
+    uses shared-container {
+      refine opts {
+        presence "enable opts";
+      }
+      refine opts/val {
+        must "current() > 0" {
+          error-message "val > 0";
+        }
+      }
+    }
+  }
+}

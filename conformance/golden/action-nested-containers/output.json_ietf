@@ -1,0 +1,12 @@
+{
+  "operations-action-nested-containers:system": {
+    "management": {
+      "enabled": true,
+      "retention-days": 30,
+      "audit-log": {
+        "duration-hours": 24,
+        "format": "json"
+      }
+    }
+  }
+}

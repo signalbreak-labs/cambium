@@ -1,0 +1,8 @@
+{
+  "declaration-order-out-of-alphabetical:system": {
+    "zebra": "4",
+    "apple": "1",
+    "mango": "3",
+    "banana": "2"
+  }
+}

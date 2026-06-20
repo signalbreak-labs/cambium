@@ -1,0 +1,13 @@
+module types-instance-identifier-require-default {
+  namespace "urn:types-instance-identifier-require-default";
+  prefix typesinstanceidentifierrequiredefault;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  list node {
+    key id;
+    leaf id { type string; }
+  }
+  leaf ref { type instance-identifier; }
+}

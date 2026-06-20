@@ -1,0 +1,6 @@
+<top xmlns="urn:json-ietf-instance-identifier-string" xmlns:jiiis="urn:json-ietf-instance-identifier-string">
+  <device>
+    <name>eth0</name>
+  </device>
+  <active-device>/jiiis:top/jiiis:device[jiiis:name='eth0']</active-device>
+</top>

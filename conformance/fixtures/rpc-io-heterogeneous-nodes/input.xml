@@ -1,0 +1,9 @@
+<query-metrics xmlns="urn:operations-rpc-io-heterogeneous-nodes">
+  <node-id>node-1</node-id>
+  <metrics>cpu</metrics>
+  <metrics>memory</metrics>
+  <query-id>q1</query-id>
+  <filter>
+    <pattern>.*</pattern>
+  </filter>
+</query-metrics>

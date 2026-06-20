@@ -1,0 +1,14 @@
+module schema-leafref-path {
+  namespace "urn:cambium:schema-leafref-path";
+  prefix slp;
+  yang-version 1.1;
+
+  container top {
+    leaf name { type string; }
+    leaf ref {
+      type leafref {
+        path "/slp:top/slp:name";
+      }
+    }
+  }
+}

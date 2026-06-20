@@ -1,0 +1,6 @@
+<proto xmlns="urn:types-leafref-current-context">
+  <name>ospf</name>
+  <state>up</state>
+</proto>
+<selected xmlns="urn:types-leafref-current-context">ospf</selected>
+<proto-name xmlns="urn:types-leafref-current-context">ospf</proto-name>

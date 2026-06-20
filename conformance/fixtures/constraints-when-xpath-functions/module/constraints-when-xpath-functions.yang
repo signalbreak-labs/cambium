@@ -1,0 +1,29 @@
+module constraints-when-xpath-functions {
+  yang-version 1.1;
+  namespace "urn:constraints-when-xpath-functions";
+  prefix cwxf;
+  revision 2026-06-14;
+
+  identity service-type;
+  identity firewall { base service-type; }
+  identity next-gen-firewall { base firewall; }
+  identity routing { base service-type; }
+
+  leaf service-id { type identityref { base service-type; } }
+  container fw-rules {
+    when "derived-from(../service-id, 'firewall')";
+    leaf rule-count { type uint32; }
+  }
+
+  leaf hostname { type string; }
+  container regex-cfg {
+    when "re-match(../hostname, 'prod-.*')";
+    leaf region { type string; }
+  }
+
+  leaf-list tags { type string; }
+  container tag-cfg {
+    when "count(../tags) > 0";
+    leaf tag-count { type uint32; }
+  }
+}

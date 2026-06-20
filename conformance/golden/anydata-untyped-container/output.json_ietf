@@ -1,0 +1,7 @@
+{
+  "anydata-untyped-container:top": {
+    "metrics": {
+      "custom": "value"
+    }
+  }
+}

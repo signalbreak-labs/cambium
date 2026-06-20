@@ -1,0 +1,9 @@
+module json-ietf-decimal64-no-exponent {
+  namespace "urn:json-ietf-decimal64-no-exponent";
+  prefix jsonietfdecimal64noexponent;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf rate { type decimal64 { fraction-digits 9; } }
+}

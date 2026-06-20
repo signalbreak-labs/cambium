@@ -1,0 +1,10 @@
+module status-current-deprecated-obsolete {
+  yang-version 1;
+  namespace "urn:status-current-deprecated-obsolete";
+  prefix scdo;
+  revision 2026-06-14;
+
+  leaf current-item { type string; status current; }
+  leaf deprecated-item { type string; status deprecated; }
+  leaf obsolete-item { type string; status obsolete; }
+}

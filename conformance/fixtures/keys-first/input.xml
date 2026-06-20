@@ -1,0 +1,5 @@
+<server xmlns="urn:keys-first-demo">
+  <description>main</description>
+  <name>s1</name>
+  <class>c1</class>
+</server>

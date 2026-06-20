@@ -1,0 +1,11 @@
+<action xmlns="urn:ietf:params:xml:ns:yang:1">
+  <config xmlns="urn:operations-action-container-wide-siblings">
+    <setting-b>b</setting-b>
+    <setting-d>d</setting-d>
+    <validate>
+      <strict-mode>true</strict-mode>
+    </validate>
+    <setting-a>a</setting-a>
+    <setting-c>c</setting-c>
+  </config>
+</action>

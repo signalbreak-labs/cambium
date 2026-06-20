@@ -1,0 +1,9 @@
+{
+  "types-leafref-to-leafref-chain:device": [
+    {
+      "name": "core1"
+    }
+  ],
+  "types-leafref-to-leafref-chain:primary-device": "core1",
+  "types-leafref-to-leafref-chain:active-alias": "core1"
+}

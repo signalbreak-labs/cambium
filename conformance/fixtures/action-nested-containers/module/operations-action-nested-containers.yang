@@ -1,0 +1,38 @@
+module operations-action-nested-containers {
+  yang-version 1.1;
+  namespace "urn:operations-action-nested-containers";
+  prefix oroanc;
+  revision 2026-06-15;
+
+  container system {
+    container management {
+      leaf enabled {
+        type boolean;
+      }
+      action audit-log {
+        input {
+          leaf duration-hours {
+            type uint16;
+          }
+          leaf format {
+            type enumeration {
+              enum json;
+              enum csv;
+            }
+          }
+        }
+        output {
+          leaf entries-count {
+            type uint64;
+          }
+          leaf log-file {
+            type string;
+          }
+        }
+      }
+      leaf retention-days {
+        type uint16;
+      }
+    }
+  }
+}

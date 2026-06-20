@@ -1,0 +1,7 @@
+<route xmlns="urn:composite-key-with-interleaved-containers">
+  <dest-prefix>10.0.0.0/8</dest-prefix>
+  <next-hop-ip>192.0.2.1</next-hop-ip>
+  <metrics>
+    <distance>10</distance>
+  </metrics>
+</route>

@@ -1,0 +1,13 @@
+{
+  "ordering-composite-key-wide:edges": [
+    {
+      "src-type": "fpc",
+      "src-slot": 1,
+      "src-pfe": 0,
+      "dst-type": "fpc",
+      "dst-slot": 2,
+      "dst-pfe": 1,
+      "weight": 100
+    }
+  ]
+}

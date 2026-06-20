@@ -1,0 +1,13 @@
+{
+  "operations-rpc-io-nested-containers:deploy-service": {
+    "service-name": "svc",
+    "config": {
+      "replica-count": 3,
+      "resource-limits": {
+        "cpu": "100m",
+        "memory": "512M"
+      },
+      "timeout": 30
+    }
+  }
+}

@@ -1,0 +1,30 @@
+module operations-notification-nested-container {
+  yang-version 1.1;
+  namespace "urn:operations-notification-nested-container";
+  prefix oronnc;
+  revision 2026-06-15;
+
+  container system {
+    leaf hostname {
+      type string;
+    }
+    notification error-alarm {
+      leaf severity {
+        type enumeration {
+          enum critical;
+          enum major;
+          enum minor;
+        }
+      }
+      leaf error-code {
+        type uint32;
+      }
+      leaf description {
+        type string;
+      }
+      leaf timestamp {
+        type string;
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+module augment-cross-module-ident-collision {
+  yang-version 1.1;
+  namespace "urn:augment-cross-module-ident-collision";
+  prefix acmic;
+
+  import augment-cross-module-ident-collision-base {
+    prefix acmib;
+  }
+
+  revision 2026-06-15;
+
+  augment "/acmib:top" {
+    container config-extra {
+      leaf w {
+        type string;
+      }
+    }
+    leaf config-status {
+      type string;
+    }
+  }
+}

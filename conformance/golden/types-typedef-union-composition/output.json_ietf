@@ -1,0 +1,6 @@
+{
+  "types-typedef-union-composition:top": {
+    "server": "example.com",
+    "mode": "tcp"
+  }
+}

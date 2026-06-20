@@ -1,0 +1,40 @@
+module linkage-refine-min-max-iffeature {
+  yang-version 1.1;
+  namespace "urn:linkage-refine-min-max-iffeature";
+  prefix lrmmi;
+  revision 2026-06-15;
+
+  feature advanced;
+
+  grouping tags-group {
+    leaf-list tags {
+      type string;
+    }
+  }
+
+  grouping basic {
+    leaf mode {
+      type string;
+    }
+    leaf advanced-opt {
+      type string;
+    }
+  }
+
+  container policy {
+    uses tags-group {
+      refine tags {
+        min-elements 1;
+        max-elements 5;
+      }
+    }
+  }
+
+  container service {
+    uses basic {
+      refine advanced-opt {
+        if-feature advanced;
+      }
+    }
+  }
+}

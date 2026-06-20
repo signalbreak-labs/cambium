@@ -1,0 +1,16 @@
+module schema-choice-case-order {
+  namespace "urn:cambium:schema-choice-case-order";
+  prefix scco;
+  yang-version 1.1;
+
+  container root {
+    choice mode {
+      case primary {
+        leaf first { type string; }
+      }
+      case secondary {
+        leaf second { type string; }
+      }
+    }
+  }
+}

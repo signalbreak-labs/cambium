@@ -1,0 +1,6 @@
+<link-state-change xmlns="urn:operations-notification-top-level">
+  <reason>port-up</reason>
+  <link-state>up</link-state>
+  <interface-name>eth0</interface-name>
+  <timestamp>2026-06-15T12:00:00Z</timestamp>
+</link-state-change>

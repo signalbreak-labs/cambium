@@ -1,0 +1,12 @@
+module ext-mod {
+  yang-version 1.1;
+  namespace "urn:ext-mod";
+  prefix em;
+  revision 2026-06-15;
+
+  extension Metadata {
+    argument key {
+      yin-element true;
+    }
+  }
+}

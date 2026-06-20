@@ -1,0 +1,15 @@
+{
+  "json-ietf-cross-module-base:interfaces": {
+    "interface": [
+      {
+        "name": "eth0",
+        "counter": 500,
+        "json-ietf-cross-module-aug:custom-field": "abc"
+      }
+    ]
+  },
+  "json-ietf-cross-module-base:system": {
+    "mode": "basic",
+    "secret": "shh"
+  }
+}

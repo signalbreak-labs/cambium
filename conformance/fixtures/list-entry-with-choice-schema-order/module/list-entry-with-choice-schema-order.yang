@@ -1,0 +1,19 @@
+module list-entry-with-choice-schema-order {
+  yang-version 1;
+  namespace "urn:list-entry-with-choice-schema-order";
+  prefix lewcs;
+  revision 2026-06-14;
+
+  list vlan {
+    key vlan-id;
+    leaf vlan-id { type uint16; }
+    choice native-option {
+      case tagged {
+        leaf tag { type empty; }
+      }
+      case untagged {
+        leaf untag { type empty; }
+      }
+    }
+  }
+}

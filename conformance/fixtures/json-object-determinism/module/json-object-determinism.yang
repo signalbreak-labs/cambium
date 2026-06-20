@@ -1,0 +1,15 @@
+module json-object-determinism {
+  namespace "urn:json-object-determinism";
+  prefix jod;
+  revision 2026-06-15;
+
+  container top {
+    leaf zebra { type string; }
+    leaf alpha { type string; }
+    container mid {
+      leaf nine { type uint8; }
+      leaf one { type uint8; }
+    }
+    leaf middle { type string; }
+  }
+}

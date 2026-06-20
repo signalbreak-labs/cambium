@@ -1,0 +1,6 @@
+{
+  "module": "schema-uses-site-order",
+  "children": {
+    "/schema-uses-site-order/root": ["before", "g1", "g2", "after"]
+  }
+}

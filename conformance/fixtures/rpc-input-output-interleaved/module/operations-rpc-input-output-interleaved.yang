@@ -1,0 +1,39 @@
+module operations-rpc-input-output-interleaved {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-input-output-interleaved";
+  prefix oriioi;
+  revision 2026-06-15;
+
+  rpc configure-interface {
+    input {
+      leaf name {
+        type string;
+      }
+      leaf mode {
+        type enumeration {
+          enum auto;
+          enum manual;
+        }
+      }
+      leaf mtu {
+        type uint32;
+      }
+    }
+    output {
+      leaf status {
+        type enumeration {
+          enum ok;
+          enum fail;
+        }
+      }
+      leaf error-message {
+        type string;
+      }
+      container stats {
+        leaf packets-sent {
+          type uint64;
+        }
+      }
+    }
+  }
+}

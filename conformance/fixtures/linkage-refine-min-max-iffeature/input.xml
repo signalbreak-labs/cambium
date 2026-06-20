@@ -1,0 +1,7 @@
+<lrmmi:policy xmlns:lrmmi="urn:linkage-refine-min-max-iffeature">
+  <lrmmi:tags>a</lrmmi:tags>
+  <lrmmi:tags>b</lrmmi:tags>
+</lrmmi:policy>
+<lrmmi:service xmlns:lrmmi="urn:linkage-refine-min-max-iffeature">
+  <lrmmi:mode>auto</lrmmi:mode>
+</lrmmi:service>

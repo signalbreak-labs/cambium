@@ -1,0 +1,4 @@
+<top xmlns="urn:types-int-int16-range">
+  <i16-full>-32768</i16-full>
+  <i16-range>-500</i16-range>
+</top>

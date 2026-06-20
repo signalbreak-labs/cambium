@@ -1,0 +1,5 @@
+{
+  "linkage-refine-mandatory-config:service": {
+    "name": "demo"
+  }
+}

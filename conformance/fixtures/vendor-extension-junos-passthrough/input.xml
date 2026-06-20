@@ -1,0 +1,8 @@
+<config xmlns="urn:vendor-extension-junos-passthrough">
+  <users>
+    <user>
+      <name>admin</name>
+      <password>hunter2</password>
+    </user>
+  </users>
+</config>

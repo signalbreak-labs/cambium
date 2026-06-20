@@ -1,0 +1,10 @@
+{
+  "json-ietf-instance-identifier-string:top": {
+    "device": [
+      {
+        "name": "eth0"
+      }
+    ],
+    "active-device": "/json-ietf-instance-identifier-string:top/device[name='eth0']"
+  }
+}

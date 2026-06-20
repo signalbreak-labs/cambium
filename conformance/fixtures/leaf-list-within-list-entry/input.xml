@@ -1,0 +1,10 @@
+<policy xmlns="urn:leaf-list-within-list-entry">
+  <name>p2</name>
+  <actions>b</actions>
+  <actions>a</actions>
+</policy>
+<policy xmlns="urn:leaf-list-within-list-entry">
+  <name>p1</name>
+  <actions>b</actions>
+  <actions>a</actions>
+</policy>

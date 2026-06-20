@@ -1,0 +1,26 @@
+module extension-yin-element-modes {
+  yang-version 1.1;
+  namespace "urn:extension-yin-element-modes";
+  prefix eyem;
+  revision 2026-06-15;
+
+  extension attr-form {
+    argument name {
+      yin-element false;
+    }
+  }
+
+  extension elem-form {
+    argument body {
+      yin-element true;
+    }
+  }
+
+  container top {
+    leaf x {
+      eyem:attr-form "compact";
+      eyem:elem-form "expanded";
+      type string;
+    }
+  }
+}

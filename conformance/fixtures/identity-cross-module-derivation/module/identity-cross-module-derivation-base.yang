@@ -1,0 +1,8 @@
+module identity-cross-module-derivation-base {
+  yang-version 1;
+  namespace "urn:identity-cross-module-derivation-base";
+  prefix icmdb;
+  revision 2026-06-14;
+
+  identity transport-protocol;
+}

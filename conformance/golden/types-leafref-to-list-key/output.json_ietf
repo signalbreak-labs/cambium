@@ -1,0 +1,9 @@
+{
+  "types-leafref-to-list-key:device": [
+    {
+      "hostname": "router1",
+      "version": "1.0"
+    }
+  ],
+  "types-leafref-to-list-key:primary-device": "router1"
+}

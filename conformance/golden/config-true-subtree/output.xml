@@ -1,0 +1,4 @@
+<settings xmlns="urn:config-true-subtree">
+  <hostname>core</hostname>
+  <debug-level>3</debug-level>
+</settings>

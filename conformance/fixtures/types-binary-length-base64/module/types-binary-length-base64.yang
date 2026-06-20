@@ -1,0 +1,9 @@
+module types-binary-length-base64 {
+  namespace "urn:types-binary-length-base64";
+  prefix typesbinarylengthbase64;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  leaf ext-comm { type binary { length "8"; } }
+}

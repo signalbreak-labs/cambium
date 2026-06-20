@@ -1,0 +1,17 @@
+module ordering-composite-key-wide {
+  yang-version 1;
+  namespace "urn:ordering-composite-key-wide";
+  prefix ockw;
+  revision 2026-06-14;
+
+  list edges {
+    key "src-type src-slot src-pfe dst-type dst-slot dst-pfe";
+    leaf weight { type uint32; }
+    leaf src-type { type string; }
+    leaf src-slot { type uint8; }
+    leaf src-pfe { type uint8; }
+    leaf dst-type { type string; }
+    leaf dst-slot { type uint8; }
+    leaf dst-pfe { type uint8; }
+  }
+}

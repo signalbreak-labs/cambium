@@ -1,0 +1,6 @@
+{
+  "linkage-refine-default:ntp": {
+    "alg": "sha256",
+    "key": "secret"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "wide-heterogeneous-siblings-all-types:platform": {
+    "hardware": {
+      "sku": "ABC"
+    },
+    "name": "r1",
+    "software": {
+      "version": "1.0"
+    },
+    "dns-servers": [
+      "8.8.8.8"
+    ],
+    "services": {
+      "enabled": true
+    },
+    "static-route": "0.0.0.0/0",
+    "timezone": "UTC",
+    "state": {
+      "uptime": 1234
+    },
+    "features": [
+      "mpls",
+      "vlan"
+    ]
+  }
+}

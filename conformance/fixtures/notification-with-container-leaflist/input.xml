@@ -1,0 +1,9 @@
+<backup-complete xmlns="urn:operations-notification-with-container-leaflist">
+  <timestamp>2026-06-15T12:00:00Z</timestamp>
+  <backup-id>bk-1</backup-id>
+  <summary>
+    <status>success</status>
+    <files-backed>42</files-backed>
+    <duration>PT5M</duration>
+  </summary>
+</backup-complete>

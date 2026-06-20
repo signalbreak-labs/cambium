@@ -1,0 +1,14 @@
+module json-ietf-string-escaping-control-unicode {
+  namespace "urn:json-ietf-string-escaping-control-unicode";
+  prefix jisecu;
+  revision 2026-06-15;
+
+  container top {
+    leaf with-control { type string; }
+    leaf with-quote { type string; }
+    leaf with-backslash { type string; }
+    leaf french { type string; }
+    leaf emoji { type string; }
+    leaf greek { type string; }
+  }
+}

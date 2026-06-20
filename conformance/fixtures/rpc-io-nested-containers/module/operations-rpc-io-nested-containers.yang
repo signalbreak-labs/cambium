@@ -1,0 +1,40 @@
+module operations-rpc-io-nested-containers {
+  yang-version 1.1;
+  namespace "urn:operations-rpc-io-nested-containers";
+  prefix orionc;
+  revision 2026-06-15;
+
+  rpc deploy-service {
+    input {
+      leaf service-name {
+        type string;
+      }
+      container config {
+        leaf replica-count {
+          type uint16;
+        }
+        container resource-limits {
+          leaf cpu {
+            type string;
+          }
+          leaf memory {
+            type string;
+          }
+        }
+        leaf timeout {
+          type uint32;
+        }
+      }
+    }
+    output {
+      container deployment-info {
+        leaf status {
+          type string;
+        }
+        leaf message {
+          type string;
+        }
+      }
+    }
+  }
+}

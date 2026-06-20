@@ -1,0 +1,10 @@
+{
+  "json-ietf-string-escaping-control-unicode:top": {
+    "with-control": "line1\u000Aline2\tend",
+    "with-quote": "say \"hello\"",
+    "with-backslash": "C:\\path",
+    "french": "café",
+    "emoji": "🚀",
+    "greek": "αβγ"
+  }
+}

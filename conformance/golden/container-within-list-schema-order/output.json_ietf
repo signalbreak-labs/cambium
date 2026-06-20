@@ -1,0 +1,10 @@
+{
+  "container-within-list-schema-order:device": [
+    {
+      "id": "d1",
+      "config": {
+        "enabled": true
+      }
+    }
+  ]
+}

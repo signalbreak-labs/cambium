@@ -1,0 +1,5 @@
+<execute-script xmlns="urn:operations-rpc-io-with-anyxml">
+  <timeout>60</timeout>
+  <parameters><args><arg>a</arg><arg>b</arg></args></parameters>
+  <script-name>backup.sh</script-name>
+</execute-script>

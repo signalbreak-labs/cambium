@@ -1,0 +1,7 @@
+module types-identityref-foreign-base {
+  namespace "urn:types-identityref-foreign-base";
+  prefix tifb;
+  revision 2026-06-14;
+  identity component-type;
+  identity cpu { base component-type; }
+}

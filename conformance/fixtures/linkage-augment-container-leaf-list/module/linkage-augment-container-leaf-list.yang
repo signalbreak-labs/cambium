@@ -1,0 +1,29 @@
+module linkage-augment-container-leaf-list {
+  yang-version 1.1;
+  namespace "urn:linkage-augment-container-leaf-list";
+  prefix lacll;
+  revision 2026-06-15;
+
+  container top {
+    leaf id {
+      type string;
+    }
+  }
+
+  augment "/lacll:top" {
+    container stats {
+      leaf packets {
+        type uint64;
+      }
+      leaf bytes {
+        type uint64;
+      }
+    }
+    leaf mtu {
+      type uint16;
+    }
+    leaf-list tags {
+      type string;
+    }
+  }
+}

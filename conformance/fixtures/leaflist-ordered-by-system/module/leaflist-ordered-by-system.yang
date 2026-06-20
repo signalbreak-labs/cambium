@@ -1,0 +1,11 @@
+module leaflist-ordered-by-system {
+  namespace "urn:leaflist-ordered-by-system";
+  prefix llobs;
+  revision 2026-06-15;
+
+  container top {
+    leaf-list ports {
+      type uint16;
+    }
+  }
+}

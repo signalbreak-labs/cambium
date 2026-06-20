@@ -1,0 +1,27 @@
+module linkage-refine-default {
+  yang-version 1.1;
+  namespace "urn:linkage-refine-default";
+  prefix lrd;
+  revision 2026-06-15;
+
+  grouping auth {
+    leaf alg {
+      type string;
+    }
+    leaf key {
+      type string;
+    }
+  }
+
+  container ntp {
+    presence "enable ntp";
+    uses auth {
+      refine alg {
+        default "sha256";
+      }
+      refine key {
+        default "secret";
+      }
+    }
+  }
+}

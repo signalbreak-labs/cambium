@@ -1,0 +1,4 @@
+<global-operation xmlns="urn:operations-rpc-action-notification-coexistence">
+  <param-a>a</param-a>
+  <param-b>b</param-b>
+</global-operation>

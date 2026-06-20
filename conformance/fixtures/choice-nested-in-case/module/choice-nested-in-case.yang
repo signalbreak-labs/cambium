@@ -1,0 +1,22 @@
+module choice-nested-in-case {
+  yang-version 1;
+  namespace "urn:choice-nested-in-case";
+  prefix cnic;
+  revision 2026-06-14;
+
+  choice address-family {
+    case ipv4 {
+      choice routing {
+        case rip {
+          leaf metric { type uint8; }
+        }
+        case ospf {
+          leaf area { type uint32; }
+        }
+      }
+    }
+    case ipv6 {
+      leaf prefix { type string; }
+    }
+  }
+}

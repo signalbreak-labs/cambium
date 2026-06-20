@@ -1,0 +1,12 @@
+{
+  "module": "schema-leafref-path",
+  "children": {
+    "/schema-leafref-path/top": ["name", "ref"]
+  },
+  "leafrefs": {
+    "/schema-leafref-path/top/ref": {
+      "path": "/slp:top/slp:name",
+      "target": "/schema-leafref-path/top/name"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+module types-identityref-derived-hierarchy {
+  namespace "urn:types-identityref-derived-hierarchy";
+  prefix typesidentityrefderivedhierarchy;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  identity component;
+  identity hardware-component { base component; }
+  identity linecard { base hardware-component; }
+  identity fpc { base linecard; }
+  leaf item { type identityref { base component; } }
+}

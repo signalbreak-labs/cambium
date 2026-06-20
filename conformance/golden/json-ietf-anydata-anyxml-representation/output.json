@@ -1,0 +1,22 @@
+{
+  "json-ietf-anydata-anyxml-representation:top": {
+    "config": {
+      "metadata": {
+        "custom": [
+          1,
+          2,
+          ,{
+            "nested": true
+          }
+        ]
+      }
+    },
+    "payload": {
+      "data": {
+        "foo": {
+          "bar": "test"
+        }
+      }
+    }
+  }
+}

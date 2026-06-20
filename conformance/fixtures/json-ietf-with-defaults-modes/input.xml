@@ -1,0 +1,5 @@
+<settings xmlns="urn:json-ietf-with-defaults-modes">
+  <timeout>30</timeout>
+  <retries>3</retries>
+  <name>primary</name>
+</settings>

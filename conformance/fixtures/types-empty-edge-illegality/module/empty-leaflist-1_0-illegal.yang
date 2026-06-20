@@ -1,0 +1,10 @@
+module empty-leaflist-1_0-illegal {
+  yang-version 1.0;
+  namespace "urn:empty-leaflist-1_0-illegal";
+  prefix el0i;
+  revision 2026-06-15;
+
+  leaf-list flags {
+    type empty;
+  }
+}

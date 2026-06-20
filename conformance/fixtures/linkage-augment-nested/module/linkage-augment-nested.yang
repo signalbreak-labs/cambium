@@ -1,0 +1,26 @@
+module linkage-augment-nested {
+  yang-version 1.1;
+  namespace "urn:linkage-augment-nested";
+  prefix lan;
+  revision 2026-06-15;
+
+  container dev {
+    leaf id {
+      type string;
+    }
+  }
+
+  augment "/lan:dev" {
+    container status {
+      leaf ready {
+        type boolean;
+      }
+    }
+  }
+
+  augment "/lan:dev/lan:status" {
+    leaf timestamp {
+      type string;
+    }
+  }
+}

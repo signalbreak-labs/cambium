@@ -1,0 +1,15 @@
+module types-leafref-absolute-path {
+  namespace "urn:types-leafref-absolute-path";
+  prefix typesleafrefabsolutepath;
+
+  yang-version 1;
+  revision 2026-06-14;
+
+  container top {
+    list iface {
+      key name;
+      leaf name { type string; }
+    }
+  }
+  leaf primary-iface { type leafref { path "/top/iface/name"; } }
+}

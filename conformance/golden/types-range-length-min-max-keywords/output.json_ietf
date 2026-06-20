@@ -1,0 +1,6 @@
+{
+  "types-range-length-min-max-keywords:top": {
+    "code": -2147483648,
+    "label": "max"
+  }
+}

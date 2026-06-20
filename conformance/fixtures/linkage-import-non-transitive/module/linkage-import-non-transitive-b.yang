@@ -1,0 +1,15 @@
+module linkage-import-non-transitive-b {
+  yang-version 1.1;
+  namespace "urn:linkage-import-non-transitive-b";
+  prefix lintb;
+
+  import linkage-import-non-transitive-c {
+    prefix lintc;
+  }
+
+  revision 2026-06-15;
+
+  leaf x {
+    type lintc:color;
+  }
+}

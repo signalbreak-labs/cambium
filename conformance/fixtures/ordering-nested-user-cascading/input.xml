@@ -1,0 +1,12 @@
+<top xmlns="urn:ordering-nested-user-cascading">
+  <statement>
+    <name>s2</name>
+    <actions>b</actions>
+    <actions>a</actions>
+  </statement>
+  <statement>
+    <name>s1</name>
+    <actions>b</actions>
+    <actions>a</actions>
+  </statement>
+</top>

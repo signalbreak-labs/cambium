@@ -1,0 +1,14 @@
+{
+  "constraints-unique-violation-reject:entry": [
+    {
+      "id": 1,
+      "a": "x",
+      "b": "p"
+    },
+    {
+      "id": 2,
+      "a": "y",
+      "b": "q"
+    }
+  ]
+}

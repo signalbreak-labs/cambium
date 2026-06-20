@@ -1,0 +1,5 @@
+<top xmlns="urn:json-ietf-decimal64-canonical-quoting">
+  <negative-value>-3.14</negative-value>
+  <positive-value>2.5</positive-value>
+  <zero-value>0</zero-value>
+</top>

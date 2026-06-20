@@ -1,0 +1,8 @@
+<interface xmlns="urn:list-single-key-string">
+  <name>eth0</name>
+  <mtu>1500</mtu>
+</interface>
+<interface xmlns="urn:list-single-key-string">
+  <name>eth1</name>
+  <mtu>9000</mtu>
+</interface>

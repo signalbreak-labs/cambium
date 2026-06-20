@@ -1,0 +1,18 @@
+module linkage-import-revision-date-base {
+  yang-version 1.1;
+  namespace "urn:linkage-import-revision-date-base";
+  prefix lirdb;
+  revision 2026-06-14 {
+    description "Pinned revision for import-by-revision test.";
+  }
+
+  typedef old-field-type {
+    type string;
+  }
+
+  container c {
+    leaf old-field {
+      type old-field-type;
+    }
+  }
+}

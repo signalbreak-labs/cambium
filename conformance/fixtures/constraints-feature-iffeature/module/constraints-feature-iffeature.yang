@@ -1,0 +1,17 @@
+module constraints-feature-iffeature {
+  yang-version 1.1;
+  namespace "urn:constraints-feature-iffeature";
+  prefix cfif;
+  revision 2026-06-14;
+
+  feature high-security;
+
+  container stats {
+    if-feature "not high-security";
+    leaf packet-count { type uint64; }
+    leaf dropped-packets {
+      if-feature high-security;
+      type uint64;
+    }
+  }
+}

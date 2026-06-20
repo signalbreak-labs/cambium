@@ -1,0 +1,5 @@
+<node xmlns="urn:types-instance-identifier-require-default">
+  <id>x</id>
+</node>
+<ref xmlns="urn:types-instance-identifier-require-default"
+  xmlns:t="urn:types-instance-identifier-require-default">/t:node[t:id='x']</ref>

@@ -1,0 +1,13 @@
+<top xmlns="urn:idents-keywords-go">
+  <func>f</func>
+  <range>r</range>
+  <chan>c</chan>
+  <map>m</map>
+  <select>s</select>
+  <go>g</go>
+  <defer>d</defer>
+  <interface>
+    <enabled/>
+  </interface>
+  <package>p</package>
+</top>

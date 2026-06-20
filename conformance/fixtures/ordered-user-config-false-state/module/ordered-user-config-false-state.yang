@@ -1,0 +1,13 @@
+module ordered-user-config-false-state {
+  namespace "urn:ordered-user-config-false-state";
+  prefix oucfs;
+  revision 2026-06-15;
+
+  container state {
+    config false;
+    list event {
+      leaf seq { type uint32; }
+      leaf msg { type string; }
+    }
+  }
+}
