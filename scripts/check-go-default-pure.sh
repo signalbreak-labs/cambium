@@ -5,12 +5,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT/go"
 
 # Public cgo-free surface — subject to the forbidden-dependency closure check.
-pkgs=(./cambium ./codegen ./compat)
+pkgs=(./cambium ./codegen ./compat ./datatree)
 
 # Packages whose cgo-free (!cgo) tests must also run under CGO_ENABLED=0 — these
 # include the nocgo architecture-fitness tests (e.g. conformance/nocgo_test.go,
 # pure_go_boundary_test.go) that the CGO_ENABLED=1 lane silently excludes.
-nocgoTestPkgs=(./cambium ./codegen ./compat ./conformance ./internal/...)
+nocgoTestPkgs=(./cambium ./codegen ./compat ./datatree ./conformance ./internal/...)
 
 CGO_ENABLED=0 go vet "${pkgs[@]}"
 CGO_ENABLED=0 go test "${nocgoTestPkgs[@]}"
