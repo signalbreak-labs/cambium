@@ -1,0 +1,36 @@
+// {{.Name}} is a generated YANG enumeration type for "{{.YangName}}".
+type {{.Name}} int64
+
+const (
+{{- range .Variants}}
+	{{.Const}} {{$.Name}} = {{.Value}}
+{{- end}}
+)
+
+// AsName returns the canonical YANG enum name.
+func (v {{.Name}}) AsName() string {
+	switch v {
+{{- range .Variants}}
+	case {{.Const}}:
+		return {{printf "%q" .Name}}
+{{- end}}
+	default:
+		return ""
+	}
+}
+
+// String returns the canonical YANG enum name.
+func (v {{.Name}}) String() string { return v.AsName() }
+
+// Parse{{.Name}} parses a YANG enum name.
+func Parse{{.Name}}(name string) ({{.Name}}, bool) {
+	switch name {
+{{- range .Variants}}
+	case {{printf "%q" .Name}}:
+		return {{.Const}}, true
+{{- end}}
+	default:
+		return 0, false
+	}
+}
+

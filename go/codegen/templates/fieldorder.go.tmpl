@@ -1,0 +1,4 @@
+// {{.Name}}FieldOrder lists child wire names in schema declaration
+// order (list keys first).
+var {{.Name}}FieldOrder = []string{ {{range $i, $w := .Wires}}{{if $i}}, {{end}}{{printf "%q" $w}}{{end}} }
+

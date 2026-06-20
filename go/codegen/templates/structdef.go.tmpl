@@ -1,0 +1,12 @@
+// {{.Name}} is a generated YANG data struct.
+type {{.Name}} struct {
+{{- range .Fields}}
+	// {{.Doc}}
+	{{.Ident}} {{.GoType}}
+{{- end}}
+{{- if .HasMetadata}}
+	// CambiumMetadata carries RFC 7952 instance metadata by child wire name.
+	CambiumMetadata map[string][]MetadataAnnotation
+{{- end}}
+}
+

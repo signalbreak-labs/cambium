@@ -1,0 +1,20 @@
+func cambiumBitsNames(value string) ([]string, error) {
+	for _, r := range value {
+		switch r {
+		case ' ':
+		case '\t', '\n', '\r', '\v', '\f':
+			return nil, fmt.Errorf("bits value uses non-space whitespace separator")
+		}
+	}
+	var names []string
+	start := 0
+	for start < len(value) {
+		for start < len(value) && value[start] == ' ' { start++ }
+		end := start
+		for end < len(value) && value[end] != ' ' { end++ }
+		if end > start { names = append(names, value[start:end]) }
+		start = end
+	}
+	return names, nil
+}
+

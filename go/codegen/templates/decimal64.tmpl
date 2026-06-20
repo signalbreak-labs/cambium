@@ -1,0 +1,63 @@
+// Decimal64 is a fixed-point decimal64 value.
+type Decimal64 struct {
+	raw            int64
+	fractionDigits uint8
+}
+
+// NewDecimal64 creates a fixed-point decimal64 value.
+func NewDecimal64(raw int64, fractionDigits uint8) Decimal64 {
+	return Decimal64{raw: raw, fractionDigits: fractionDigits}
+}
+
+// Raw returns the fixed-point integer representation.
+func (d Decimal64) Raw() int64 { return d.raw }
+
+// FractionDigits returns the number of fractional digits.
+func (d Decimal64) FractionDigits() uint8 { return d.fractionDigits }
+
+// String returns the RFC-7950 canonical form.
+func (d Decimal64) String() string {
+	if d.fractionDigits == 0 {
+		return strconv.FormatInt(d.raw, 10)
+	}
+	divisor := int64(1)
+	for i := uint8(0); i < d.fractionDigits; i++ {
+		divisor *= 10
+	}
+	whole := d.raw / divisor
+	frac := d.raw % divisor
+	if frac < 0 {
+		frac = -frac
+	}
+	padded := strconv.FormatInt(frac, 10)
+	width := int(d.fractionDigits)
+	if len(padded) < width {
+		padded = strings.Repeat("0", width-len(padded)) + padded
+	} else if len(padded) > width {
+		padded = padded[:width]
+	}
+	trimmed := strings.TrimRight(padded, "0")
+	if trimmed == "" {
+		trimmed = "0"
+	}
+	if d.raw < 0 {
+		return fmt.Sprintf("-%d.%s", -whole, trimmed)
+	}
+	return fmt.Sprintf("%d.%s", whole, trimmed)
+}
+
+type cambiumDecimal64Range struct {
+	min int64
+	max int64
+}
+
+func cambiumValidateDecimal64Value(v Decimal64, fractionDigits uint8, ranges []cambiumDecimal64Range) error {
+	if v.FractionDigits() != fractionDigits { return fmt.Errorf("decimal64 fraction-digits %d, want %d", v.FractionDigits(), fractionDigits) }
+	if len(ranges) == 0 { return nil }
+	raw := v.Raw()
+	for _, r := range ranges {
+		if raw >= r.min && raw <= r.max { return nil }
+	}
+	return fmt.Errorf("decimal64 value %s out of bounds", v.String())
+}
+

@@ -1,0 +1,47 @@
+// {{.Name}} is a generated YANG bits type for "{{.YangName}}".
+type {{.Name}} struct {
+	set map[string]bool
+}
+
+var {{.Name}}BitPositions = []struct {
+	name string
+	pos  int64
+}{
+{{- range .Bits}}
+	{name: {{printf "%q" .Name}}, pos: {{.Pos}}},
+{{- end}}
+}
+
+// New{{.Name}} creates a bits value from bit names.
+func New{{.Name}}(names []string) ({{.Name}}, error) {
+	out := {{.Name}}{set: make(map[string]bool)}
+	for _, name := range names {
+		if out.set[name] {
+			return {{.Name}}{}, fmt.Errorf("duplicate bit name: %s", name)
+		}
+		ok := false
+		for _, item := range {{.Name}}BitPositions {
+			if item.name == name {
+				ok = true
+				out.set[name] = true
+				break
+			}
+		}
+		if !ok {
+			return {{.Name}}{}, fmt.Errorf("invalid bit name: %s", name)
+		}
+	}
+	return out, nil
+}
+
+// String returns the canonical space-separated bits value.
+func (b {{.Name}}) String() string {
+	parts := make([]string, 0, len(b.set))
+	for _, item := range {{.Name}}BitPositions {
+		if b.set[item.name] {
+			parts = append(parts, item.name)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+

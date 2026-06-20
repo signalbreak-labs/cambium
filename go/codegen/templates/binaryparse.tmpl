@@ -1,0 +1,47 @@
+type cambiumBinaryLengthRange struct {
+	min int64
+	max int64
+}
+
+func cambiumJSONBinary(raw any, name string, ranges []cambiumBinaryLengthRange) (string, error) {
+	s, err := cambiumJSONString(raw, name)
+	if err != nil { return "", err }
+	s, err = cambiumCanonicalJSONBinaryString(s)
+	if err != nil { return "", fmt.Errorf("%s %v", name, err) }
+	if err := cambiumValidateBinaryString(s, ranges); err != nil { return "", fmt.Errorf("%s %v", name, err) }
+	return s, nil
+}
+
+func cambiumCanonicalJSONBinaryString(s string) (string, error) {
+	if len(s) < 65 || s[64] != '\n' {
+		return s, nil
+	}
+	var b strings.Builder
+	for len(s) > 64 {
+		if s[64] != '\n' {
+			return "", fmt.Errorf("newlines are expected every 64 Base64 characters")
+		}
+		b.WriteString(s[:64])
+		s = s[65:]
+	}
+	b.WriteString(s)
+	return b.String(), nil
+}
+
+func cambiumValidateBinaryString(s string, ranges []cambiumBinaryLengthRange) error {
+	for _, r := range s {
+		switch r {
+		case ' ', '\t', '\n', '\r', '\v', '\f':
+			return fmt.Errorf("must be canonical base64 binary")
+		}
+	}
+	decoded, err := base64.StdEncoding.DecodeString(s)
+	if err != nil { return fmt.Errorf("must be base64 binary: %w", err) }
+	if len(ranges) == 0 { return nil }
+	l := int64(len(decoded))
+	for _, r := range ranges {
+		if l >= r.min && l <= r.max { return nil }
+	}
+	return fmt.Errorf("binary length %d out of bounds", l)
+}
+
