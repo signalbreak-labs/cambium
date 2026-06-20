@@ -1,0 +1,2299 @@
+{
+  "fixtures": [
+    {
+      "name": "types-int-int8-range",
+      "theme": "builtin-scalar-types",
+      "covers": "int8 (RFC 7950 \u00a74.2.5) with range restriction at signed boundaries -128/0/+127",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); pin i8 at -128, 0, 127",
+      "yang_sketch": "container top { leaf i8-min { type int8; } leaf i8-max { type int8; } } // pins -128, 127",
+      "juniper_exemplar": "ietf-yang-types counter-style int typedefs"
+    },
+    {
+      "name": "types-int-int16-range",
+      "theme": "builtin-scalar-types",
+      "covers": "int16 with full bounds -32768/+32767 and narrowed sub-range -1000..1000",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin full bounds + in-range",
+      "yang_sketch": "leaf i16-full { type int16; } leaf i16-range { type int16 { range \"-1000..1000\"; } }",
+      "juniper_exemplar": "occasional int16 in native; ASN-span typedefs"
+    },
+    {
+      "name": "types-int-int32-range-multipart",
+      "theme": "builtin-scalar-types",
+      "covers": "int32 with multi-part range (a..b | c..d) and gap exclusion (RFC 7950 \u00a79.2.4); int32 emitted JSON-bare (RFC 7951 \u00a76.1)",
+      "invariant": "validate + validate-reject(gap value 0 -> E0003) + serialize-bytes(JsonIetf); pin -50, 50 valid, 0 rejected",
+      "yang_sketch": "leaf priority { type int32 { range \"-100..0 | 1..100\"; } }",
+      "juniper_exemplar": "Junos priority/metric multi-part int32; trace-options 0..3"
+    },
+    {
+      "name": "types-int-int64-range-quoted",
+      "theme": "builtin-scalar-types",
+      "covers": "int64 (RFC 7950 \u00a74.2.5) JSON-string-quoted at min/max boundaries (RFC 7951 \u00a76.1)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin -9223372036854775808 / 9223372036854775807 -> quoted strings",
+      "yang_sketch": "leaf count { type int64; } // pins int64 min/max -> JSON strings",
+      "juniper_exemplar": "ietf-yang-types counter64/gauge64 base"
+    },
+    {
+      "name": "types-uint-uint8-range",
+      "theme": "builtin-scalar-types",
+      "covers": "uint8 with range (0..255 full + 0..63 DSCP subset)",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); pin 0,128,255 and dscp 63",
+      "yang_sketch": "leaf u8 { type uint8; } leaf u8-dscp { type uint8 { range \"0..63\"; } }",
+      "juniper_exemplar": "junos-yang-types DSCP 0..63"
+    },
+    {
+      "name": "types-uint-uint16-range-port",
+      "theme": "builtin-scalar-types",
+      "covers": "uint16 port-number idiom (1..65535 excluding 0)",
+      "invariant": "validate + validate-reject(0 -> E0003) + serialize-bytes(JsonIetf); pin 22,443,65535 valid, 0 rejected",
+      "yang_sketch": "leaf port { type uint16 { range \"1..65535\"; } }",
+      "juniper_exemplar": "ietf-inet-types port-number"
+    },
+    {
+      "name": "types-uint-uint32-range-multi",
+      "theme": "builtin-scalar-types",
+      "covers": "uint32 (most common type, 297K uses) multi-part range, emitted JSON-bare (RFC 7951 \u00a76.1)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 100, 65000 -> bare integers",
+      "yang_sketch": "leaf as-number { type uint32 { range \"1..4199999999\"; } }",
+      "juniper_exemplar": "junos-yang-types asn-32; ospf/bgp metric"
+    },
+    {
+      "name": "types-uint-uint64-range-quoted",
+      "theme": "builtin-scalar-types",
+      "covers": "uint64 (70K uses) JSON-string-quoted at max boundary (RFC 7951 \u00a76.1)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 18446744073709551615 -> quoted string",
+      "yang_sketch": "leaf bytes-sent { type uint64; }",
+      "juniper_exemplar": "ietf-yang-types counter64; junos-jl2tpd counters"
+    },
+    {
+      "name": "types-decimal64-fraction1-range",
+      "theme": "builtin-scalar-types",
+      "covers": "decimal64 fraction-digits 1 (tenths) + range (RFC 7950 \u00a74.2.8); JSON-quoted canonical",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin -0.5, 50.0, 99.9",
+      "yang_sketch": "leaf temp { type decimal64 { fraction-digits 1; range \"-50.0..100.0\"; } }",
+      "juniper_exemplar": "native optics-temp fd1"
+    },
+    {
+      "name": "types-decimal64-fraction2-canonical-round",
+      "theme": "builtin-scalar-types",
+      "covers": "decimal64 fraction-digits 2 with canonical binary-to-decimal rounding (RFC 7950 \u00a79.3.4)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile; pin 3.14, -2.99",
+      "yang_sketch": "leaf rate { type decimal64 { fraction-digits 2; } }",
+      "juniper_exemplar": "native fractional bandwidth rates; codegen_v2.rs fd2"
+    },
+    {
+      "name": "types-decimal64-fraction3-and-6",
+      "theme": "builtin-scalar-types",
+      "covers": "decimal64 fraction-digits 3 and 6 (the explicit 3..8 mid-range span) with trailing-zero canonicalization",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile; pin milli=1.5 (->\"1.500\"), micro=0.000001 (capture exact bytes from libyang printer)",
+      "yang_sketch": "leaf milli { type decimal64 { fraction-digits 3; } } leaf micro { type decimal64 { fraction-digits 6; } }",
+      "juniper_exemplar": "OpenConfig timing/PCS decimal64 fd shapes"
+    },
+    {
+      "name": "types-decimal64-fraction9-negative",
+      "theme": "builtin-scalar-types",
+      "covers": "decimal64 fraction-digits 9 (nanoseconds) + negative + high precision",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin -0.000000001 and +999.999999999",
+      "yang_sketch": "leaf delay { type decimal64 { fraction-digits 9; } }",
+      "juniper_exemplar": "network monitoring precision delays; fabric-timing"
+    },
+    {
+      "name": "types-decimal64-fraction18-max-magnitude",
+      "theme": "builtin-scalar-types",
+      "covers": "decimal64 fraction-digits 18 (max per RFC) at maximum representable magnitude",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 9223372036.854775807",
+      "yang_sketch": "leaf precise { type decimal64 { fraction-digits 18; range \"0..9223372036.854775807\"; } }",
+      "juniper_exemplar": "RFC 6991 high-precision measurement models"
+    },
+    {
+      "name": "types-boolean-default-false",
+      "theme": "builtin-scalar-types",
+      "covers": "boolean (RFC 7950 \u00a74.2.7) bare true/false + default true/false with with_defaults EXPLICIT emission",
+      "invariant": "serialize-bytes(Json,JsonIetf,Xml) WithDefaults=Explicit forcing false/true to emit",
+      "yang_sketch": "leaf enabled { type boolean; default false; } leaf active { type boolean; default true; }",
+      "juniper_exemplar": "native enable/disable flags; ietf-interfaces enabled"
+    },
+    {
+      "name": "types-empty-leaf-null-json",
+      "theme": "builtin-scalar-types",
+      "covers": "empty type (316K uses, config-flag idiom) with [null] JSON encoding (RFC 7951 \u00a76.9) and <leaf/> XML",
+      "invariant": "serialize-bytes(Json,JsonIetf,Xml); enabled present -> [null] JSON, empty element XML (bytes captured from libyang printer)",
+      "yang_sketch": "leaf enabled { type empty; }",
+      "juniper_exemplar": "presence/config-flag idiom; ietf-netconf-acm empty"
+    },
+    {
+      "name": "types-enumeration-explicit-values-sparse",
+      "theme": "builtin-scalar-types",
+      "covers": "enumeration with explicit non-sequential values 0/4/6 (gaps, RFC 791/2460) + serialize BY NAME not ordinal (RFC 7950 \u00a74.2.4)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile(discriminants 0/4/6 not 0/1/2); pin 'ipv6'",
+      "yang_sketch": "leaf ip-version { type enumeration { enum unknown {value 0;} enum ipv4 {value 4;} enum ipv6 {value 6;} } }",
+      "juniper_exemplar": "ip-version 0/4/6"
+    },
+    {
+      "name": "types-enumeration-zero-value-disabled",
+      "theme": "builtin-scalar-types",
+      "covers": "enumeration with explicit zero value (disabled/off idiom) + non-zero siblings, name round-trip",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 'disabled'(0), 'primary'(1) -> by name",
+      "yang_sketch": "leaf status { type enumeration { enum disabled {value 0;} enum primary {value 1;} enum secondary {value 2;} } }",
+      "juniper_exemplar": "native status enums disabled=0/up=1/down=2"
+    },
+    {
+      "name": "types-enum-bits-auto-position",
+      "theme": "builtin-scalar-types",
+      "covers": "enum/bit AUTO-position continuation after an explicit value (RFC 7950 \u00a79.6.4, \u00a79.7.4): enum a{value 5;} enum b -> b=6; bit auto-increment (YANG 1.1)",
+      "invariant": "codegen-compile(assert auto ordinals b=6, d=2; bit y=4) + serialize-bytes(JsonIetf by name); pin e='b', f='x y'",
+      "yang_sketch": "leaf e { type enumeration { enum a {value 5;} enum b; enum c {value 1;} enum d; } } leaf f { type bits { bit x {position 3;} bit y; bit z {position 0;} } }",
+      "juniper_exemplar": "complements types-enum-sparse-gaps (all-explicit); auto-increment bug-trap"
+    },
+    {
+      "name": "types-bits-explicit-positions-gaps",
+      "theme": "builtin-scalar-types",
+      "covers": "bits (RFC 7950 \u00a74.2.9) explicit positions with gaps + space-separated token serialization in DECLARATION order not input order (RFC 7951 \u00a76.5)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + codegen-compile(bitflags); pin 'read delete' -> canonical declaration order",
+      "yang_sketch": "leaf ops { type bits { bit create {position 0;} bit read {position 1;} bit update {position 2;} bit delete {position 3;} } }",
+      "juniper_exemplar": "ietf-netconf-acm access-operations"
+    },
+    {
+      "name": "types-binary-length-base64",
+      "theme": "builtin-scalar-types",
+      "covers": "binary type (RFC 7950 \u00a74.2.9) with length restriction + base64 JSON encoding (RFC 7951 \u00a76.6)",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); pin 8-octet value -> base64 string",
+      "yang_sketch": "leaf ext-comm { type binary { length \"8\"; } }",
+      "juniper_exemplar": "junos-yang-types ext-community-recv binary{length 8}"
+    },
+    {
+      "name": "types-string-pattern-modifier-invert-match",
+      "theme": "type-restrictions",
+      "covers": "CORE RFC 7950 1.1 pattern 'modifier invert-match' (\u00a79.4.6) \u2014 requires yang-version 1.1; negation semantics",
+      "invariant": "validate + validate-reject(value matching base pattern REJECTED -> E0003 both langs) + serialize-bytes(Xml); pin 'abc' rejected, 'ABC9' accepted",
+      "yang_sketch": "yang-version 1.1; leaf name { type string { pattern '[a-z]+' { modifier invert-match; } } }",
+      "juniper_exemplar": "CORE RFC 7950 1.1 (NOT a vendor extension); second 1.1 module"
+    },
+    {
+      "name": "types-string-multiple-patterns-conjunction",
+      "theme": "type-restrictions",
+      "covers": "string with multiple pattern statements AND-composed (RFC 7950 \u00a74.2.6); value must match ALL",
+      "invariant": "validate + validate-reject(both langs, E0003); pin 'abc123' valid, 'abc'(no digit) and '123'(no letter) rejected",
+      "yang_sketch": "leaf token { type string { pattern '[a-z]+'; pattern '.*[0-9].*'; } }",
+      "juniper_exemplar": "native multiple patterns; conjunction constraint"
+    },
+    {
+      "name": "types-string-length-pattern-anchor-posix",
+      "theme": "type-restrictions",
+      "covers": "string length + pattern with anchors (^,$) + POSIX character classes ([[:alnum:]]) all AND-composed (RFC 7950 \u00a74.2.6)",
+      "invariant": "validate + validate-reject; pin 'abc_123' valid, '12345678901'(>10) and 'abc-'(non-alnum) rejected",
+      "yang_sketch": "leaf code { type string { length \"1..10\"; pattern '^[[:alnum:]_]*$'; } }",
+      "juniper_exemplar": "junos-yang-types anchored POSIX-class patterns; subsumes types-string-patterns-posix"
+    },
+    {
+      "name": "constraints-range-length-reject",
+      "theme": "type-restrictions",
+      "covers": "the bare numeric range / string length REJECTION path (CAMBIUM_E0003) \u2014 the core type-restriction reject that other type fixtures only comment",
+      "invariant": "validate(in-range byte-golden) + validate-reject: n<min, n>max, string>length each E0003 + app-tag parity (Rust==Go unit tests). VERIFIED: libyang 'Unsatisfied range/length'",
+      "yang_sketch": "leaf n { type int32 { range \"1..100\"; } } leaf s { type string { length \"2..5\"; } } // valid n=42,s='abc'; reject n=0,n=101,s='toolong'",
+      "juniper_exemplar": "synthetic; closes the un-pinned range/length reject"
+    },
+    {
+      "name": "types-range-length-min-max-keywords",
+      "theme": "type-restrictions",
+      "covers": "range/length using literal 'min'/'max' grammar tokens (RFC 7950 \u00a79.2.4, \u00a79.4.4) resolving to type extremes",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); pin int32 'max'=2147483647 and 'min'=-2147483648 (proves keywords resolved to int32 extremes, not 0). VERIFIED compiles",
+      "yang_sketch": "leaf code { type int32 { range \"min..-1 | 1..max\"; } } leaf label { type string { length \"min..max\"; } }",
+      "juniper_exemplar": "synthetic; native ranges occasionally use min/max"
+    },
+    {
+      "name": "json-ietf-decimal64-no-exponent",
+      "theme": "type-restrictions",
+      "covers": "RFC 7951 \u00a76.1 no-exponent canonical decimal64 on the PARSE side \u2014 scientific/exponent input rejected",
+      "invariant": "validate-reject: input rate='1E-9' REJECTED at PARSE -> CAMBIUM_E0002 (both langs); plain '0.000000001' accepted byte-golden. VERIFIED: libyang 'Invalid 2. character of decimal64'",
+      "yang_sketch": "leaf rate { type decimal64 { fraction-digits 9; } } // reject 1E-9 -> E0002; valid 0.000000001",
+      "juniper_exemplar": "synthetic; parse-direction E0002 not validate E0003"
+    },
+    {
+      "name": "types-leafref-absolute-path",
+      "theme": "reference-types",
+      "covers": "leafref (504 uses, RFC 7950 \u00a79.9) with absolute path /top/.../name + unresolved-target rejection (\u00a79.9.3)",
+      "invariant": "validate + validate-reject(dangling -> CAMBIUM_E0003 both langs + 'instance-required' app-tag) + serialize-bytes(JsonIetf) + codegen-compile(leafref->base type String)",
+      "yang_sketch": "list iface { key name; leaf name { type string; } } leaf primary-iface { type leafref { path \"/top/iface/name\"; } }",
+      "juniper_exemplar": "native absolute leafref paths"
+    },
+    {
+      "name": "types-leafref-relative-parent-path",
+      "theme": "reference-types",
+      "covers": "leafref with relative ../ path from nested context (RFC 7950 \u00a76.4.1)",
+      "invariant": "validate + validate-reject(unresolved); pin nested route-id referencing parent iface name via ../..",
+      "yang_sketch": "list iface { key name; leaf name { type string; } container config { leaf route-id { type leafref { path \"../../name\"; } } } }",
+      "juniper_exemplar": "native relative-path config-leaf -> parent-key"
+    },
+    {
+      "name": "types-leafref-current-context",
+      "theme": "reference-types",
+      "covers": "leafref with current() context function (RFC 7950 \u00a710.1.1) in a predicate; sibling-relative resolution",
+      "invariant": "validate + validate-reject; pin proto-name resolving sibling 'selected' via current()/../selected",
+      "yang_sketch": "list proto { key name; leaf name {type string;} leaf state {type string;} } leaf proto-name { type leafref { path \"/top/proto[name = current()/../selected]/name\"; } } leaf selected { type string; }",
+      "juniper_exemplar": "OpenConfig/ietf current() predicate usage"
+    },
+    {
+      "name": "types-leafref-to-list-key",
+      "theme": "reference-types",
+      "covers": "leafref targeting a list KEY leaf (the most common target)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin primary-device referencing a device hostname key",
+      "yang_sketch": "list device { key hostname; leaf hostname {type string;} leaf version {type string;} } leaf primary-device { type leafref { path \"/devices/device/hostname\"; } }",
+      "juniper_exemplar": "Junos device/system references to list key"
+    },
+    {
+      "name": "types-leafref-to-leaf-list",
+      "theme": "reference-types",
+      "covers": "leafref targeting a leaf-list member (distinct mechanism from list key)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin assigned-tag referencing one allowed-tags leaf-list value",
+      "yang_sketch": "leaf-list tag { type string; } leaf assigned-tag { type leafref { path \"/allowed-tags/tag\"; } }",
+      "juniper_exemplar": "leaf-list + leafref combination"
+    },
+    {
+      "name": "types-leafref-to-leafref-chain",
+      "theme": "reference-types",
+      "covers": "leafref targeting another leafref (chained resolution, RFC 7950)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin active-alias -> primary-device -> device name chain",
+      "yang_sketch": "leaf primary-device { type leafref { path \"/devices/d/name\"; } } leaf active-alias { type leafref { path \"/alias/primary-device\"; } }",
+      "juniper_exemplar": "rare-but-valid leafref chains"
+    },
+    {
+      "name": "types-leafref-deref-function",
+      "theme": "reference-types",
+      "covers": "leafref using deref() XPath function (YANG 1.1, RFC 7950 \u00a710.3.1)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin home-dir resolving via deref(../logged-in-user)/../home",
+      "yang_sketch": "yang-version 1.1; list user { key uid; leaf uid {type string;} leaf home {type string;} } leaf logged-in-user { type leafref { path \"/users/user/uid\"; } } leaf home-dir { type leafref { path \"deref(../logged-in-user)/../home\"; } }",
+      "juniper_exemplar": "YANG 1.1 deref(); XPath completeness"
+    },
+    {
+      "name": "types-leafref-require-instance-false",
+      "theme": "reference-types",
+      "covers": "leafref with require-instance false (forward-reference allowed; dangling not an error)",
+      "invariant": "validate(dangling accepted) + serialize-bytes(JsonIetf); pin future-target referencing non-existent id",
+      "yang_sketch": "list item { key id; leaf id {type string;} } leaf future-target { type leafref { path \"/targets/item/id\"; require-instance false; } }",
+      "juniper_exemplar": "forward-reference scenarios"
+    },
+    {
+      "name": "types-leafref-cross-module",
+      "theme": "reference-types",
+      "covers": "leafref whose TARGET is in a DIFFERENT module (RFC 7950 \u00a79.9.2) \u2014 PREFIXED path steps /b:.../b:name",
+      "invariant": "validate(byte-golden JsonIetf) + validate-reject(dangling -> E0003 'instance-required' both langs) + codegen-compile(->String). Two owned modules. VERIFIED compiles",
+      "yang_sketch": "// module B: list interface {key name; leaf name {type string;}}  // module A: leaf bound-if { type leafref { path \"/b:interfaces/b:interface/b:name\"; } }",
+      "juniper_exemplar": "OpenConfig cross-model leafref glue"
+    },
+    {
+      "name": "types-identityref-single-base",
+      "theme": "reference-types",
+      "covers": "identityref (RFC 7950 \u00a79.10) single base + same-module identity emitted BARE (RFC 7951 \u00a76.8)",
+      "invariant": "validate + serialize-bytes(JsonIetf bare) + codegen-compile; pin 'tcp' -> bare",
+      "yang_sketch": "identity transport; identity tcp {base transport;} identity udp {base transport;} leaf proto { type identityref { base transport; } }",
+      "juniper_exemplar": "OpenConfig address-family identities"
+    },
+    {
+      "name": "types-identityref-multiple-bases",
+      "theme": "reference-types",
+      "covers": "identityref derived from MULTIPLE base identities (YANG 1.1, union-like OR semantics, RFC 7950 \u00a76.4.16)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin component='ethernet' valid against either base",
+      "yang_sketch": "yang-version 1.1; identity interface-type; identity data-plane; identity ethernet { base interface-type; base data-plane; } leaf class { type identityref { base interface-type; } }",
+      "juniper_exemplar": "OpenConfig multi-base identities"
+    },
+    {
+      "name": "types-identityref-derived-hierarchy",
+      "theme": "reference-types",
+      "covers": "multi-level derived identity hierarchy (grandparent<-parent<-child<-grandchild); identityref to ancestor accepts deep descendant",
+      "invariant": "validate + serialize-bytes(JsonIetf bare) + codegen-compile(transitive derivation); pin 'fpc' (3+ levels deep)",
+      "yang_sketch": "identity component; identity hardware-component {base component;} identity linecard {base hardware-component;} identity fpc {base linecard;} leaf item { type identityref { base component; } }",
+      "juniper_exemplar": "deep identity hierarchies in OpenConfig"
+    },
+    {
+      "name": "types-identityref-foreign-module-prefix",
+      "theme": "reference-types",
+      "covers": "identityref to a foreign-module-derived identity emitted module:identity-prefixed in JSON (RFC 7951 \u00a76.8); two owned modules",
+      "invariant": "serialize-bytes(JsonIetf) with module: prefix on foreign identity; pin foreign 'cpu' -> 'module:cpu'",
+      "yang_sketch": "import other-mod {prefix tt;} leaf component { type identityref { base tt:component-type; } } // foreign derived -> module-prefixed",
+      "juniper_exemplar": "cross-module identity references; subsumes types-identityref"
+    },
+    {
+      "name": "identityref-iana-if-type-foreign",
+      "theme": "reference-types",
+      "covers": "RFC 7951 \u00a76.8 foreign-module identityref with a REALISTIC large foreign base \u2014 iana-if-type (hundreds of derived); imports the vendored iana-if-type + ietf-interfaces",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml) + codegen-compile; pin type=ethernetCsmacd -> 'iana-if-type:ethernetCsmacd'. VERIFIED against vendored modules",
+      "yang_sketch": "import iana-if-type {prefix ianaift;} import ietf-interfaces {prefix if;} leaf type { type identityref { base if:interface-type; } }",
+      "juniper_exemplar": "iana-if-type + ietf-interfaces vendored in conformance/corpus/ietf-interfaces/"
+    },
+    {
+      "name": "types-instance-identifier-require-default",
+      "theme": "reference-types",
+      "covers": "instance-identifier with require-instance true (default, RFC 7950 \u00a79.13) + path validation + JSON string form (RFC 7951 \u00a76.13)",
+      "invariant": "validate + validate-reject(dangling -> CAMBIUM_E0003) + serialize-bytes(JsonIetf string path); pin valid '/top/node[id=\"x\"]', dangling rejected",
+      "yang_sketch": "list node { key id; leaf id {type string;} } leaf ref { type instance-identifier; }",
+      "juniper_exemplar": "IETF rpc/state references"
+    },
+    {
+      "name": "types-instance-identifier-no-require",
+      "theme": "reference-types",
+      "covers": "instance-identifier with require-instance false (unvalidated reference, RFC 7950 \u00a79.13)",
+      "invariant": "validate(unresolved XPath accepted, no error); pin arbitrary path",
+      "yang_sketch": "leaf any-path { type instance-identifier { require-instance false; } }",
+      "juniper_exemplar": "IETF rpc/notification context"
+    },
+    {
+      "name": "types-instance-identifier-complex-path",
+      "theme": "reference-types",
+      "covers": "instance-identifier targeting nested list with COMPOSITE key + nested predicates",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin '/vlans/vlan[id=\"100\"][name=\"mgmt\"]/member[port=\"eth0\"]'",
+      "yang_sketch": "list vlan { key \"id name\"; leaf id {type uint16;} leaf name {type string;} list member { key port; leaf port {type string;} } } leaf selected-member { type instance-identifier; }",
+      "juniper_exemplar": "policy/config complex-path use"
+    },
+    {
+      "name": "types-typedef-simple-base",
+      "theme": "type-composition",
+      "covers": "simple typedef with a base type (RFC 7950 \u00a77.3)",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml) + codegen-compile; pin port=443",
+      "yang_sketch": "typedef port-number { type uint16 { range \"1..65535\"; } } leaf port { type port-number; }",
+      "juniper_exemplar": "junos-types timeticks64 typedef"
+    },
+    {
+      "name": "types-typedef-chain-2deep",
+      "theme": "type-composition",
+      "covers": "typedef of typedef (2 levels): B=A=base; restrictions inherited",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml) + codegen-compile; pin gw=192.168.1.1",
+      "yang_sketch": "typedef base-ip { type string { pattern '...'; } } typedef gateway-ip { type base-ip; } leaf gw { type gateway-ip; }",
+      "juniper_exemplar": "junos-types composite typedefs (most common chain depth)"
+    },
+    {
+      "name": "types-typedef-chain-3deep",
+      "theme": "type-composition",
+      "covers": "typedef chained 3+ levels (C->B->A->base); transitive restriction inheritance",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile; pin tsid=12345",
+      "yang_sketch": "typedef base-id {type uint32;} typedef session-id {type base-id;} typedef tunnel-session-id {type session-id;} leaf tsid { type tunnel-session-id; }",
+      "juniper_exemplar": "synthetic stress beyond observed 2-level corpus"
+    },
+    {
+      "name": "types-typedef-restriction-narrowing",
+      "theme": "type-composition",
+      "covers": "typedef adding a range/pattern restriction narrower than its base typedef",
+      "invariant": "validate + validate-reject(out-of-narrowed -> E0003) + serialize-bytes(Xml); pin ssh=22 valid, 2000 rejected",
+      "yang_sketch": "typedef port-base { type uint16; } typedef ssh-port { type port-base { range \"1..1024\"; } } leaf ssh { type ssh-port; }",
+      "juniper_exemplar": "junos-types restriction narrowing idiom"
+    },
+    {
+      "name": "types-typedef-default-inheritance",
+      "theme": "type-composition",
+      "covers": "default applied THROUGH a typedef (RFC 7950 \u00a77.3 typedef default substatement) vs leaf override",
+      "invariant": "serialize-bytes WithDefaults=Explicit + codegen-compile(field default sourced from typedef for a, leaf for b); empty input -> a=50, b=75. VERIFIED compiles",
+      "yang_sketch": "typedef pct { type uint8 { range \"0..100\"; } default 50; } leaf a { type pct; } leaf b { type pct; default 75; }",
+      "juniper_exemplar": "RFC 6991-style typedef defaults"
+    },
+    {
+      "name": "types-typedef-union-composition",
+      "theme": "type-composition",
+      "covers": "typedef that is itself a union, nested with a further outer union (RFC 7950 \u00a79.12)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile; pin 'example.com'(outer string), 'tcp'(inner enum), 6(inner uint8)",
+      "yang_sketch": "typedef transport { type union { type enumeration {enum tcp; enum udp;} type uint8; } } typedef endpoint { type union { type string {pattern '...';} type transport; } } leaf server { type endpoint; }",
+      "juniper_exemplar": "junos typedef-union type reuse"
+    },
+    {
+      "name": "types-typedef-submodule-cross-file",
+      "theme": "type-composition",
+      "covers": "typedef defined in a submodule and used in the parent module (cross-file)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile; pin val=3.141",
+      "yang_sketch": "// main: include part; leaf val { type shared-decimal; }  // submodule part: typedef shared-decimal { type decimal64 {fraction-digits 3;} }",
+      "juniper_exemplar": "OpenConfig modular submodule typedef"
+    },
+    {
+      "name": "types-union-heterogeneous-members-quoting",
+      "theme": "type-composition",
+      "covers": "union (193K+ uses, RFC 7950 \u00a74.2.12) with 5+ heterogeneous members + per-member JSON quoting (string/bool bare, int64/uint64/decimal64 quoted, RFC 7951 \u00a76.1/\u00a76.3)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile(tagged enum); pin 'text', true, int64-max(quoted), uint64-max(quoted), 3.14(quoted)",
+      "yang_sketch": "leaf val { type union { type string; type boolean; type int64; type uint64; type decimal64 {fraction-digits 2;} } }",
+      "juniper_exemplar": "subsumes types-union-breadth; widest non-trivial type"
+    },
+    {
+      "name": "types-union-scalar-all-members",
+      "theme": "type-composition",
+      "covers": "union containing ALL scalar base kinds (string, bool, int8..64, uint8..64, decimal64, enum, bits, binary) \u2014 every member kind in one union",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile; exercise all 10 arms across input docs",
+      "yang_sketch": "leaf scalar-union { type union { type string; type boolean; type int8; type uint16; type int64; type uint64; type decimal64{fraction-digits 2;} type enumeration{enum alpha; enum beta;} type bits{bit flag1{position 0;} bit flag2{position 1;}} type binary; } }",
+      "juniper_exemplar": "native unions with 5+ heterogeneous members"
+    },
+    {
+      "name": "types-union-member-resolution-order",
+      "theme": "type-composition",
+      "covers": "union member RESOLUTION ORDER \u2014 first-match wins on an ambiguous value (RFC 7950 \u00a79.12)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen(assert discriminant=enum not uint); pin '5' -> resolves to enum 'five' (declared first), not uint32/uint16",
+      "yang_sketch": "leaf code { type union { type enumeration { enum five {value 5;} } type uint32; } }",
+      "juniper_exemplar": "subsumes types-union-resolution; RFC 7950 \u00a79.12 pathology"
+    },
+    {
+      "name": "types-union-nested-typedef-chain",
+      "theme": "type-composition",
+      "covers": "union nesting \u2014 a union member that is itself a typedef union (union-of-union), + typedef-of-typedef chain + binary union member (base64)",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile(flattened resolution); pin '65000:100'(string) and 8-byte binary",
+      "yang_sketch": "typedef common-string { type string { pattern '[0-9]+:[0-9]+'; } } typedef community-recv { type union { type common-string; type binary {length 8;} } } leaf ext-comm { type community-recv; }",
+      "juniper_exemplar": "subsumes types-union-typedef-chain; bgp-ext-community-recv-type"
+    },
+    {
+      "name": "types-union-leafref-member",
+      "theme": "type-composition",
+      "covers": "union containing a leafref member (functional reference arm)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 'eth0'(leafref arm) and '192.168.1.1'(string arm)",
+      "yang_sketch": "list interface { key name; leaf name {type string;} } leaf primary-or-static { type union { type leafref { path \"/top/interface/name\"; } type string {pattern '192\\\\.168\\\\.[0-9]+\\\\.[0-9]+';} } }",
+      "juniper_exemplar": "Junos flexible-reference unions"
+    },
+    {
+      "name": "types-union-identityref-member",
+      "theme": "type-composition",
+      "covers": "union containing an identityref member",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 'tcp'(identityref arm) and 8080(port arm)",
+      "yang_sketch": "identity protocol-base; identity tcp {base protocol-base;} identity udp {base protocol-base;} leaf transport { type union { type identityref { base protocol-base; } type uint16 {range \"1..65535\";} } }",
+      "juniper_exemplar": "junos-diagnostics-bgp identityref+inet union"
+    },
+    {
+      "name": "types-union-two-identityrefs-distinct-bases",
+      "theme": "type-composition",
+      "covers": "union of TWO identityref members with DIFFERENT bases (union of two identity hierarchies)",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 'linecard'(hw base) and 'driver'(sw base)",
+      "yang_sketch": "identity hw-component; identity linecard {base hw-component;} identity sw-component; identity driver {base sw-component;} leaf component-type { type union { type identityref {base hw-component;} type identityref {base sw-component;} } }",
+      "juniper_exemplar": "subsumes the union-of-distinct-base-identityref construct from types-identityref"
+    },
+    {
+      "name": "types-union-enum-and-scalar",
+      "theme": "type-composition",
+      "covers": "union combining an enumeration with a scalar base type",
+      "invariant": "validate + serialize-bytes(JsonIetf); pin 'auto'(enum arm) and 42(numeric arm not matching enum)",
+      "yang_sketch": "leaf mode { type union { type enumeration {enum auto; enum manual;} type uint8 {range \"0..255\";} } }",
+      "juniper_exemplar": "Junos state/diagnostic enum+scalar unions"
+    },
+    {
+      "name": "container-presence-empty",
+      "theme": "data-node-types",
+      "covers": "presence container (RFC 7950 \u00a77.5.1) emitting {} JSON / empty element when present-but-childless; non-presence distinction (vanishes); presence -> Option<()> codegen",
+      "invariant": "serialize-bytes(Json,JsonIetf,Xml) + codegen-compile; pin enable-ssh present (port default omitted), non-presence omitted",
+      "yang_sketch": "container enable-ssh { presence \"ssh enabled\"; leaf port { type uint16; default 22; } } container non-presence { leaf status { type string; } }",
+      "juniper_exemplar": "native enable-flag presence containers"
+    },
+    {
+      "name": "container-nested-depth",
+      "theme": "data-node-types",
+      "covers": "nested container hierarchy 3+ levels with schema-order preservation at each level (I1)",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml); pin all leaves a,b,c in schema order",
+      "yang_sketch": "container level1 { leaf a {type string;} container level2 { leaf b {type string;} container level3 { leaf c {type string;} } } }",
+      "juniper_exemplar": "junos-conf 4+ deep nesting"
+    },
+    {
+      "name": "list-single-key-string",
+      "theme": "data-node-types",
+      "covers": "list with single string key + key-leaf uniqueness",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); pin entries name='eth0','eth1'",
+      "yang_sketch": "list interface { key name; leaf name {type string;} leaf mtu {type uint16;} }",
+      "juniper_exemplar": "junos-interfaces name key"
+    },
+    {
+      "name": "list-single-key-numeric",
+      "theme": "data-node-types",
+      "covers": "list with single numeric (uint16) key + numeric uniqueness",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); pin vlan-id=100,200,300",
+      "yang_sketch": "list port { key vlan-id; leaf vlan-id {type uint16;} leaf description {type string;} }",
+      "juniper_exemplar": "junos-vlan numeric key"
+    },
+    {
+      "name": "list-composite-key-two",
+      "theme": "data-node-types",
+      "covers": "composite key with 2 leaves, keys-first emission (I3)",
+      "invariant": "I3-keys-first + serialize-bytes(JsonIetf,Xml); pin metric interleaved among src-ip/dst-ip keys",
+      "yang_sketch": "list edge { key \"src-ip dst-ip\"; leaf metric {type uint32;} leaf src-ip {type string;} leaf dst-ip {type string;} }",
+      "juniper_exemplar": "junos-routing adjacency src-dst"
+    },
+    {
+      "name": "list-composite-key-three",
+      "theme": "data-node-types",
+      "covers": "composite key with 3 leaves interleaved with non-key siblings (I3)",
+      "invariant": "I3-keys-first + serialize-bytes(JsonIetf,Xml); keys (prefix,nexthop-ip,afi) first, then preference,metric",
+      "yang_sketch": "list route { key \"prefix nexthop-ip afi\"; leaf preference {type uint8;} leaf prefix {type string;} leaf nexthop-ip {type string;} leaf metric {type uint32;} leaf afi {type string;} }",
+      "juniper_exemplar": "junos-routing multi-afi keys"
+    },
+    {
+      "name": "ordering-composite-key-wide",
+      "theme": "data-node-types",
+      "covers": "composite key with 6 leaves, non-contiguous in declaration order, keys-first at maximum width (I3)",
+      "invariant": "I3-keys-first + serialize-bytes(JsonIetf,Xml) + validate; SCRAMBLED input, all 6 keys first in key-statement order then weight",
+      "yang_sketch": "list edges { key \"src-type src-slot src-pfe dst-type dst-slot dst-pfe\"; leaf weight {type uint32;} leaf src-type{type string;} ... }",
+      "juniper_exemplar": "junos-fabric edges widest composite key"
+    },
+    {
+      "name": "composite-key-with-interleaved-containers",
+      "theme": "data-node-types",
+      "covers": "composite-key list with non-key CONTAINERS interleaved between key leaves (I3 enforcement past nested nodes)",
+      "invariant": "I3-keys-first + serialize-bytes(JsonIetf,Xml); scrambled, keys first then metrics container",
+      "yang_sketch": "list route { key \"dest-prefix next-hop-ip\"; leaf dest-prefix {type string;} container metrics { leaf distance {type uint8;} } leaf next-hop-ip {type string;} }",
+      "juniper_exemplar": "junos-routing-options route+metrics"
+    },
+    {
+      "name": "list-keyless-positional",
+      "theme": "data-node-types",
+      "covers": "keyless list (no key, config false) positional order preservation + max-elements; ygot historically could not emit keyless lists",
+      "invariant": "I1/I2 positional + json-array-order + serialize-bytes(JsonIetf); pin readings 300,100,200 -> preserved positionally",
+      "yang_sketch": "container state { config false; list sample { max-elements 8; leaf reading {type uint64;} } }",
+      "juniper_exemplar": "telemetry/state rows; kickoff REQUIRED v0.1 fixture"
+    },
+    {
+      "name": "list-ordered-by-user-insertion",
+      "theme": "ordering-invariants",
+      "covers": "ordered-by user LIST byte-exact insertion-order preservation (I1)",
+      "invariant": "I1-user-ordered + serialize-bytes(JsonIetf,Xml); pin rules c,a,b -> [c,a,b] not alphabetized",
+      "yang_sketch": "list rule { ordered-by user; key name; leaf name {type string;} leaf action {type string;} }",
+      "juniper_exemplar": "junos-policy firewall rules insertion order"
+    },
+    {
+      "name": "list-ordered-by-system-canonical",
+      "theme": "ordering-invariants",
+      "covers": "ordered-by system LIST (default) libyang key-canonicalization (I2 first half)",
+      "invariant": "I2-system + serialize-bytes(JsonIetf,Xml); pin vlan-id 300,100,200 -> canonical 100,200,300 by key",
+      "yang_sketch": "list vlan { key vlan-id; leaf vlan-id {type uint16;} leaf name {type string;} }",
+      "juniper_exemplar": "junos-vlan system-ordered; pairs with system-list-canonical"
+    },
+    {
+      "name": "leaflist-ordered-by-user",
+      "theme": "ordering-invariants",
+      "covers": "leaf-list ordered-by user (~42K uses) byte-exact value insertion order, JSON array order (RFC 7951 \u00a75.4, I1)",
+      "invariant": "I1-user-ordered + json-array-order + serialize-bytes(JsonIetf,Xml); pin actions c,a,b -> [c,a,b]",
+      "yang_sketch": "leaf-list actions { ordered-by user; type string; }",
+      "juniper_exemplar": "junos-access-control ACM operations order"
+    },
+    {
+      "name": "leaflist-ordered-by-system",
+      "theme": "ordering-invariants",
+      "covers": "leaf-list ordered-by system (default) libyang value-canonicalization on parse (I2 second half) \u2014 the distinct value-canonicalization code path",
+      "invariant": "I2-system + json-array-order + serialize-bytes(JsonIetf,Xml); pin ports 30,10,20 -> [10,20,30]",
+      "yang_sketch": "leaf-list ports { type uint16; }",
+      "juniper_exemplar": "junos-policy permit-protocols system-ordered"
+    },
+    {
+      "name": "leaflist-with-defaults",
+      "theme": "ordering-invariants",
+      "covers": "leaf-list with multiple default values (RFC 7950 \u00a77.7.2)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) WithDefaults=Explicit; omit servers -> [8.8.8.8, 8.8.4.4]",
+      "yang_sketch": "leaf-list servers { type string; default \"8.8.8.8\"; default \"8.8.4.4\"; }",
+      "juniper_exemplar": "ietf-dns servers with defaults"
+    },
+    {
+      "name": "ordering-nested-user-cascading",
+      "theme": "ordering-invariants",
+      "covers": "ordered-by user list whose child leaf-list is ALSO ordered-by user (cascading double order); ygot historically errored",
+      "invariant": "I1-user-ordered + json-array-order + serialize-bytes(JsonIetf); pin entries [s2,s1], each actions [b,a]",
+      "yang_sketch": "list statement { ordered-by user; key name; leaf name {type string;} leaf-list actions { ordered-by user; type string; } }",
+      "juniper_exemplar": "openconfig-routing-policy; kickoff REQUIRED v0.1 fixture"
+    },
+    {
+      "name": "ordered-user-config-false-state",
+      "theme": "ordering-invariants",
+      "covers": "positional keyless list under config FALSE (state data) preserving parse order \u2014 the state-vs-config user-order crossing (RFC 7950 \u00a77.7.7)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate; pin event seq 3,1,2 -> preserved (no key to canonicalize as state). VERIFIED compiles",
+      "yang_sketch": "container state { config false; list event { leaf seq {type uint32;} leaf msg {type string;} } }",
+      "juniper_exemplar": "telemetry/state rows"
+    },
+    {
+      "name": "min-elements-reject",
+      "theme": "data-node-types",
+      "covers": "min-elements constraint (RFC 7950 \u00a77.7.5) on list/leaf-list with COUNT-constraint rejection, order-agnostic",
+      "invariant": "validate(2..4 byte-golden) + validate-reject(1 entry -> CAMBIUM_E0003 'Too few' both langs). VERIFIED libyang",
+      "yang_sketch": "leaf-list servers { min-elements 2; max-elements 4; type string; }",
+      "juniper_exemplar": "synthetic; min-elements absent corpus-wide but RFC-required"
+    },
+    {
+      "name": "max-elements-reject",
+      "theme": "data-node-types",
+      "covers": "max-elements constraint (RFC 7950 \u00a77.7.6) rejection when count exceeds maximum",
+      "invariant": "validate(<=4 byte-golden) + validate-reject(5 -> CAMBIUM_E0003 'Too many' both langs). Shares module with min-elements-reject",
+      "yang_sketch": "leaf-list servers { min-elements 2; max-elements 4; type string; } // 5 entries rejected",
+      "juniper_exemplar": "junos-ntp max-elements 8"
+    },
+    {
+      "name": "choice-multiple-cases-default",
+      "theme": "data-node-types",
+      "covers": "choice (1,836 corpus) with multiple named cases + default-case (RFC 7950 \u00a77.9.3) + JSON case-transparency (no 'case' wrapper, RFC 7951 \u00a75.2)",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml); activate one case, child at choice position no wrapper",
+      "yang_sketch": "choice auth-type { default \"password\"; case password { leaf pass-string {type string;} } case public-key { leaf key-data {type string;} } case token { leaf token-value {type string;} } }",
+      "juniper_exemplar": "junos-ssh authentication choice; subsumes ordering-choice-case"
+    },
+    {
+      "name": "choice-mandatory-reject",
+      "theme": "data-node-types",
+      "covers": "mandatory choice (RFC 7950 \u00a77.9.4) \u2014 must select a case or validation fails",
+      "invariant": "validate(one case) + validate-reject(no case -> CAMBIUM_E0003 both langs) + serialize-bytes(Xml)",
+      "yang_sketch": "choice tunnel-mode { mandatory true; case gre { leaf remote {type string;} } case mpls { leaf label {type uint32;} } }",
+      "juniper_exemplar": "junos-tunnel mandatory mode"
+    },
+    {
+      "name": "choice-single-node-case",
+      "theme": "data-node-types",
+      "covers": "choice with single-node case branches (one leaf per case)",
+      "invariant": "serialize-bytes(JsonIetf,Xml); activate create or delete",
+      "yang_sketch": "choice operation { case create { leaf name {type string;} } case delete { leaf id {type uint32;} } }",
+      "juniper_exemplar": "junos-rpc single-node cases"
+    },
+    {
+      "name": "choice-nested-in-case",
+      "theme": "data-node-types",
+      "covers": "choice nested inside a case of an outer choice + JSON case-transparency at depth; generic case_N names where order is the only meaning (RFC 7950 \u00a77.9.2)",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml); activate ipv4>rip; inner choice transparent",
+      "yang_sketch": "choice address-family { case ipv4 { choice routing { case rip { leaf metric {type uint8;} } case ospf { leaf area {type uint32;} } } } case ipv6 { leaf prefix {type string;} } }",
+      "juniper_exemplar": "junos-routing-options af/protocol nesting; subsumes ordering-choice-nested"
+    },
+    {
+      "name": "choice-cases-interleaved-siblings",
+      "theme": "data-node-types",
+      "covers": "choice interleaved with plain leaf/container siblings (not grouped at schema position), I1",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml); order id, active-case, description",
+      "yang_sketch": "container rule { leaf id {type string;} choice action-type { case accept { leaf priority {type uint8;} } case deny { leaf reason {type string;} } } leaf description {type string;} }",
+      "juniper_exemplar": "junos-policy-options interleaved conditions"
+    },
+    {
+      "name": "choice-with-leaflist-branch",
+      "theme": "data-node-types",
+      "covers": "choice with a case containing an ordered-by-user leaf-list (ordering interaction)",
+      "invariant": "I1-user-ordered + serialize-bytes(JsonIetf,Xml); file case active, paths [p3,p1,p2] preserved",
+      "yang_sketch": "choice log-dest { case file { leaf-list paths { ordered-by user; type string; } } case syslog { leaf facility {type string;} } }",
+      "juniper_exemplar": "junos-system syslog destinations"
+    },
+    {
+      "name": "choice-shorthand-leaflist-list",
+      "theme": "data-node-types",
+      "covers": "SHORTHAND case \u2014 choice directly containing a leaf-list and a list with NO explicit 'case' wrapper (RFC 7950 \u00a77.9.2 auto-wraps); implicit case synthesis",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate + codegen-compile(synthesized case arms named tags/rows); activate tags -> array at choice position. VERIFIED auto-wraps",
+      "yang_sketch": "choice payload { leaf-list tags { type string; } list rows { key id; leaf id {type uint16;} leaf v {type string;} } }",
+      "juniper_exemplar": "synthetic; complements explicit-case choice fixtures"
+    },
+    {
+      "name": "list-entry-with-choice-schema-order",
+      "theme": "data-node-types",
+      "covers": "list entry containing a choice at schema position (I3 keys-first + choice ordering together)",
+      "invariant": "I3-keys-first + I1-decl-order + serialize-bytes(JsonIetf,Xml); vlan key first, choice in position",
+      "yang_sketch": "list vlan { key vlan-id; leaf vlan-id {type uint16;} choice native-option { case tagged { leaf tag {type empty;} } case untagged { leaf untag {type empty;} } } }",
+      "juniper_exemplar": "junos-vlan tagging choice"
+    },
+    {
+      "name": "container-within-list-schema-order",
+      "theme": "data-node-types",
+      "covers": "container child within a list entry, schema order with key first (I3)",
+      "invariant": "I3-keys-first + serialize-bytes(JsonIetf,Xml); key id then config container",
+      "yang_sketch": "list device { key id; leaf id {type string;} container config { leaf enabled {type boolean;} } }",
+      "juniper_exemplar": "junos-interfaces interface+config block"
+    },
+    {
+      "name": "leaf-list-within-list-entry",
+      "theme": "data-node-types",
+      "covers": "leaf-list child within a list entry, cascading I1/I2 ordering both preserved",
+      "invariant": "I1-user-ordered + serialize-bytes(JsonIetf,Xml); policy list [p2,p1], each actions [b,a]",
+      "yang_sketch": "list policy { ordered-by user; key name; leaf name {type string;} leaf-list actions { ordered-by user; type string; } }",
+      "juniper_exemplar": "openconfig-policy ordered statements"
+    },
+    {
+      "name": "config-true-subtree",
+      "theme": "data-node-types",
+      "covers": "config true subtree (default, RFC 7950 \u00a77.21.1) rw-data classification",
+      "invariant": "serialize-bytes(Xml) + config-node classification; pin hostname, debug-level",
+      "yang_sketch": "container settings { config true; leaf hostname {type string;} leaf debug-level {type uint8;} }",
+      "juniper_exemplar": "junos-conf config-true setup"
+    },
+    {
+      "name": "config-false-state-subtree",
+      "theme": "data-node-types",
+      "covers": "config false subtree, ro-state classification, config/state split",
+      "invariant": "serialize-bytes(Xml) + state-node classification; pin uptime, load-avg",
+      "yang_sketch": "container system { config false; leaf uptime {type uint64;} leaf load-avg {type string;} }",
+      "juniper_exemplar": "junos-state operational data"
+    },
+    {
+      "name": "mixed-config-state-nested",
+      "theme": "data-node-types",
+      "covers": "mixed config true + config false in nested siblings (config inheritance/override)",
+      "invariant": "serialize-bytes(Xml) + config inheritance; hostname rw, state/uptime ro",
+      "yang_sketch": "container system { leaf hostname {type string;} container state { config false; leaf uptime {type uint64;} } }",
+      "juniper_exemplar": "junos-conf+state subtree split"
+    },
+    {
+      "name": "status-current-deprecated-obsolete",
+      "theme": "data-node-types",
+      "covers": "status statement current/deprecated/obsolete (RFC 7950 \u00a77.21.2) metadata preservation",
+      "invariant": "serialize-bytes(Xml) + status-metadata preservation; set all three",
+      "yang_sketch": "leaf current-item {type string; status current;} leaf deprecated-item {type string; status deprecated;} leaf obsolete-item {type string; status obsolete;}",
+      "juniper_exemplar": "native mixed status leaves"
+    },
+    {
+      "name": "anydata-untyped-container",
+      "theme": "data-node-types",
+      "covers": "anydata (YANG 1.1, RFC 7950 \u00a77.10) untyped structured data; opaque round-trip (RFC 7951 \u00a75.9 JSON value)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + parse-opaque; pin opaque subtree {\"custom\":[1,2,{\"nested\":true}]} preserved",
+      "yang_sketch": "yang-version 1.1; container top { anydata metrics; }",
+      "juniper_exemplar": "RFC 7950 completeness (0 corpus); required surface"
+    },
+    {
+      "name": "anyxml-opaque-passthrough",
+      "theme": "data-node-types",
+      "covers": "anyxml (17,581 native uses, RFC 7950 \u00a77.11) opaque XML subtree verbatim round-trip (LYD_PARSE_OPAQ)",
+      "invariant": "serialize-bytes(Xml) + parse-opaque; pin <data><foo><bar>x</bar></foo></data> round-trips byte-stable",
+      "yang_sketch": "container rpc-reply { anyxml data; }",
+      "juniper_exemplar": "native RPC anyxml; subsumes anyxml-passthrough"
+    },
+    {
+      "name": "anyxml-attributes-namespaced",
+      "theme": "data-node-types",
+      "covers": "anyxml fidelity \u2014 XML attributes + namespaced child elements (RFC 7950 \u00a77.11; RFC 7951 \u00a75.10). CRITICAL: libyang preserves attr but REWRITES prefixed ns to default-ns form and REJECTS mixed text+element",
+      "invariant": "serialize-bytes(Xml) + validate; golden captures libyang's ACTUAL canonical opaque form (attr survives, ns:foo->foo xmlns=, element-only content). VERIFIED fidelity facts",
+      "yang_sketch": "container top { anyxml payload; } // input <ns:foo xmlns:ns='urn:x' attr='1'><bar>v</bar></ns:foo>",
+      "juniper_exemplar": "native RPCs anyxml-heavy; fidelity bug-trap beyond bare passthrough"
+    },
+    {
+      "name": "declaration-order-out-of-alphabetical",
+      "theme": "ordering-invariants",
+      "covers": "container with children in NON-alphabetical schema order (schema-declaration-order preservation case, I1)",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml); input zebra,apple,mango,banana -> NOT alphabetized",
+      "yang_sketch": "container system { leaf zebra {type string;} leaf apple {type string;} leaf mango {type string;} leaf banana {type string;} }",
+      "juniper_exemplar": "junos-system non-alphabetical parameters"
+    },
+    {
+      "name": "wide-heterogeneous-siblings-all-types",
+      "theme": "ordering-invariants",
+      "covers": "container with 9+ mixed-kind children (containers, leaves, leaf-lists, choices, config-false state) in scrambled input \u2014 broadest declaration-order stress (I1)",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml); scrambled input, schema order locked",
+      "yang_sketch": "container platform { container hardware{...} leaf name{...} container software{...} leaf-list dns-servers{...} container services{...} choice routing-protocol{...} leaf timezone{...} container state{config false;...} leaf-list features{...} }",
+      "juniper_exemplar": "junos-system wide container; subsumes ordering-wide-siblings"
+    },
+    {
+      "name": "json-object-determinism",
+      "theme": "ordering-invariants",
+      "covers": "I5 \u2014 JSON object member order = single libyang printer order (schema declaration order), NOT language-native map/struct reflection; Rust==Go byte-identical",
+      "invariant": "I5-json-object-determinism + serialize-bytes(Json,JsonIetf) + cross-language-byte-diff(Rust bytes == Go bytes); non-alphabetical schema order survives",
+      "yang_sketch": "container top { leaf zebra {type string;} leaf alpha {type string;} container mid { leaf nine {type uint8;} leaf one {type uint8;} } leaf middle {type string;} }",
+      "juniper_exemplar": "kickoff/spec REQUIRED v0.1; whole catalog inherits this gate"
+    },
+    {
+      "name": "linkage-grouping-simple",
+      "theme": "linkage",
+      "covers": "grouping definition (RFC 7950 \u00a77.12) + uses expansion (\u00a77.13) at schema position among siblings; codegen INLINES the grouping",
+      "invariant": "I1-decl-order + serialize-bytes(JsonIetf,Xml) + codegen-compile(inlined at uses site in grouping order); SCRAMBLED input -> schema order name,ip,mask,mtu",
+      "yang_sketch": "grouping addr { leaf ip {type string;} leaf mask {type uint8;} } container intf { leaf name {type string;} uses addr; leaf mtu {type uint16;} }",
+      "juniper_exemplar": "openconfig-pf-interfaces grouping; 39,700 uses"
+    },
+    {
+      "name": "linkage-grouping-nested-uses",
+      "theme": "linkage",
+      "covers": "grouping that itself contains a uses of another grouping (transitive reuse, flattens with no double wrapping)",
+      "invariant": "codegen-compile(transitive expansion) + serialize-bytes(JsonIetf); scrambled -> final expanded order",
+      "yang_sketch": "grouping base-addr { leaf ip {type string;} leaf mask {type uint8;} } grouping extended-addr { uses base-addr; leaf gateway {type string;} } container intf { leaf name {type string;} uses extended-addr; }",
+      "juniper_exemplar": "openconfig-ospf-policy nested grouping"
+    },
+    {
+      "name": "linkage-grouping-config-state",
+      "theme": "linkage",
+      "covers": "one grouping reused by both config and state containers \u2014 INLINE copy, not a shared reference (two distinct codegen structs)",
+      "invariant": "serialize-bytes(Xml) + codegen-compile(two distinct struct fields, no shared ptr); pin ip+mask in both, identical serialization",
+      "yang_sketch": "grouping addr-params { leaf ip {type string;} leaf mask {type uint8;} } container intf { leaf name {type string;} container config { uses addr-params; } container state { config false; uses addr-params; } }",
+      "juniper_exemplar": "openconfig-interfaces config/state common grouping; subsumes linkage-grouping-uses"
+    },
+    {
+      "name": "linkage-grouping-cross-module",
+      "theme": "linkage",
+      "covers": "grouping defined in module A, used (prefixed) in module B; children inherit base-module context in JSON",
+      "invariant": "serialize-bytes(JsonIetf) + codegen-compile; two owned modules, prefixed uses resolves",
+      "yang_sketch": "// A: grouping shared-addr { leaf ip {type string;} leaf mask {type uint8;} }  // B: import A {prefix lgcmb;} container intf { uses lgcmb:shared-addr; }",
+      "juniper_exemplar": "openconfig-ospf-policy cross-module uses"
+    },
+    {
+      "name": "linkage-refine-default",
+      "theme": "linkage",
+      "covers": "refine (RFC 7950 \u00a77.13.2) altering default on inherited leaves",
+      "invariant": "serialize-bytes WithDefaults=Explicit + codegen-compile; omit alg/key -> refined defaults sha256/secret emitted",
+      "yang_sketch": "grouping auth { leaf alg {type string;} leaf key {type string;} } container ntp { uses auth { refine alg { default \"sha256\"; } refine key { default \"secret\"; } } }",
+      "juniper_exemplar": "OpenConfig refine"
+    },
+    {
+      "name": "linkage-refine-mandatory-config",
+      "theme": "linkage",
+      "covers": "refine changing mandatory true / config false on inherited leaves",
+      "invariant": "validate + serialize-bytes(Xml) + codegen-compile(name non-Option, secret absent from config); pin name present, secret config-false",
+      "yang_sketch": "grouping params { leaf name {type string;} leaf secret {type string;} } container service { uses params { refine name { mandatory true; } refine secret { config false; } } }",
+      "juniper_exemplar": "OpenConfig refine mandatory/config; subsumes linkage-refine"
+    },
+    {
+      "name": "linkage-refine-presence-must",
+      "theme": "linkage",
+      "covers": "refine adding presence to an inherited container + refine adding a must constraint",
+      "invariant": "validate + validate-reject(must fail val=0 -> CAMBIUM_E0003) + serialize-bytes(Xml); pin opts present val=5 valid",
+      "yang_sketch": "grouping shared-container { container opts { leaf val {type uint8;} } } container system { uses shared-container { refine opts { presence \"enable opts\"; } refine opts/val { must \"current() > 0\" { error-message \"val > 0\"; } } } }",
+      "juniper_exemplar": "OpenConfig refine presence/must"
+    },
+    {
+      "name": "linkage-refine-min-max-iffeature",
+      "theme": "linkage",
+      "covers": "refine changing min-elements/max-elements on an inherited leaf-list + refine adding if-feature to an inherited node",
+      "invariant": "validate + validate-reject(0 tags -> E0003 min) + serialize-bytes(Xml); feature gates advanced-opt presence",
+      "yang_sketch": "feature advanced; grouping tags-group { leaf-list tags {type string;} } grouping basic { leaf mode {type string;} leaf advanced-opt {type string;} } container policy { uses tags-group { refine tags { min-elements 1; max-elements 5; } } } container service { uses basic { refine advanced-opt { if-feature advanced; } } }",
+      "juniper_exemplar": "OpenConfig refine min/max + if-feature"
+    },
+    {
+      "name": "linkage-augment-intra-module",
+      "theme": "linkage",
+      "covers": "augment (RFC 7950 \u00a77.17) in the same module targeting an earlier container + when guard; injected node at libyang-compiled position not appended",
+      "invariant": "I2-decl-order + validate + validate-reject(when-false type='lag' with speed -> CAMBIUM_E0003) + serialize-bytes(JsonIetf,Xml); type='eth'+speed valid",
+      "yang_sketch": "list interface { key name; leaf name {type string;} leaf type {type string;} } augment \"/interfaces/interface\" { when \"type = 'eth'\"; leaf speed {type uint32;} }",
+      "juniper_exemplar": "830 native augments; subsumes linkage-augment"
+    },
+    {
+      "name": "linkage-augment-container-leaf-list",
+      "theme": "linkage",
+      "covers": "augment carrying multiple node kinds at once (container + leaf + leaf-list), declaration order among augmented peers preserved",
+      "invariant": "serialize-bytes(JsonIetf,Xml); scrambled -> compiled order stats,mtu,tags",
+      "yang_sketch": "container top { leaf id {type string;} } augment \"/top\" { container stats { leaf packets {type uint64;} leaf bytes {type uint64;} } leaf mtu {type uint16;} leaf-list tags {type string;} }",
+      "juniper_exemplar": "openconfig-aft-summary mixed-kind augment"
+    },
+    {
+      "name": "linkage-augment-choice-case",
+      "theme": "linkage",
+      "covers": "augment of a choice (injecting a new case) + augment of an existing case (adding a leaf to it)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate; activate udp case port=5000+timeout=30; augmented case at compiled position",
+      "yang_sketch": "choice transport { case tcp { leaf port {type uint16;} } case udp { leaf port {type uint16;} } } augment \"/config/transport\" { case quic { leaf quic-port {type uint16;} } } augment \"/config/transport/udp\" { leaf timeout {type uint32;} }",
+      "juniper_exemplar": "OpenConfig choice/case augment"
+    },
+    {
+      "name": "linkage-augment-nested",
+      "theme": "linkage",
+      "covers": "augment of an already-augmented node (second augment targets first augment's injected container)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate; both augments' children compile; pin id+status(ready,timestamp)",
+      "yang_sketch": "container dev { leaf id {type string;} } augment \"/dev\" { container status { leaf ready {type boolean;} } } augment \"/dev/status\" { leaf timestamp {type string;} }",
+      "juniper_exemplar": "chained native augments"
+    },
+    {
+      "name": "linkage-augment-inter-module",
+      "theme": "linkage",
+      "covers": "augment in module B targeting module A path with prefix (RFC 7950 \u00a77.17 inter-module); injected children inherit augmenting-module context in JSON",
+      "invariant": "serialize-bytes(JsonIetf,Xml); two owned modules, prefixed augment path resolves; base nodes carry base prefix, injected carry augmenting context",
+      "yang_sketch": "// A: list interface {key name; leaf name; leaf type;}  // B: import A {prefix liaim-b;} augment \"/liaim-b:interfaces/liaim-b:interface\" { leaf speed {type uint32;} }",
+      "juniper_exemplar": "openconfig-ospf-policy augments routing-policy with prefix"
+    },
+    {
+      "name": "augment-cross-module-ident-collision",
+      "theme": "linkage",
+      "covers": "cross-module augment injecting a sibling whose PascalCase type name collides with a native node in the target module (codegen disambiguation), serialization still emits both original names",
+      "invariant": "codegen-compile(two distinct non-clobbering types, deterministic suffix) + serialize-bytes(Xml)(both original YANG names round-trip)",
+      "yang_sketch": "// base: container top { container config { leaf v; } leaf status; }  // aug: import base; augment \"/acmib:top\" { container config-extra { leaf w; } leaf config-status; }",
+      "juniper_exemplar": "890-augment corpus collision; subsumes idents-augment-collision"
+    },
+    {
+      "name": "augment-when-target-context",
+      "theme": "linkage",
+      "covers": "when on an AUGMENT evaluated with the augment-TARGET as XPath context, reaching UP the target tree cross-module (RFC 7950 \u00a77.21.5) \u2014 the OpenConfig/Junos failure point",
+      "invariant": "validate + validate-reject(mode!='enabled' with area present -> CAMBIUM_E0003) + serialize-bytes(Xml); pin mode='enabled'+area valid. VERIFIED reach-up compiles",
+      "yang_sketch": "// base: container system { leaf mode; container ospf { leaf router-id; } }  // aug: augment \"/base:system/base:ospf\" { when \"../base:mode = 'enabled'\"; leaf area {type string;} }",
+      "juniper_exemplar": "cross-module augment-with-reach-up"
+    },
+    {
+      "name": "linkage-deviation-not-supported",
+      "theme": "linkage",
+      "covers": "cross-module deviation not-supported (RFC 7950 \u00a77.20.3) removing a node; using the removed node fails parse (CAMBIUM_E0002)",
+      "invariant": "validate(deviated tree byte-golden) + validate-reject(deprecated-field present -> CAMBIUM_E0002 'node not found' both langs); two owned modules",
+      "yang_sketch": "// base: container c { leaf deprecated-field; leaf active-field; }  // dev: import base; deviation \"/ldnsb:c/ldnsb:deprecated-field\" { deviate not-supported; }",
+      "juniper_exemplar": "jnx-openconfig-dev 873 not-supported deviations"
+    },
+    {
+      "name": "linkage-deviation-replace-type",
+      "theme": "linkage",
+      "covers": "cross-module deviation replace narrowing a type (uint64->uint32+range); codegen uses the replaced type",
+      "invariant": "validate(count=500) + validate-reject(count=2000 exceeds range -> CAMBIUM_E0003 both langs) + codegen-compile(uint32); two owned modules",
+      "yang_sketch": "// base: container c { leaf count {type uint64;} }  // dev: deviation \"/ldrb:c/ldrb:count\" { deviate replace { type uint32 { range \"1..1000\"; } } }",
+      "juniper_exemplar": "jnx-openconfig-dev 94 replace deviations"
+    },
+    {
+      "name": "linkage-deviation-add",
+      "theme": "linkage",
+      "covers": "cross-module deviation add inserting mandatory true on a previously-optional leaf",
+      "invariant": "validate(optional-name present) + validate-reject(omitted -> CAMBIUM_E0003 'mandatory missing' both langs); two owned modules",
+      "yang_sketch": "// base: container c { leaf optional-name {type string;} }  // dev: deviation \"/ldab:c/ldab:optional-name\" { deviate add { mandatory true; } }",
+      "juniper_exemplar": "jnx-openconfig-dev 23 add deviations"
+    },
+    {
+      "name": "linkage-deviation-delete",
+      "theme": "linkage",
+      "covers": "cross-module deviation delete removing a default substatement; default cleared from compiled schema",
+      "invariant": "serialize-bytes(Xml) WithDefaults=Explicit; omit flag -> NOT present (default deleted); two owned modules",
+      "yang_sketch": "// base: container c { leaf flag {type boolean; default true; description \"A flag\";} }  // dev: deviation \"/lddb:c/lddb:flag\" { deviate delete { default true; } }",
+      "juniper_exemplar": "RFC 7950 delete deviation"
+    },
+    {
+      "name": "linkage-deviation-multi",
+      "theme": "linkage",
+      "covers": "multiple deviations on different nodes in ONE module (not-supported + replace + add) with load-order resolution; each violation tested independently",
+      "invariant": "validate(valid tree) + validate-reject x3: legacy present->E0002, maximum overflow->E0003, name absent->E0003 (both langs); two owned modules",
+      "yang_sketch": "// dev: deviation legacy {not-supported;} deviation maximum {replace{type uint32{range...};}} deviation name {add{mandatory true;}}",
+      "juniper_exemplar": "jnx-openconfig-dev combined deviate kinds; subsumes linkage-deviation"
+    },
+    {
+      "name": "linkage-deviation-replace-default-config",
+      "theme": "linkage",
+      "covers": "deviate REPLACE of default/config + deviate ADD of must/if-feature (RFC 7950 \u00a77.20.3.2). CRITICAL: replace{default} requires the target to ALREADY carry a default",
+      "invariant": "validate(effective: mode default 'enabled', router-id ro) + validate-reject(must violation -> E0003 both langs) + serialize-bytes(Xml); two owned modules. VERIFIED constraint",
+      "yang_sketch": "// base: leaf mode {type string; default \"disabled\";} container ospf { leaf router-id; }  // dev: deviation mode {replace{default \"enabled\";}} deviation router-id {replace{config false;}} deviation ospf {add{must \"../base:mode='enabled'\";}}",
+      "juniper_exemplar": "jnx-openconfig-dev replace default/config common"
+    },
+    {
+      "name": "linkage-import-prefix",
+      "theme": "linkage",
+      "covers": "import (RFC 7950 \u00a77.1.5) by module name + assigned prefix; remote typedef usage with prefix",
+      "invariant": "validate + serialize-bytes(JsonIetf); two owned modules, port=8080 via remote:port-number",
+      "yang_sketch": "// base: typedef port-number { type uint16 { range \"1..65535\"; } }  // main: import base {prefix remote;} leaf port { type remote:port-number; }",
+      "juniper_exemplar": "OpenConfig/native import with prefix"
+    },
+    {
+      "name": "linkage-import-revision-date",
+      "theme": "linkage",
+      "covers": "import with revision-date substatement pinning a specific module version",
+      "invariant": "validate + serialize-bytes(JsonIetf); both modules pinned-revision, leafref resolves to pinned old-field",
+      "yang_sketch": "// base@2026-06-14: container c { leaf old-field; }  // main: import base { prefix lirdb; revision-date 2026-06-14; }",
+      "juniper_exemplar": "RFC 7950 revision-date import (version stability)"
+    },
+    {
+      "name": "linkage-import-multiple",
+      "theme": "linkage",
+      "covers": "single module importing 3+ other modules with mixed prefixes; cross-imported typedefs compose without shadowing",
+      "invariant": "validate + serialize-bytes(JsonIetf); four owned modules, obj uses m1:id, m2:name, m3:mode",
+      "yang_sketch": "// m1: typedef id; m2: typedef name; m3: typedef mode;  // main: import m1{prefix m1;} import m2{prefix m2;} import m3{prefix m3;} container obj { leaf id{type m1:id;} leaf name{type m2:name;} leaf mode{type m3:mode;} }",
+      "juniper_exemplar": "complex models importing many dependents"
+    },
+    {
+      "name": "linkage-import-non-transitive",
+      "theme": "linkage",
+      "covers": "import NON-transitivity (RFC 7950 \u00a75.1.1) \u2014 A imports B, B imports C; A canNOT use C's symbols without importing C",
+      "invariant": "validate-reject(A references c:color unimported -> CAMBIUM_E0001 'Referenced type not found' both langs); positive control B (imports C) compiles. Three owned modules. VERIFIED",
+      "yang_sketch": "// C: typedef color;  // B: import C; uses c:color;  // A(bad): import B only; leaf bad { type c:color; } -> FAILS",
+      "juniper_exemplar": "synthetic; non-transitivity boundary"
+    },
+    {
+      "name": "linkage-submodule-simple",
+      "theme": "linkage",
+      "covers": "submodule with belongs-to (RFC 7950 \u00a75.3) + include (\u00a77.1.5); submodule nodes compile into PARENT namespace and serialize with parent prefix in JSON (not submodule name)",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate; main+submodule, grouping-expanded nodes carry 'lss:' parent prefix",
+      "yang_sketch": "// main: include ...-auth; container aaa { uses auth-params; }  // submodule: belongs-to main {prefix lss;} grouping auth-params { leaf username; leaf password; }",
+      "juniper_exemplar": "openconfig submodule include; subsumes linkage-submodule"
+    },
+    {
+      "name": "linkage-submodule-multi",
+      "theme": "linkage",
+      "covers": "main module including TWO submodules; cross-submodule typedef/grouping reuse; all compile into parent namespace",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); main+2 submodules, one defines typedef the other imports+uses, parent prefix throughout",
+      "yang_sketch": "// main: include types; include state; container device { uses device-state; }  // types submodule: typedef device-id;  // state submodule: import types; grouping device-state { leaf id {type lsm:device-id;} leaf online; }",
+      "juniper_exemplar": "openconfig modular multi-submodule design"
+    },
+    {
+      "name": "linkage-submodule-imports-foreign",
+      "theme": "linkage",
+      "covers": "a submodule that itself IMPORTS a foreign top-level module and uses its typedef (RFC 7950 \u00a75.3.1) \u2014 parent-prefix serialization",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); submodule imports ietf-inet-types, uses inet:ip-address; JSON uses parent module name. VERIFIED compiles",
+      "yang_sketch": "// main: include ...-part; container aaa { uses radius-cfg; }  // submodule: belongs-to main {prefix lsif;} import ietf-inet-types {prefix inet;} grouping radius-cfg { leaf server {type inet:ip-address;} leaf secret; }",
+      "juniper_exemplar": "submodule importing vendored ietf-inet-types"
+    },
+    {
+      "name": "identity-standalone",
+      "theme": "identity",
+      "covers": "identity (RFC 7950 \u00a76.4.16) without base \u2014 standalone abstract identity as a type base point",
+      "invariant": "validate; identity exists as identityref base; component-type omitted",
+      "yang_sketch": "identity hardware-component { description \"Any hardware component\"; } container inventory { leaf component-type { type identityref { base hardware-component; } } }",
+      "juniper_exemplar": "ietf-routing-types top-level identity"
+    },
+    {
+      "name": "identity-cross-module-derivation",
+      "theme": "identity",
+      "covers": "identity defined in module A, DERIVED in module B by importing A and basing on the prefixed identity; cross-module base resolution",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml); two owned modules, local derived identities bare, foreign-derived would prefix (RFC 7951 \u00a76.8)",
+      "yang_sketch": "// A: identity transport-protocol;  // B: import A {prefix icmb;} identity tcp {base icmb:transport-protocol;} identity udp {base icmb:transport-protocol;} leaf proto { type identityref { base icmb:transport-protocol; } }",
+      "juniper_exemplar": "openconfig-policy-types cross-module derivation"
+    },
+    {
+      "name": "identity-multi-base-cross-module",
+      "theme": "identity",
+      "covers": "identity in module C deriving from bases in modules A AND B (multi-base cross-module, RFC 7950 \u00a76.4.16 YANG 1.1)",
+      "invariant": "validate + serialize-bytes(JsonIetf); three owned modules, high-speed-interface resolves both foreign bases, module-prefixed value",
+      "yang_sketch": "// A: identity interface-role;  // B: identity hardware-feature;  // C: import A; import B; identity high-speed-interface { base imbcma:interface-role; base imbcmb:hardware-feature; } leaf type { type identityref { base imbcma:interface-role; } }",
+      "juniper_exemplar": "multi-base from imported modules"
+    },
+    {
+      "name": "identity-hierarchy-with-identityref",
+      "theme": "identity",
+      "covers": "grandparent/parent/child identity hierarchy + identityref restricted to a mid-level base accepting descendants vs root base accepting any",
+      "invariant": "validate + serialize-bytes(JsonIetf) + codegen-compile(identityref base filtering); pin primary='rsvp-tunnel'(restricted to mpls-tunnel), backup='rsvp-tunnel'(restricted to tunnel-type)",
+      "yang_sketch": "identity tunnel-type; identity mpls-tunnel {base tunnel-type;} identity rsvp-tunnel {base mpls-tunnel;} identity ldp-tunnel {base mpls-tunnel;} leaf primary { type identityref { base mpls-tunnel; } } leaf backup { type identityref { base tunnel-type; } }",
+      "juniper_exemplar": "openconfig-mpls nested identity hierarchies"
+    },
+    {
+      "name": "rpc-input-only",
+      "theme": "operations",
+      "covers": "rpc (RFC 7950 \u00a77.14) with input children only, no output (YANG 1.0); input schema-order emission (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled input -> schema order interface-name,check-type,timeout",
+      "yang_sketch": "rpc request-status { input { leaf interface-name {type string;} leaf check-type {type enumeration{enum arp; enum icmp;}} leaf timeout {type uint32;} } }",
+      "juniper_exemplar": "native input-only rpc"
+    },
+    {
+      "name": "rpc-output-only",
+      "theme": "operations",
+      "covers": "rpc with output children only (reply-only); output schema-order emission (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled reply -> schema order version-string,build-date,revision-id",
+      "yang_sketch": "rpc get-version { output { leaf version-string {type string;} leaf build-date {type string;} leaf revision-id {type string;} } }",
+      "juniper_exemplar": "native reply-only rpc; subsumes rpc-io-output"
+    },
+    {
+      "name": "rpc-input-output-interleaved",
+      "theme": "operations",
+      "covers": "rpc with both input and output blocks; input children before output children, each in schema order (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled both -> input(name,mode,mtu) then output(status,error-message,stats)",
+      "yang_sketch": "rpc configure-interface { input { leaf name; leaf mode {type enumeration{...};} leaf mtu {type uint32;} } output { leaf status {type enumeration{...};} leaf error-message {type string;} container stats { leaf packets-sent {type uint64;} } } }",
+      "juniper_exemplar": "native request/reply rpc"
+    },
+    {
+      "name": "rpc-io-heterogeneous-nodes",
+      "theme": "operations",
+      "covers": "rpc input/output containing all node kinds (leaf, leaf-list, container, choice) in schema order (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled -> declared order in both blocks",
+      "yang_sketch": "rpc query-metrics { input { leaf query-id; leaf-list metrics; container filter {...} choice scope {...} } output { container results { leaf count; leaf-list values; } leaf response-time {type decimal64{fraction-digits 3;}} leaf-list warnings; } }",
+      "juniper_exemplar": "native rpc all node kinds"
+    },
+    {
+      "name": "rpc-io-nested-containers",
+      "theme": "operations",
+      "covers": "rpc input/output with nested container hierarchies; I4 ordering at depth",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled nested -> full schema hierarchy order",
+      "yang_sketch": "rpc deploy-service { input { leaf service-name; container config { leaf replica-count; container resource-limits { leaf cpu; leaf memory; } leaf timeout; } } output { container deployment-info {...} } }",
+      "juniper_exemplar": "native deep rpc I/O"
+    },
+    {
+      "name": "rpc-io-with-anyxml",
+      "theme": "operations",
+      "covers": "rpc input/output containing an anyxml opaque node at schema position; content verbatim",
+      "invariant": "I4-rpc-io-order + serialize-bytes(Xml) + parse-opaque; scrambled -> script-name,parameters,timeout / result,completion-time",
+      "yang_sketch": "rpc execute-script { input { leaf script-name; anyxml parameters; leaf timeout; } output { anyxml result; leaf completion-time; } }",
+      "juniper_exemplar": "native anyxml in RPC operations"
+    },
+    {
+      "name": "rpc-io-decimal64-numeric-types",
+      "theme": "operations",
+      "covers": "rpc input/output with int64/uint64/decimal64 requiring JSON string quoting (RFC 7951 \u00a76.1) while preserving I4 order; inherits I5 Rust==Go gate",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf)(int64/uint64/decimal64 quoted) + cross-language-byte-diff; scrambled -> schema order",
+      "yang_sketch": "rpc compute-aggregate { input { leaf samples-count {type uint64;} leaf offset {type int64;} leaf scale-factor {type decimal64{fraction-digits 2;}} } output { leaf sum {type int64;} leaf average {type decimal64{fraction-digits 3;}} leaf max-value {type uint64;} } }",
+      "juniper_exemplar": "numeric rpc I/O quoting"
+    },
+    {
+      "name": "action-container-simple",
+      "theme": "operations",
+      "covers": "YANG 1.1 action (RFC 7950 \u00a77.15) inside a container with input+output; action input/output schema order (I4); the project's yang-version 1.1 coverage",
+      "invariant": "I4-rpc-io-order + serialize-bytes(Xml) + validate; action at declared position after name; scrambled I/O -> schema order",
+      "yang_sketch": "yang-version 1.1; container device { leaf name; action restart { input { leaf delay-seconds; leaf force {type boolean;} } output { leaf status {type enumeration{...};} leaf message; } } }",
+      "juniper_exemplar": "OpenConfig in-tree action; subsumes action-yang11"
+    },
+    {
+      "name": "action-list-keys-context",
+      "theme": "operations",
+      "covers": "YANG 1.1 action inside a list entry (list key provides implicit invocation context per entry)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(Xml) + validate; scrambled I/O -> schema order",
+      "yang_sketch": "yang-version 1.1; list service { key name; leaf name; leaf enabled {type boolean;} action reset { input { leaf reset-type {type enumeration{...};} leaf preserve-state {type boolean;} } output { leaf result {type enumeration{...};} leaf details; } } }",
+      "juniper_exemplar": "action scoped per list entry"
+    },
+    {
+      "name": "action-nested-containers",
+      "theme": "operations",
+      "covers": "YANG 1.1 action at a nested position in the data tree (container>container>action)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(Xml) + validate; action at depth, scrambled I/O -> schema order",
+      "yang_sketch": "yang-version 1.1; container system { container management { leaf enabled {type boolean;} action audit-log { input { leaf duration-hours; leaf format {type enumeration{...};} } output { leaf entries-count {type uint64;} leaf log-file; } } leaf retention-days; } }",
+      "juniper_exemplar": "action at tree depth"
+    },
+    {
+      "name": "action-io-heterogeneous",
+      "theme": "operations",
+      "covers": "YANG 1.1 action input/output with heterogeneous node kinds (leaf, leaf-list, container)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(Xml); scrambled -> full schema order including nested container children",
+      "yang_sketch": "yang-version 1.1; container interface { action diagnostic { input { leaf test-type; leaf-list parameters; container config { leaf timeout; } } output { container results { leaf-list tests-passed; leaf summary; } leaf duration {type decimal64{fraction-digits 2;}} } } }",
+      "juniper_exemplar": "action mixed node kinds"
+    },
+    {
+      "name": "action-container-wide-siblings",
+      "theme": "operations",
+      "covers": "YANG 1.1 action positioned AMONG many data-leaf siblings in a container (action at schema position, I1+I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(Xml); schema order setting-a,setting-b,action,setting-c,setting-d preserved",
+      "yang_sketch": "yang-version 1.1; container config { leaf setting-a; leaf setting-b; action validate { input { leaf strict-mode {type boolean;} } output { leaf is-valid {type boolean;} leaf errors; } } leaf setting-c; leaf setting-d; }",
+      "juniper_exemplar": "action sibling-placement stress"
+    },
+    {
+      "name": "notification-top-level",
+      "theme": "operations",
+      "covers": "top-level notification (RFC 7950 \u00a77.16, YANG 1.0) with content children in schema order (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled -> timestamp,interface-name,link-state,reason",
+      "yang_sketch": "notification link-state-change { leaf timestamp; leaf interface-name; leaf link-state {type enumeration{enum up; enum down;}} leaf reason; }",
+      "juniper_exemplar": "top-level notification ordering"
+    },
+    {
+      "name": "notification-nested-container",
+      "theme": "operations",
+      "covers": "YANG 1.1 notification nested inside a data container; content schema order (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled -> severity,error-code,description,timestamp",
+      "yang_sketch": "yang-version 1.1; container system { leaf hostname; notification error-alarm { leaf severity {type enumeration{...};} leaf error-code {type uint32;} leaf description; leaf timestamp; } }",
+      "juniper_exemplar": "nested notification in data tree"
+    },
+    {
+      "name": "notification-nested-list",
+      "theme": "operations",
+      "covers": "YANG 1.1 notification inside a list entry (scoped to entry context)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled -> packet-size,action-taken",
+      "yang_sketch": "yang-version 1.1; list interface { key name; leaf name; leaf mtu {type uint32;} notification mtu-exceeded { leaf packet-size {type uint32;} leaf action-taken {type enumeration{enum drop; enum fragment;}} } }",
+      "juniper_exemplar": "notification scoped to list entry"
+    },
+    {
+      "name": "notification-with-container-leaflist",
+      "theme": "operations",
+      "covers": "notification containing nested container AND leaf-list children in schema order (I4)",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); scrambled -> backup-id,summary(duration,files-backed,status),timestamp / rotation-time,archived-files,total-size",
+      "yang_sketch": "yang-version 1.1; notification backup-complete { leaf backup-id; container summary { leaf duration; leaf files-backed {type uint64;} leaf status {type enumeration{...};} } leaf timestamp; } notification log-rotation { leaf rotation-time; leaf-list archived-files; leaf total-size {type uint64;} }",
+      "juniper_exemplar": "notification with container + leaf-list"
+    },
+    {
+      "name": "notification-interleaved-siblings",
+      "theme": "operations",
+      "covers": "notification schema-node positioned AMONG ordinary data siblings (RFC 7950 \u00a77.16; I4/I2 interaction) \u2014 must NOT perturb the container's DATA-instance declaration order",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate; DATA instance emits count,threshold,summary in decl order with no 'raised' notification node. VERIFIED sibling placement",
+      "yang_sketch": "yang-version 1.1; container alarms { leaf count {type uint32;} notification raised { leaf severity; leaf resource; } leaf threshold {type uint32;} container summary { leaf last; } }",
+      "juniper_exemplar": "notification-among-data-siblings"
+    },
+    {
+      "name": "rpc-action-notification-coexistence",
+      "theme": "operations",
+      "covers": "one module defining rpc + action + notification together \u2014 verify no cross-type ordering interference; each independently in schema order",
+      "invariant": "I4-rpc-io-order + serialize-bytes(JsonIetf,Xml); all three present, scrambled, each in declared order",
+      "yang_sketch": "yang-version 1.1; rpc global-operation { input{leaf param-a; leaf param-b;} output{leaf result;} } container device { leaf id; action device-action { input{leaf value{type uint32;}} output{leaf ack{type boolean;}} } notification device-event { leaf event-type; leaf timestamp; } }",
+      "juniper_exemplar": "rpc/action/notification non-interference"
+    },
+    {
+      "name": "constraints-when-must",
+      "theme": "constraints-conditionals",
+      "covers": "when XPath conditional (OR multi-clause) + must assertion with error-message/error-app-tag; cross-language CAMBIUM_E0003 + app-tag parity (data_validation.rs is Rust-only, this makes it shared)",
+      "invariant": "validate(byte-golden) + validate-reject(must violation -> E0003 + app-tag + data-path, Rust==Go); kind=a,info='x' valid; info='' rejected",
+      "yang_sketch": "container detail { when \"../kind = 'a' or ../kind = 'b'\"; leaf info {type string;} must \"string-length(info) > 0\" { error-message \"info required\"; error-app-tag \"must-violation\"; } }",
+      "juniper_exemplar": "cross-language parity for inline-covered must/when"
+    },
+    {
+      "name": "constraints-when-xpath-functions",
+      "theme": "constraints-conditionals",
+      "covers": "when with XPath functions: derived-from(), derived-from-or-self(), re-match(), boolean(), count(), descendant // (RFC 7950 \u00a710)",
+      "invariant": "validate + validate-reject; gate containers by derived-from(service-id,'firewall'), re-match(hostname,'^prod-.*'), count(tags)>0",
+      "yang_sketch": "identity service-type; identity firewall {base service-type;} container fw-rules { when \"derived-from(../service-id, 'firewall')\"; ... } container regex-cfg { when \"re-match(../hostname, '^prod-.*')\"; ... }",
+      "juniper_exemplar": "libyang XPath evaluator on non-trivial predicates"
+    },
+    {
+      "name": "constraints-must-multiple",
+      "theme": "constraints-conditionals",
+      "covers": "multiple must constraints on one node (conjunction) referencing siblings/ancestors, each with error-message/error-app-tag (RFC 7950 \u00a77.5.3)",
+      "invariant": "validate + validate-reject(each must independently -> E0003 + distinct app-tag, both langs); pin payload<mtu, mtu<=9000, qos rule",
+      "yang_sketch": "container network { leaf mtu {type uint16{range \"512..65535\";}} leaf payload {type uint16;} must \"payload < mtu\" {error-app-tag \"payload-check\";} must \"mtu <= 9000\" {error-app-tag \"mtu-limit\";} ... }",
+      "juniper_exemplar": "multiple-must conjunction"
+    },
+    {
+      "name": "constraints-unique-composite",
+      "theme": "constraints-conditionals",
+      "covers": "unique on single leaf, composite (multiple leaves), and descendant-path on nested lists (RFC 7950 \u00a77.8.3)",
+      "invariant": "validate(distinct tuples byte-golden) + serialize-bytes(Xml); declares unique \"name\", unique \"priority name\", nested unique \"rule-id\"",
+      "yang_sketch": "list policy { key id; leaf id {type uint32;} leaf name; leaf priority {type uint8;} unique \"name\"; unique \"priority name\"; container rules { list rule { leaf rule-id {type uint32;} leaf src-ip; unique \"rule-id\"; } } }",
+      "juniper_exemplar": "unique single/composite/descendant"
+    },
+    {
+      "name": "constraints-unique-violation-reject",
+      "theme": "constraints-conditionals",
+      "covers": "unique-constraint duplicate-tuple REJECTION (RFC 7950 \u00a77.8.3) with data-path/app-tag parity",
+      "invariant": "validate(distinct byte-golden) + validate-reject(two entries share (a,b) tuple -> CAMBIUM_E0003 + data-path, both langs). VERIFIED compiles",
+      "yang_sketch": "list entry { key id; unique \"a b\"; leaf id {type uint16;} leaf a; leaf b; } // reject: (1,x,p),(2,x,p)",
+      "juniper_exemplar": "synthetic; closes the unique reject gap"
+    },
+    {
+      "name": "constraints-mandatory-interaction",
+      "theme": "constraints-conditionals",
+      "covers": "mandatory true on leaf + interaction with default (default applied before presence check) + with when (when gates requirement) + mandatory refined from grouping",
+      "invariant": "validate + validate-reject(missing hostname/operational primary-server -> E0003) + serialize-bytes(Xml)",
+      "yang_sketch": "leaf hostname {type string; mandatory true;} leaf domain {type string; default \"example.com\";} container services { when \"../mode = 'operational'\"; leaf primary-server {type string; mandatory true;} } container auth { uses auth-config { refine username { mandatory true; } refine password { default \"unset\"; } } }",
+      "juniper_exemplar": "mandatory/default/when/refine interaction"
+    },
+    {
+      "name": "constraints-default-types",
+      "theme": "constraints-conditionals",
+      "covers": "default on leaf (string/numeric/boolean) + default on leaf-list (multiple) + default on a choice case (RFC 7950 \u00a77.6.1, \u00a77.9.3); round-trip",
+      "invariant": "serialize-bytes(JsonIetf,Xml) WithDefaults=Explicit; omit all -> defaults emitted including selected default-case syslog",
+      "yang_sketch": "leaf hostname {type string; default \"localhost\";} leaf port {type uint16; default 8080;} leaf enabled {type boolean; default true;} leaf-list nameserver {type string; default \"8.8.8.8\"; default \"8.8.4.4\";} choice log-backend { default syslog; case syslog {leaf facility;} case file {leaf path;} case remote {leaf server;} }",
+      "juniper_exemplar": "default across leaf/leaf-list/choice"
+    },
+    {
+      "name": "constraints-feature-iffeature",
+      "theme": "constraints-conditionals",
+      "covers": "feature definition + if-feature on leaf/container + YANG 1.1 boolean expression (and/or/not/parens) + feature gating schema-node presence (RFC 7950 \u00a77.20.1)",
+      "invariant": "validate across feature-sets; node present/absent per enabled features; if-feature \"detailed-stats or candidate-config\", \"not high-security\"",
+      "yang_sketch": "yang-version 1.1; feature candidate-config; feature detailed-stats; feature high-security; container stats { if-feature \"detailed-stats or candidate-config\"; leaf packet-count { if-feature \"not high-security\"; } leaf dropped-packets { if-feature \"detailed-stats and high-security\"; } }",
+      "juniper_exemplar": "feature/if-feature boolean expressions; subsumes constraints-feature-presence feature part"
+    },
+    {
+      "name": "constraints-feature-dependency",
+      "theme": "constraints-conditionals",
+      "covers": "feature-on-feature dependency chain (YANG 1.1, RFC 7950 \u00a77.20.1): feature B{if-feature A;} node{if-feature B;} \u2014 transitive gate",
+      "invariant": "validate across feature-sets {A}->absent, {A,B}->present, {B} alone->absent (B needs A). VERIFIED compiles",
+      "yang_sketch": "yang-version 1.1; feature a; feature b { if-feature a; } container top { leaf gated { if-feature b; type string; } }",
+      "juniper_exemplar": "transitive feature dependency"
+    },
+    {
+      "name": "constraints-feature-presence",
+      "theme": "constraints-conditionals",
+      "covers": "presence container (enable idiom, 238 native) + if-feature-gated presence container; empty presence emits {} JSON while non-presence vanishes; presence -> Option<()>/bool codegen",
+      "invariant": "validate + serialize-bytes(Json,JsonIetf,Xml)(Json/JsonIetf divergence on empty non-presence locked) + codegen-compile; ssh present {} , port default 22",
+      "yang_sketch": "feature candidate; container ssh { presence \"enable ssh\"; leaf port {type uint16; default 22;} } container candidate-store { if-feature candidate; presence \"enable candidate\"; }",
+      "juniper_exemplar": "Junos enable-flag presence; byte-level {}-vs-absent distinction"
+    },
+    {
+      "name": "parse-malformed-e0002",
+      "theme": "edge-illegality",
+      "covers": "raw PARSE-failure code CAMBIUM_E0002 (rule-codes registry: malformed input, interior NUL, unknown element in strict mode) \u2014 distinct from schema-driven E0003",
+      "invariant": "parse-reject x3: truncated/unclosed XML, interior-NUL value, strict-mode unknown element each -> CAMBIUM_E0002 (Rust==Go). Strict-mode case requires no LYD_PARSE_OPAQ. VERIFIED concept",
+      "yang_sketch": "container top { leaf name {type string;} } // malformation in INPUT not schema",
+      "juniper_exemplar": "synthetic; closes the parse-failure E0002 path"
+    },
+    {
+      "name": "types-empty-edge-illegality",
+      "theme": "edge-illegality",
+      "covers": "schema-validity illegality boundaries for type empty (RFC 7950 \u00a77.6.1, \u00a79.11): leaf{type empty; default x;} illegal; leaf-list of empty illegal in YANG 1.0 (allowed 1.1)",
+      "invariant": "schema-load-reject: (a) empty+default FAILS load, (b) 1.0 leaf-list-of-empty FAILS load -> CAMBIUM_E0001 (both langs); 1.1 leaf-list-of-empty positive control loads. BOTH ILLEGALITIES VERIFIED",
+      "yang_sketch": "// module1: leaf flag { type empty; default \"x\"; } ILLEGAL  // module2 (1.0): leaf-list flags { type empty; } ILLEGAL",
+      "juniper_exemplar": "synthetic; load-time illegality guard"
+    },
+    {
+      "name": "json-ietf-module-namespace-qualification",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a75.1 \u2014 top-level member is module:name; child in different module re-qualifies; same-module children bare",
+      "invariant": "serialize-bytes(JsonIetf); top-level key 'json-ietf-module-qual:top', child leaves bare",
+      "yang_sketch": "container top { leaf local-leaf {type string;} container nested { leaf inner {type string;} } }",
+      "juniper_exemplar": "module namespace qualification at boundaries"
+    },
+    {
+      "name": "json-ietf-scalar-quoting-int-spans",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a76.1 \u2014 int8..int32/uint8..uint32 BARE numbers vs int64/uint64 QUOTED strings; the 32->64-bit quoting boundary",
+      "invariant": "serialize-bytes(JsonIetf); i8..u32 bare, i64=\"9223372036854775807\" / u64=\"18446744073709551615\" quoted",
+      "yang_sketch": "leaf i8{type int8;} leaf i16{type int16;} leaf i32{type int32;} leaf i64{type int64;} leaf u8{type uint8;} leaf u16{type uint16;} leaf u32{type uint32;} leaf u64{type uint64;}",
+      "juniper_exemplar": "the most load-bearing RFC 7951 quoting rule; subsumes types-numeric-decimal64 quoting"
+    },
+    {
+      "name": "json-ietf-decimal64-canonical-quoting",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a76.1 \u2014 decimal64 ALWAYS quoted string in canonical form: trailing zeros per fraction-digits + sign preservation + zero canonicalization",
+      "invariant": "serialize-bytes(JsonIetf); negative=-3.14, positive=2.50 (trailing zero fd2), zero=0; fd1/fd2/fd9/fd18 spans (bytes from libyang printer)",
+      "yang_sketch": "leaf negative-value {type decimal64{fraction-digits 2;}} leaf positive-value {type decimal64{fraction-digits 2;}} leaf zero-value {type decimal64{fraction-digits 2;}}",
+      "juniper_exemplar": "decimal64 canonical/sign-preserve quoting"
+    },
+    {
+      "name": "json-ietf-string-escaping-control-unicode",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a76.1 JSON string escaping \u2014 control chars (\\n,\\t,\\u00XX), quote (\\\"), backslash (\\\\), and non-ASCII Unicode (\\uXXXX, surrogate pairs for emoji)",
+      "invariant": "serialize-bytes(JsonIetf); pin newline/tab control, embedded quote, backslash, caf\u00e9/emoji/greek -> proper escapes (bytes from libyang printer)",
+      "yang_sketch": "leaf with-control {type string;} leaf with-quote {type string;} leaf with-backslash {type string;} leaf french {type string;} leaf emoji {type string;} leaf greek {type string;}",
+      "juniper_exemplar": "string escaping incl. Unicode"
+    },
+    {
+      "name": "json-ietf-leaflist-array-user-system",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a75.4 \u2014 leaf-list as JSON array; ordered-by user preserves insertion order, ordered-by system sorted/canonicalized",
+      "invariant": "serialize-bytes(JsonIetf); user [100,50,75] preserved, system [8080,22,443,80]->[22,80,443,8080]",
+      "yang_sketch": "leaf-list priorities { ordered-by user; type uint8; } leaf-list ports { type uint16; }",
+      "juniper_exemplar": "leaf-list array order both modes (JSON-format view of I1/I2)"
+    },
+    {
+      "name": "json-ietf-list-array-keys-first",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a75.3 \u2014 list as JSON array of objects; within each object key leaves FIRST then non-keys (I3 in JSON)",
+      "invariant": "serialize-bytes(JsonIetf); composite key, objects emit name,protocol(keys) then mtu",
+      "yang_sketch": "list interface { key \"name protocol\"; leaf protocol {type string;} leaf mtu {type uint16;} leaf name {type string;} }",
+      "juniper_exemplar": "list-array keys-first in JSON"
+    },
+    {
+      "name": "json-ietf-nested-container-object",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a75.2 \u2014 nested containers as nested JSON objects",
+      "invariant": "serialize-bytes(JsonIetf); top/middle/deep/value -> nested object nesting",
+      "yang_sketch": "container top { container middle { container deep { leaf value {type string;} } } }",
+      "juniper_exemplar": "nested container object nesting"
+    },
+    {
+      "name": "json-ietf-choice-case-transparency",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a75.2 \u2014 active case child at choice position WITHOUT 'case' wrapper; nested-choice transparency at depth",
+      "invariant": "serialize-bytes(JsonIetf); deny case -> {priority,reason} no wrapper; nested tcp case -> {port} both choices transparent",
+      "yang_sketch": "container rule { leaf priority {type uint8;} choice action-type { case deny {leaf reason;} case allow {leaf log{type boolean;}} } } // + nested choice variant",
+      "juniper_exemplar": "JSON case-transparency flat + nested"
+    },
+    {
+      "name": "json-ietf-presence-vs-nonpresence",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u2014 presence container present-but-childless emits {}; non-presence empty container ABSENT (not {})",
+      "invariant": "serialize-bytes(JsonIetf); ssh presence -> {} (or {port:22} explicit), empty-slot non-presence -> omitted entirely",
+      "yang_sketch": "container ssh { presence \"enable ssh\"; leaf port {type uint16; default 22;} } container empty-slot { leaf name {type string;} }",
+      "juniper_exemplar": "{}-vs-absent subtlety"
+    },
+    {
+      "name": "json-ietf-anydata-anyxml-representation",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a75.9/\u00a75.10 \u2014 anydata as untyped JSON value preserved verbatim; anyxml opaque XML-to-JSON conversion",
+      "invariant": "serialize-bytes(JsonIetf); anydata {custom:[1,2,{nested:true}]} preserved; anyxml <foo><bar>test</bar></foo> -> {foo:{bar:test}}",
+      "yang_sketch": "container config { anydata metadata; } container top { anyxml payload; }",
+      "juniper_exemplar": "anydata/anyxml JSON representation"
+    },
+    {
+      "name": "json-ietf-with-defaults-modes",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 6243 with-defaults modes: explicit (\u00a72.1), trim (\u00a72.2), report-all (\u00a72.3), report-all-tagged (\u00a72.4) \u2014 default emission/omission/tagging",
+      "invariant": "serialize-bytes(JsonIetf) x4 modes over the same timeout/retries/name shape; explicit/report-all include defaults, trim omits unmodified, report-all-tagged marks them",
+      "yang_sketch": "container settings { leaf timeout {type uint32; default 30;} leaf retries {type uint8; default 3;} leaf name {type string;} }",
+      "juniper_exemplar": "RFC 6243 four with-defaults modes"
+    },
+    {
+      "name": "json-ietf-instance-identifier-string",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a76.13 \u2014 instance-identifier serialized as a JSON string with fully-qualified XPath path + predicates",
+      "invariant": "serialize-bytes(JsonIetf); active-device -> '/jiiis:devices/device[name=\\'eth0\\']'",
+      "yang_sketch": "list device { key name; leaf name {type string;} } leaf active-device { type instance-identifier; }",
+      "juniper_exemplar": "instance-identifier JSON string form"
+    },
+    {
+      "name": "json-ietf-leafref-union-resolved-form",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u2014 leafref serializes as its RESOLVED BASE-TYPE value (not the XPath); union member serializes per its RESOLVED member type quoting (\u00a76.3)",
+      "invariant": "serialize-bytes(JsonIetf); leafref primary-iface->'eth0' (bare string), union int64 member->quoted '9223372036854775807'",
+      "yang_sketch": "leaf primary-iface { type leafref { path \"/ifaces/iface/name\"; } } leaf value { type union { type int64; type boolean; } }",
+      "juniper_exemplar": "leafref/union resolved-form encoding"
+    },
+    {
+      "name": "json-ietf-cross-module-augment-deviation-when",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7950+7951 JSON interactions: augmented foreign node module-qualified at top; deviation-replace-narrowed type changes JSON quoting (uint64->uint32 bare); when-unmet node ABSENT; submodule node uses parent prefix",
+      "invariant": "serialize-bytes(JsonIetf); augmented node qualified, narrowed counter bare-number, debug(when unmet) absent, submodule secret under parent prefix",
+      "yang_sketch": "augment \"/interfaces/interface\" { leaf custom-field; } // + deviation replace uint64->uint32 // + leaf debug { when \"../mode='advanced'\"; } // + submodule node",
+      "juniper_exemplar": "schema-construct x JSON-encoding interactions"
+    },
+    {
+      "name": "json-ietf-parse-roundtrip",
+      "theme": "json-ietf-serialization",
+      "covers": "RFC 7951 \u00a74 PARSE direction \u2014 reading a JSON_IETF document IN (quoting, [null], module-prefix, leaf-list array) then round-tripping; FIRST input-format='json' fixture",
+      "invariant": "serialize-bytes(JsonIetf,Xml) from a json input; int64 quoted, empty [null], bare same-module identityref, leaf-list array on parse side; both outputs byte-stable. VERIFIED",
+      "yang_sketch": "identity base-id; identity derived-id {base base-id;} leaf big {type int64;} leaf flag {type empty;} leaf kind {type identityref{base base-id;}} leaf-list tags {type string;} // input.json given",
+      "juniper_exemplar": "gNMI/RESTCONF on-wire input shape"
+    },
+    {
+      "name": "metadata-yang-version-units",
+      "theme": "extensions-metadata",
+      "covers": "yang-version 1.0 vs 1.1 + units + status(current/deprecated/obsolete) + description/reference + organization/contact module metadata; round-trip preservation (RFC 7950 \u00a77.1, \u00a77.3.3)",
+      "invariant": "validate + serialize-bytes(Xml); module + node metadata parsed/preserved; yang-version 1.1 gates the action",
+      "yang_sketch": "yang-version 1.1; organization \"...\"; contact \"...\"; revision 2026-06-14 { description; reference; } container performance { leaf cpu-usage { type decimal64{fraction-digits 2;} units \"percent\"; status current; } leaf memory-free { units \"bytes\"; status deprecated; } } action reset-metrics { input{leaf force{type boolean;}} output{leaf result;} }",
+      "juniper_exemplar": "module + node metadata round-trip"
+    },
+    {
+      "name": "extension-definition-and-usage",
+      "theme": "extensions-metadata",
+      "covers": "extension definition (extension + argument, RFC 7950 \u00a77.19) + usage on schema nodes + pass-through on serialization (libyang opaque)",
+      "invariant": "validate + serialize-bytes(Xml); custom extension annotations on nodes round-trip",
+      "yang_sketch": "extension metadata { argument key { yin-element true; } } container system { edu:metadata \"version\"; leaf hostname; edu:metadata \"owner\"; leaf domain; }",
+      "juniper_exemplar": "owned extension pass-through (junos-extensions referenced only)"
+    },
+    {
+      "name": "extension-yin-element-modes",
+      "theme": "extensions-metadata",
+      "covers": "extension argument yin-element TRUE (nested-element form) vs FALSE (attribute form) serialization difference in YIN (RFC 7950 \u00a77.19.2.2)",
+      "invariant": "serialize-bytes(Xml/YIN) + schema-introspection; attr-form arg as YIN attribute, elem-form arg as nested YIN element. VERIFIED both compile",
+      "yang_sketch": "yang-version 1.1; extension attr-form { argument name { yin-element false; } } extension elem-form { argument body { yin-element true; } } leaf x { exm:attr-form \"compact\"; exm:elem-form \"expanded\"; type string; }",
+      "juniper_exemplar": "yin-element true/false YIN forms"
+    },
+    {
+      "name": "vendor-extension-junos-passthrough",
+      "theme": "extensions-metadata",
+      "covers": "Juniper vendor extension usage (jx:annotate, jx:secret via import) \u2014 pass-through on serialization, IGNORED by codegen",
+      "invariant": "validate + serialize-bytes(Xml) + codegen-compile(extensions ignored); junos:* metadata preserved",
+      "yang_sketch": "yang-version 1.1; import junos-extensions {prefix jx;} container config { jx:annotate \"/veja:config/users\"; container users { list user { key name; leaf name; leaf password { jx:secret; } } } }",
+      "juniper_exemplar": "junos-extensions jx:annotate/jx:secret pass-through"
+    },
+    {
+      "name": "extension-unknown-opaque-passthrough",
+      "theme": "extensions-metadata",
+      "covers": "unknown/undefined extension usage preserved as opaque via libyang LYD_PARSE_OPAQ; round-trip fidelity",
+      "invariant": "serialize-bytes(Xml); undefined extension preserved unchanged when its module is absent",
+      "yang_sketch": "yang-version 1.1; container config { leaf secret-key {type string;} } // parsed LYD_PARSE_OPAQ with an undefined extension present",
+      "juniper_exemplar": "libyang opaque preservation of unknown constructs"
+    },
+    {
+      "name": "extension-and-typedef-collision",
+      "theme": "extensions-metadata",
+      "covers": "extension defined in module A; typedef in module B with PascalCase collision \u2014 codegen unified symbol table spans both RFC 7950 namespaces",
+      "invariant": "codegen-compile(non-colliding symbols despite extension/typedef shared codegen namespace); two owned modules",
+      "yang_sketch": "// A: extension Metadata { argument key { yin-element true; } }  // B: import A {prefix ext;} typedef Metadata { type string {length \"1..255\";} } leaf meta { type Metadata; } ext:Metadata \"version\";",
+      "juniper_exemplar": "cross-namespace codegen collision"
+    },
+    {
+      "name": "metadata-annotation-rfc7952",
+      "theme": "extensions-metadata",
+      "covers": "RFC 7952 instance-level metadata annotations (md:annotation extension; @-member in JSON, attribute in XML) \u2014 the mechanism behind default/origin tags",
+      "invariant": "serialize-bytes(JsonIetf,Xml) + validate; import ietf-yang-metadata, annotate a leaf, JSON @leaf:{module:annot:value}, XML attribute (bytes from printer). CRITICAL: import MUST precede revision. VERIFIED",
+      "yang_sketch": "yang-version 1.1; import ietf-yang-metadata {prefix md;} md:annotation last-modified { type string; } container top { leaf name {type string;} } // annotated last-modified='...'",
+      "juniper_exemplar": "ietf-yang-metadata RFC 7952 (vendored at third_party/libyang/modules/)"
+    },
+    {
+      "name": "idents-keywords-rust",
+      "theme": "identifier-codegen",
+      "covers": "Rust keyword identifiers (type, match, ref, move, struct, fn, impl, loop, async, await, box, where, self, crate, super) escaped via r# prefix; serialization emits original YANG names",
+      "invariant": "codegen-compile(r#type etc.) + serialize-bytes(Xml)(original names byte-unchanged)",
+      "yang_sketch": "container top { leaf type {type string;} leaf match {type string;} leaf ref {type string;} leaf move {type string;} leaf struct {type string;} leaf fn {type string;} leaf impl {type string;} leaf loop {type string;} leaf async {type string;} leaf await {type string;} leaf box {type string;} leaf where {type string;} }",
+      "juniper_exemplar": "Rust keyword surface; subsumes idents-keywords-wide Rust part"
+    },
+    {
+      "name": "idents-keywords-go",
+      "theme": "identifier-codegen",
+      "covers": "Go keyword identifiers (func, range, chan, map, select, go, defer, interface, package) escaped (suffix/mangling); serialization emits original YANG names",
+      "invariant": "codegen-compile(valid Go idents, no reserved clash) + serialize-bytes(Xml)(original names byte-unchanged)",
+      "yang_sketch": "container top { leaf func {type string;} leaf range {type string;} leaf chan {type string;} leaf map {type string;} leaf select {type string;} leaf go {type string;} leaf defer {type string;} container interface { leaf enabled {type empty;} } leaf package {type string;} }",
+      "juniper_exemplar": "Go keyword surface; subsumes idents-keywords-wide Go part"
+    },
+    {
+      "name": "idents-collision-hyphen-underscore",
+      "theme": "identifier-codegen",
+      "covers": "PascalCase collision between hyphenated and underscored siblings (foo-bar + foo_bar -> FooBar) with deterministic suffix; serialization preserves both originals",
+      "invariant": "codegen-compile(FooBar/FooBar2 distinct deterministic) + serialize-bytes(Xml)(both original names)",
+      "yang_sketch": "container top { leaf foo-bar {type string;} leaf foo_bar {type string;} container baz-qux { leaf enabled {type empty;} } container baz_qux { leaf status {type string;} } }",
+      "juniper_exemplar": "normalization-induced collision (core)"
+    },
+    {
+      "name": "idents-enum-value-collision",
+      "theme": "identifier-codegen",
+      "covers": "enumeration value name collisions (enabled / ENABLED / enable-default / enable_default) \u2014 codegen must emit distinct enum variant discriminants",
+      "invariant": "codegen-compile(distinct variants despite case-only and hyphen/underscore collisions)",
+      "yang_sketch": "typedef enable-mode { type enumeration { enum disabled {value 0;} enum enabled {value 1;} enum ENABLED {value 2;} enum enable-default {value 3;} enum enable_default {value 4;} } } leaf mode { type enable-mode; }",
+      "juniper_exemplar": "enum-variant disambiguation (distinct from field naming)"
+    },
+    {
+      "name": "idents-container-leaf-collision",
+      "theme": "identifier-codegen",
+      "covers": "PascalCase collision between a container and a sibling leaf within the same parent (struct vs field naming clash)",
+      "invariant": "codegen-compile(non-colliding struct/field types) + serialize-bytes(Xml)(both originals)",
+      "yang_sketch": "container top { container config { leaf enabled {type empty;} } leaf config-backup {type string;} container interface-state { leaf up {type boolean;} } leaf interface {type string;} }",
+      "juniper_exemplar": "container-vs-leaf same-parent collision; subsumes idents-pathological collision part"
+    },
+    {
+      "name": "idents-leading-digit",
+      "theme": "identifier-codegen",
+      "covers": "identifiers beginning with digits (2g, 10Gbps, 0config) \u2014 valid YANG (RFC 7950 \u00a76.2) but Rust/Go reject leading digits; codegen prefixes/mangles",
+      "invariant": "codegen-compile(valid mangled idents) + serialize-bytes(Xml)(original names)",
+      "yang_sketch": "container top { leaf 2g {type string;} leaf 10Gbps {type string;} leaf 0config {type string;} }",
+      "juniper_exemplar": "leading-digit RFC edge"
+    },
+    {
+      "name": "idents-long-name",
+      "theme": "identifier-codegen",
+      "covers": "identifiers >60 chars (72-char and 80+ char names); codegen truncates/hashes/keeps; serialization preserves full name",
+      "invariant": "codegen-compile + serialize-bytes(Xml)(full YANG name preserved)",
+      "yang_sketch": "container top { leaf get-service-accounting-aggregation-source-destination-prefix-information {type string;} leaf very-long-interface-configuration-with-many-policy-and-route-settings-applied {type string;} }",
+      "juniper_exemplar": "production >60-char identifiers; subsumes idents-pathological long part"
+    },
+    {
+      "name": "idents-unicode-mixed-case",
+      "theme": "identifier-codegen",
+      "covers": "non-ASCII/CJK and mixed-case identifiers (camelCase, PascalCase) where YANG permits (RFC 7950 NameStartChar); codegen handles/rejects; serialization unchanged",
+      "invariant": "codegen-compile (behavior documented) + serialize-bytes(Xml)(unicode/case preserved)",
+      "yang_sketch": "container top { leaf systemStatus {type string;} leaf ConfigUrl {type string;} leaf port-id {type string;} leaf PortNum {type string;} }",
+      "juniper_exemplar": "unicode/mixed-case identifier surface"
+    },
+    {
+      "name": "rfc6991-inet-yang-types-roundtrip",
+      "theme": "real-typedef-imports",
+      "covers": "RFC 6991 real-typedef round-trip \u2014 imports vendored ietf-inet-types + ietf-yang-types; ip-address (ipv4/ipv6 union incl. %zone), ipv6-prefix, mac-address, date-and-time, counter64 (uint64 quoted)",
+      "invariant": "validate + serialize-bytes(JsonIetf,Xml) + codegen-compile; pin addr ipv4+ipv6/zone, pfx, mac canonical, ts, ctr quoted. VERIFIED against vendored modules. imports precede revision",
+      "yang_sketch": "import ietf-inet-types {prefix inet;} import ietf-yang-types {prefix yang;} leaf addr {type inet:ip-address;} leaf pfx {type inet:ipv6-prefix;} leaf mac {type yang:mac-address;} leaf ts {type yang:date-and-time;} leaf ctr {type yang:counter64;}",
+      "juniper_exemplar": "RFC 6991 vendored at conformance/corpus/ietf-interfaces/ (imported, not copied)"
+    }
+  ],
+  "coverage_matrix": [
+    {
+      "yang_construct": "int8 builtin type (RFC 7950 \u00a74.2.5)",
+      "fixture": "types-int-int8-range"
+    },
+    {
+      "yang_construct": "int16 builtin type",
+      "fixture": "types-int-int16-range"
+    },
+    {
+      "yang_construct": "int32 builtin type + multi-part range + gap exclusion + JSON-bare (RFC 7951 \u00a76.1)",
+      "fixture": "types-int-int32-range-multipart"
+    },
+    {
+      "yang_construct": "int64 builtin type + JSON string quoting (RFC 7951 \u00a76.1)",
+      "fixture": "types-int-int64-range-quoted"
+    },
+    {
+      "yang_construct": "uint8 builtin type + range",
+      "fixture": "types-uint-uint8-range"
+    },
+    {
+      "yang_construct": "uint16 builtin type (port idiom 1..65535)",
+      "fixture": "types-uint-uint16-range-port"
+    },
+    {
+      "yang_construct": "uint32 builtin type (297K uses) + multi-part range + JSON-bare",
+      "fixture": "types-uint-uint32-range-multi"
+    },
+    {
+      "yang_construct": "uint64 builtin type + JSON string quoting",
+      "fixture": "types-uint-uint64-range-quoted"
+    },
+    {
+      "yang_construct": "decimal64 fraction-digits 1 (tenths)",
+      "fixture": "types-decimal64-fraction1-range"
+    },
+    {
+      "yang_construct": "decimal64 fraction-digits 2 + canonical rounding (RFC 7950 \u00a79.3.4)",
+      "fixture": "types-decimal64-fraction2-canonical-round"
+    },
+    {
+      "yang_construct": "decimal64 fraction-digits 3..8 mid-range span",
+      "fixture": "types-decimal64-fraction3-and-6"
+    },
+    {
+      "yang_construct": "decimal64 fraction-digits 9 (nanoseconds) + negative",
+      "fixture": "types-decimal64-fraction9-negative"
+    },
+    {
+      "yang_construct": "decimal64 fraction-digits 18 (max) + max-magnitude",
+      "fixture": "types-decimal64-fraction18-max-magnitude"
+    },
+    {
+      "yang_construct": "boolean builtin type + default true/false",
+      "fixture": "types-boolean-default-false"
+    },
+    {
+      "yang_construct": "empty builtin type + [null] JSON (RFC 7951 \u00a76.9) + empty XML element",
+      "fixture": "types-empty-leaf-null-json"
+    },
+    {
+      "yang_construct": "enumeration with sparse explicit values 0/4/6 + name round-trip",
+      "fixture": "types-enumeration-explicit-values-sparse"
+    },
+    {
+      "yang_construct": "enumeration with explicit zero value (disabled idiom)",
+      "fixture": "types-enumeration-zero-value-disabled"
+    },
+    {
+      "yang_construct": "enum/bit AUTO-position continuation after explicit value (RFC 7950 \u00a79.6.4/\u00a79.7.4)",
+      "fixture": "types-enum-bits-auto-position"
+    },
+    {
+      "yang_construct": "bits builtin type + explicit positions/gaps + space-separated declaration-order serialization (RFC 7951 \u00a76.5)",
+      "fixture": "types-bits-explicit-positions-gaps"
+    },
+    {
+      "yang_construct": "binary builtin type + length + base64 JSON (RFC 7951 \u00a76.6)",
+      "fixture": "types-binary-length-base64"
+    },
+    {
+      "yang_construct": "pattern modifier invert-match (CORE RFC 7950 1.1 \u00a79.4.6)",
+      "fixture": "types-string-pattern-modifier-invert-match"
+    },
+    {
+      "yang_construct": "string multiple patterns AND-composed conjunction",
+      "fixture": "types-string-multiple-patterns-conjunction"
+    },
+    {
+      "yang_construct": "string length + pattern anchors (^,$) + POSIX classes",
+      "fixture": "types-string-length-pattern-anchor-posix"
+    },
+    {
+      "yang_construct": "range/length out-of-bounds rejection (CAMBIUM_E0003)",
+      "fixture": "constraints-range-length-reject"
+    },
+    {
+      "yang_construct": "range/length 'min'/'max' grammar keywords resolving to type extremes (RFC 7950 \u00a79.2.4/\u00a79.4.4)",
+      "fixture": "types-range-length-min-max-keywords"
+    },
+    {
+      "yang_construct": "decimal64 exponent-form input rejected on parse (RFC 7951 \u00a76.1 no-exponent, CAMBIUM_E0002)",
+      "fixture": "json-ietf-decimal64-no-exponent"
+    },
+    {
+      "yang_construct": "leafref absolute path + unresolved rejection (RFC 7950 \u00a79.9)",
+      "fixture": "types-leafref-absolute-path"
+    },
+    {
+      "yang_construct": "leafref relative ../ path (RFC 7950 \u00a76.4.1)",
+      "fixture": "types-leafref-relative-parent-path"
+    },
+    {
+      "yang_construct": "leafref current() context function (RFC 7950 \u00a710.1.1)",
+      "fixture": "types-leafref-current-context"
+    },
+    {
+      "yang_construct": "leafref targeting list key",
+      "fixture": "types-leafref-to-list-key"
+    },
+    {
+      "yang_construct": "leafref targeting leaf-list member",
+      "fixture": "types-leafref-to-leaf-list"
+    },
+    {
+      "yang_construct": "leafref-to-leafref chain",
+      "fixture": "types-leafref-to-leafref-chain"
+    },
+    {
+      "yang_construct": "leafref deref() XPath function (YANG 1.1)",
+      "fixture": "types-leafref-deref-function"
+    },
+    {
+      "yang_construct": "leafref require-instance false (forward reference)",
+      "fixture": "types-leafref-require-instance-false"
+    },
+    {
+      "yang_construct": "leafref cross-module prefixed path + dangling reject (RFC 7950 \u00a79.9.2)",
+      "fixture": "types-leafref-cross-module"
+    },
+    {
+      "yang_construct": "identityref single base + same-module bare (RFC 7951 \u00a76.8)",
+      "fixture": "types-identityref-single-base"
+    },
+    {
+      "yang_construct": "identityref multiple bases (YANG 1.1, RFC 7950 \u00a76.4.16)",
+      "fixture": "types-identityref-multiple-bases"
+    },
+    {
+      "yang_construct": "identityref multi-level derived hierarchy",
+      "fixture": "types-identityref-derived-hierarchy"
+    },
+    {
+      "yang_construct": "identityref foreign-module prefixed JSON (RFC 7951 \u00a76.8)",
+      "fixture": "types-identityref-foreign-module-prefix"
+    },
+    {
+      "yang_construct": "identityref to realistic large foreign base (iana-if-type)",
+      "fixture": "identityref-iana-if-type-foreign"
+    },
+    {
+      "yang_construct": "instance-identifier require-instance true (default) + validation (RFC 7950 \u00a79.13)",
+      "fixture": "types-instance-identifier-require-default"
+    },
+    {
+      "yang_construct": "instance-identifier require-instance false",
+      "fixture": "types-instance-identifier-no-require"
+    },
+    {
+      "yang_construct": "instance-identifier complex path with composite key + predicates",
+      "fixture": "types-instance-identifier-complex-path"
+    },
+    {
+      "yang_construct": "typedef simple base (RFC 7950 \u00a77.3)",
+      "fixture": "types-typedef-simple-base"
+    },
+    {
+      "yang_construct": "typedef chain 2-deep + restriction inheritance",
+      "fixture": "types-typedef-chain-2deep"
+    },
+    {
+      "yang_construct": "typedef chain 3+ deep",
+      "fixture": "types-typedef-chain-3deep"
+    },
+    {
+      "yang_construct": "typedef restriction narrowing beyond base",
+      "fixture": "types-typedef-restriction-narrowing"
+    },
+    {
+      "yang_construct": "typedef default substatement inheritance vs leaf override",
+      "fixture": "types-typedef-default-inheritance"
+    },
+    {
+      "yang_construct": "typedef that is a union (composition)",
+      "fixture": "types-typedef-union-composition"
+    },
+    {
+      "yang_construct": "typedef defined in submodule used cross-file",
+      "fixture": "types-typedef-submodule-cross-file"
+    },
+    {
+      "yang_construct": "union heterogeneous members + per-member JSON quoting (RFC 7950 \u00a74.2.12, RFC 7951 \u00a76.1/\u00a76.3)",
+      "fixture": "types-union-heterogeneous-members-quoting"
+    },
+    {
+      "yang_construct": "union containing ALL scalar base kinds",
+      "fixture": "types-union-scalar-all-members"
+    },
+    {
+      "yang_construct": "union member resolution order (first-match, RFC 7950 \u00a79.12)",
+      "fixture": "types-union-member-resolution-order"
+    },
+    {
+      "yang_construct": "union nesting (union-of-union typedef) + typedef-of-typedef + binary member base64",
+      "fixture": "types-union-nested-typedef-chain"
+    },
+    {
+      "yang_construct": "union with leafref member",
+      "fixture": "types-union-leafref-member"
+    },
+    {
+      "yang_construct": "union with identityref member",
+      "fixture": "types-union-identityref-member"
+    },
+    {
+      "yang_construct": "union of two identityrefs with distinct bases",
+      "fixture": "types-union-two-identityrefs-distinct-bases"
+    },
+    {
+      "yang_construct": "union of enumeration + scalar",
+      "fixture": "types-union-enum-and-scalar"
+    },
+    {
+      "yang_construct": "presence container {} + non-presence distinction (RFC 7950 \u00a77.5.1)",
+      "fixture": "container-presence-empty"
+    },
+    {
+      "yang_construct": "nested container hierarchy 3+ levels (I1)",
+      "fixture": "container-nested-depth"
+    },
+    {
+      "yang_construct": "list single string key",
+      "fixture": "list-single-key-string"
+    },
+    {
+      "yang_construct": "list single numeric key",
+      "fixture": "list-single-key-numeric"
+    },
+    {
+      "yang_construct": "list composite key 2 leaves (I3)",
+      "fixture": "list-composite-key-two"
+    },
+    {
+      "yang_construct": "list composite key 3 leaves interleaved (I3)",
+      "fixture": "list-composite-key-three"
+    },
+    {
+      "yang_construct": "list composite key 6 leaves non-contiguous (I3 wide)",
+      "fixture": "ordering-composite-key-wide"
+    },
+    {
+      "yang_construct": "composite key with interleaved non-key containers (I3)",
+      "fixture": "composite-key-with-interleaved-containers"
+    },
+    {
+      "yang_construct": "keyless list positional order + max-elements",
+      "fixture": "list-keyless-positional"
+    },
+    {
+      "yang_construct": "list ordered-by user insertion order (I1)",
+      "fixture": "list-ordered-by-user-insertion"
+    },
+    {
+      "yang_construct": "list ordered-by system key canonicalization (I2 first half)",
+      "fixture": "list-ordered-by-system-canonical"
+    },
+    {
+      "yang_construct": "leaf-list ordered-by user (I1, RFC 7951 \u00a75.4)",
+      "fixture": "leaflist-ordered-by-user"
+    },
+    {
+      "yang_construct": "leaf-list ordered-by system value canonicalization (I2 second half)",
+      "fixture": "leaflist-ordered-by-system"
+    },
+    {
+      "yang_construct": "leaf-list multiple default values",
+      "fixture": "leaflist-with-defaults"
+    },
+    {
+      "yang_construct": "cascading nested ordered-by user (list + inner leaf-list)",
+      "fixture": "ordering-nested-user-cascading"
+    },
+    {
+      "yang_construct": "positional keyless list under config false (state user-order crossing)",
+      "fixture": "ordered-user-config-false-state"
+    },
+    {
+      "yang_construct": "min-elements count constraint rejection (RFC 7950 \u00a77.7.5)",
+      "fixture": "min-elements-reject"
+    },
+    {
+      "yang_construct": "max-elements count constraint rejection (RFC 7950 \u00a77.7.6)",
+      "fixture": "max-elements-reject"
+    },
+    {
+      "yang_construct": "choice multiple cases + default-case + JSON case-transparency (RFC 7950 \u00a77.9, RFC 7951 \u00a75.2)",
+      "fixture": "choice-multiple-cases-default"
+    },
+    {
+      "yang_construct": "mandatory choice rejection (RFC 7950 \u00a77.9.4)",
+      "fixture": "choice-mandatory-reject"
+    },
+    {
+      "yang_construct": "choice single-node case branches",
+      "fixture": "choice-single-node-case"
+    },
+    {
+      "yang_construct": "nested choice inside case + generic case names + JSON transparency at depth",
+      "fixture": "choice-nested-in-case"
+    },
+    {
+      "yang_construct": "choice interleaved with plain siblings (I1)",
+      "fixture": "choice-cases-interleaved-siblings"
+    },
+    {
+      "yang_construct": "choice case containing ordered-by-user leaf-list",
+      "fixture": "choice-with-leaflist-branch"
+    },
+    {
+      "yang_construct": "choice shorthand case (direct leaf-list + list, implicit case synthesis, RFC 7950 \u00a77.9.2)",
+      "fixture": "choice-shorthand-leaflist-list"
+    },
+    {
+      "yang_construct": "list entry containing a choice (I3 + choice ordering)",
+      "fixture": "list-entry-with-choice-schema-order"
+    },
+    {
+      "yang_construct": "container within list entry (I3)",
+      "fixture": "container-within-list-schema-order"
+    },
+    {
+      "yang_construct": "leaf-list within list entry (cascading I1/I2)",
+      "fixture": "leaf-list-within-list-entry"
+    },
+    {
+      "yang_construct": "config true subtree (RFC 7950 \u00a77.21.1)",
+      "fixture": "config-true-subtree"
+    },
+    {
+      "yang_construct": "config false state subtree",
+      "fixture": "config-false-state-subtree"
+    },
+    {
+      "yang_construct": "mixed config/state nested (config inheritance)",
+      "fixture": "mixed-config-state-nested"
+    },
+    {
+      "yang_construct": "status current/deprecated/obsolete (RFC 7950 \u00a77.21.2)",
+      "fixture": "status-current-deprecated-obsolete"
+    },
+    {
+      "yang_construct": "anydata untyped structured data (YANG 1.1, RFC 7950 \u00a77.10, RFC 7951 \u00a75.9)",
+      "fixture": "anydata-untyped-container"
+    },
+    {
+      "yang_construct": "anyxml opaque verbatim passthrough (RFC 7950 \u00a77.11)",
+      "fixture": "anyxml-opaque-passthrough"
+    },
+    {
+      "yang_construct": "anyxml attributes + namespaced children fidelity (RFC 7951 \u00a75.10)",
+      "fixture": "anyxml-attributes-namespaced"
+    },
+    {
+      "yang_construct": "non-alphabetical schema order preservation (I1, schema-declaration-order preservation case)",
+      "fixture": "declaration-order-out-of-alphabetical"
+    },
+    {
+      "yang_construct": "wide heterogeneous sibling declaration order (I1)",
+      "fixture": "wide-heterogeneous-siblings-all-types"
+    },
+    {
+      "yang_construct": "I5 JSON object member determinism + Rust==Go byte-diff",
+      "fixture": "json-object-determinism"
+    },
+    {
+      "yang_construct": "grouping + uses expansion at schema position, inlined (RFC 7950 \u00a77.12/\u00a77.13)",
+      "fixture": "linkage-grouping-simple"
+    },
+    {
+      "yang_construct": "grouping containing nested uses (transitive reuse)",
+      "fixture": "linkage-grouping-nested-uses"
+    },
+    {
+      "yang_construct": "grouping reused by config+state (inline copy, two distinct structs)",
+      "fixture": "linkage-grouping-config-state"
+    },
+    {
+      "yang_construct": "grouping referenced cross-module with prefix",
+      "fixture": "linkage-grouping-cross-module"
+    },
+    {
+      "yang_construct": "refine altering default (RFC 7950 \u00a77.13.2)",
+      "fixture": "linkage-refine-default"
+    },
+    {
+      "yang_construct": "refine altering mandatory + config",
+      "fixture": "linkage-refine-mandatory-config"
+    },
+    {
+      "yang_construct": "refine adding presence + must",
+      "fixture": "linkage-refine-presence-must"
+    },
+    {
+      "yang_construct": "refine altering min/max-elements + adding if-feature",
+      "fixture": "linkage-refine-min-max-iffeature"
+    },
+    {
+      "yang_construct": "augment intra-module + when guard + compiled placement (RFC 7950 \u00a77.17)",
+      "fixture": "linkage-augment-intra-module"
+    },
+    {
+      "yang_construct": "augment carrying container + leaf + leaf-list (mixed kinds)",
+      "fixture": "linkage-augment-container-leaf-list"
+    },
+    {
+      "yang_construct": "augment of choice (new case) + of existing case (new leaf)",
+      "fixture": "linkage-augment-choice-case"
+    },
+    {
+      "yang_construct": "augment of an augmented node (nested augment)",
+      "fixture": "linkage-augment-nested"
+    },
+    {
+      "yang_construct": "augment inter-module with prefix",
+      "fixture": "linkage-augment-inter-module"
+    },
+    {
+      "yang_construct": "cross-module augment PascalCase ident collision (codegen)",
+      "fixture": "augment-cross-module-ident-collision"
+    },
+    {
+      "yang_construct": "when on augment with target XPath context reaching up cross-module (RFC 7950 \u00a77.21.5)",
+      "fixture": "augment-when-target-context"
+    },
+    {
+      "yang_construct": "deviation not-supported cross-module (RFC 7950 \u00a77.20.3)",
+      "fixture": "linkage-deviation-not-supported"
+    },
+    {
+      "yang_construct": "deviation replace type narrowing",
+      "fixture": "linkage-deviation-replace-type"
+    },
+    {
+      "yang_construct": "deviation add mandatory",
+      "fixture": "linkage-deviation-add"
+    },
+    {
+      "yang_construct": "deviation delete default substatement",
+      "fixture": "linkage-deviation-delete"
+    },
+    {
+      "yang_construct": "multiple deviations in one module + load order",
+      "fixture": "linkage-deviation-multi"
+    },
+    {
+      "yang_construct": "deviation replace default/config + add must/if-feature",
+      "fixture": "linkage-deviation-replace-default-config"
+    },
+    {
+      "yang_construct": "import by prefix (RFC 7950 \u00a77.1.5)",
+      "fixture": "linkage-import-prefix"
+    },
+    {
+      "yang_construct": "import with revision-date",
+      "fixture": "linkage-import-revision-date"
+    },
+    {
+      "yang_construct": "multiple imports, mixed prefixes, no shadowing",
+      "fixture": "linkage-import-multiple"
+    },
+    {
+      "yang_construct": "import non-transitivity (RFC 7950 \u00a75.1.1)",
+      "fixture": "linkage-import-non-transitive"
+    },
+    {
+      "yang_construct": "submodule belongs-to + include + parent-prefix serialization (RFC 7950 \u00a75.3)",
+      "fixture": "linkage-submodule-simple"
+    },
+    {
+      "yang_construct": "multiple submodules + cross-submodule typedef/grouping reuse",
+      "fixture": "linkage-submodule-multi"
+    },
+    {
+      "yang_construct": "submodule importing a foreign top-level module (RFC 7950 \u00a75.3.1)",
+      "fixture": "linkage-submodule-imports-foreign"
+    },
+    {
+      "yang_construct": "identity standalone (no base, RFC 7950 \u00a76.4.16)",
+      "fixture": "identity-standalone"
+    },
+    {
+      "yang_construct": "identity cross-module derivation",
+      "fixture": "identity-cross-module-derivation"
+    },
+    {
+      "yang_construct": "identity multi-base from multiple imported modules",
+      "fixture": "identity-multi-base-cross-module"
+    },
+    {
+      "yang_construct": "identity hierarchy + identityref base filtering (mid vs root)",
+      "fixture": "identity-hierarchy-with-identityref"
+    },
+    {
+      "yang_construct": "rpc input only + I4 (RFC 7950 \u00a77.14)",
+      "fixture": "rpc-input-only"
+    },
+    {
+      "yang_construct": "rpc output only + I4",
+      "fixture": "rpc-output-only"
+    },
+    {
+      "yang_construct": "rpc input+output, input-before-output + I4",
+      "fixture": "rpc-input-output-interleaved"
+    },
+    {
+      "yang_construct": "rpc I/O all node kinds + I4",
+      "fixture": "rpc-io-heterogeneous-nodes"
+    },
+    {
+      "yang_construct": "rpc I/O nested containers + I4 at depth",
+      "fixture": "rpc-io-nested-containers"
+    },
+    {
+      "yang_construct": "rpc I/O with anyxml opaque + I4",
+      "fixture": "rpc-io-with-anyxml"
+    },
+    {
+      "yang_construct": "rpc I/O numeric quoting (int64/uint64/decimal64) + I4 + I5",
+      "fixture": "rpc-io-decimal64-numeric-types"
+    },
+    {
+      "yang_construct": "YANG 1.1 action in container + I4",
+      "fixture": "action-container-simple"
+    },
+    {
+      "yang_construct": "action in list entry (key context) + I4",
+      "fixture": "action-list-keys-context"
+    },
+    {
+      "yang_construct": "action at nested tree depth + I4",
+      "fixture": "action-nested-containers"
+    },
+    {
+      "yang_construct": "action I/O heterogeneous node kinds + I4",
+      "fixture": "action-io-heterogeneous"
+    },
+    {
+      "yang_construct": "action among container data siblings (I1+I4)",
+      "fixture": "action-container-wide-siblings"
+    },
+    {
+      "yang_construct": "top-level notification + I4 (RFC 7950 \u00a77.16)",
+      "fixture": "notification-top-level"
+    },
+    {
+      "yang_construct": "YANG 1.1 notification nested in container + I4",
+      "fixture": "notification-nested-container"
+    },
+    {
+      "yang_construct": "notification in list entry + I4",
+      "fixture": "notification-nested-list"
+    },
+    {
+      "yang_construct": "notification with container + leaf-list children + I4",
+      "fixture": "notification-with-container-leaflist"
+    },
+    {
+      "yang_construct": "notification interleaved among data siblings (sibling placement)",
+      "fixture": "notification-interleaved-siblings"
+    },
+    {
+      "yang_construct": "rpc/action/notification coexistence (no interference)",
+      "fixture": "rpc-action-notification-coexistence"
+    },
+    {
+      "yang_construct": "when (OR) + must + error-message/app-tag cross-language parity (RFC 7950 \u00a77.5.3)",
+      "fixture": "constraints-when-must"
+    },
+    {
+      "yang_construct": "when with XPath functions (derived-from/re-match/count/boolean, RFC 7950 \u00a710)",
+      "fixture": "constraints-when-xpath-functions"
+    },
+    {
+      "yang_construct": "multiple must conjunction + sibling/ancestor refs",
+      "fixture": "constraints-must-multiple"
+    },
+    {
+      "yang_construct": "unique single/composite/descendant (RFC 7950 \u00a77.8.3)",
+      "fixture": "constraints-unique-composite"
+    },
+    {
+      "yang_construct": "unique duplicate-tuple rejection",
+      "fixture": "constraints-unique-violation-reject"
+    },
+    {
+      "yang_construct": "mandatory + default + when + refine interaction",
+      "fixture": "constraints-mandatory-interaction"
+    },
+    {
+      "yang_construct": "default on leaf/leaf-list/choice case (RFC 7950 \u00a77.6.1/\u00a77.9.3)",
+      "fixture": "constraints-default-types"
+    },
+    {
+      "yang_construct": "feature + if-feature boolean expressions + schema gating (RFC 7950 \u00a77.20.1)",
+      "fixture": "constraints-feature-iffeature"
+    },
+    {
+      "yang_construct": "feature-on-feature transitive dependency",
+      "fixture": "constraints-feature-dependency"
+    },
+    {
+      "yang_construct": "presence container + if-feature gate + {}-vs-absent codegen Option<()>",
+      "fixture": "constraints-feature-presence"
+    },
+    {
+      "yang_construct": "raw parse-failure CAMBIUM_E0002 (malformed/NUL/strict unknown)",
+      "fixture": "parse-malformed-e0002"
+    },
+    {
+      "yang_construct": "empty+default illegal; leaf-list-of-empty illegal in 1.0 (schema-load reject E0001)",
+      "fixture": "types-empty-edge-illegality"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a75.1 module namespace qualification (module:name, bare same-module)",
+      "fixture": "json-ietf-module-namespace-qualification"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a76.1 int8..uint32 bare vs int64/uint64 quoted (32->64 boundary)",
+      "fixture": "json-ietf-scalar-quoting-int-spans"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a76.1 decimal64 always-quoted canonical + trailing zeros + sign",
+      "fixture": "json-ietf-decimal64-canonical-quoting"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a76.1 string escaping control + quote + backslash + Unicode \\uXXXX",
+      "fixture": "json-ietf-string-escaping-control-unicode"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a75.4 leaf-list JSON array (user preserved / system sorted)",
+      "fixture": "json-ietf-leaflist-array-user-system"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a75.3 list JSON array, keys-first in object (I3 in JSON)",
+      "fixture": "json-ietf-list-array-keys-first"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a75.2 nested containers as nested JSON objects",
+      "fixture": "json-ietf-nested-container-object"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a75.2 choice case-transparency (flat + nested)",
+      "fixture": "json-ietf-choice-case-transparency"
+    },
+    {
+      "yang_construct": "RFC 7951 presence {} vs non-presence absent in JSON",
+      "fixture": "json-ietf-presence-vs-nonpresence"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a75.9/\u00a75.10 anydata/anyxml JSON representation",
+      "fixture": "json-ietf-anydata-anyxml-representation"
+    },
+    {
+      "yang_construct": "RFC 6243 with-defaults modes explicit/trim/report-all/report-all-tagged",
+      "fixture": "json-ietf-with-defaults-modes"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a76.13 instance-identifier as JSON XPath string",
+      "fixture": "json-ietf-instance-identifier-string"
+    },
+    {
+      "yang_construct": "RFC 7951 leafref resolved base-type value + union resolved-member quoting (\u00a76.3)",
+      "fixture": "json-ietf-leafref-union-resolved-form"
+    },
+    {
+      "yang_construct": "RFC 7950+7951 JSON interactions: foreign augment qualification, deviation-narrowed quoting, when-absence, submodule parent prefix",
+      "fixture": "json-ietf-cross-module-augment-deviation-when"
+    },
+    {
+      "yang_construct": "RFC 7951 \u00a74 JSON_IETF parse direction round-trip (input-format=json)",
+      "fixture": "json-ietf-parse-roundtrip"
+    },
+    {
+      "yang_construct": "yang-version 1.0/1.1 + units + status + description/reference + organization/contact metadata (RFC 7950 \u00a77.1/\u00a77.3.3)",
+      "fixture": "metadata-yang-version-units"
+    },
+    {
+      "yang_construct": "extension definition + usage + pass-through (RFC 7950 \u00a77.19)",
+      "fixture": "extension-definition-and-usage"
+    },
+    {
+      "yang_construct": "extension argument yin-element true/false YIN forms (RFC 7950 \u00a77.19.2.2)",
+      "fixture": "extension-yin-element-modes"
+    },
+    {
+      "yang_construct": "vendor extension (junos jx:annotate/jx:secret) pass-through, codegen-ignored",
+      "fixture": "vendor-extension-junos-passthrough"
+    },
+    {
+      "yang_construct": "unknown/undefined extension opaque preservation (LYD_PARSE_OPAQ)",
+      "fixture": "extension-unknown-opaque-passthrough"
+    },
+    {
+      "yang_construct": "extension/typedef PascalCase collision in unified codegen symbol table",
+      "fixture": "extension-and-typedef-collision"
+    },
+    {
+      "yang_construct": "RFC 7952 instance metadata annotation (md:annotation, @-member JSON / XML attribute)",
+      "fixture": "metadata-annotation-rfc7952"
+    },
+    {
+      "yang_construct": "Rust keyword identifiers escaped via r# prefix",
+      "fixture": "idents-keywords-rust"
+    },
+    {
+      "yang_construct": "Go keyword identifiers escaped (suffix/mangling)",
+      "fixture": "idents-keywords-go"
+    },
+    {
+      "yang_construct": "hyphen/underscore PascalCase collision deterministic suffix",
+      "fixture": "idents-collision-hyphen-underscore"
+    },
+    {
+      "yang_construct": "enumeration value name collision (distinct discriminants)",
+      "fixture": "idents-enum-value-collision"
+    },
+    {
+      "yang_construct": "container-vs-leaf same-parent PascalCase collision",
+      "fixture": "idents-container-leaf-collision"
+    },
+    {
+      "yang_construct": "leading-digit identifiers (RFC 7950 \u00a76.2)",
+      "fixture": "idents-leading-digit"
+    },
+    {
+      "yang_construct": "long identifiers >60 chars",
+      "fixture": "idents-long-name"
+    },
+    {
+      "yang_construct": "unicode/CJK + mixed-case identifiers",
+      "fixture": "idents-unicode-mixed-case"
+    },
+    {
+      "yang_construct": "RFC 6991 real typedefs (ip-address union/zone, ipv6-prefix, mac-address, date-and-time, counter64)",
+      "fixture": "rfc6991-inet-yang-types-roundtrip"
+    },
+    {
+      "yang_construct": "serialization preserves original YANG identifiers (no codegen artifacts) \u2014 cross-cutting",
+      "fixture": "idents-keywords-rust"
+    },
+    {
+      "yang_construct": "cross-language Rust==Go rule-code parity for reject cases \u2014 cross-cutting",
+      "fixture": "constraints-range-length-reject"
+    },
+    {
+      "yang_construct": "I4 RPC/action/notification I/O schema-order emission \u2014 cross-cutting invariant",
+      "fixture": "rpc-input-output-interleaved"
+    },
+    {
+      "yang_construct": "I3 keys-first emission \u2014 cross-cutting invariant",
+      "fixture": "ordering-composite-key-wide"
+    },
+    {
+      "yang_construct": "I1 declaration-order preservation \u2014 cross-cutting invariant",
+      "fixture": "declaration-order-out-of-alphabetical"
+    },
+    {
+      "yang_construct": "I2 system canonicalization (list-by-key + leaf-list-by-value) \u2014 cross-cutting invariant",
+      "fixture": "leaflist-ordered-by-system"
+    }
+  ],
+  "completeness_note": "MERGED CATALOG: 175 de-duplicated, owned fixtures across 14 themes (builtin-scalar-types, type-restrictions, reference-types, type-composition, data-node-types, ordering-invariants, linkage, identity, operations, constraints-conditionals, edge-illegality, json-ietf-serialization, extensions-metadata, identifier-codegen, real-typedef-imports). This is the union of the prior 31-fixture census, the 8 proposed slices, and the 27-fixture gap-fill, with every duplicate collapsed to ONE canonical fixture while preserving every distinct construct/edge.\n\nDEDUP DECISIONS (no coverage dropped \u2014 duplicates folded into the richer single fixture):\n- leafref/identityref/instance-identifier appeared in BOTH the builtin-types slice and the typedef-chains slice plus the base catalog. Collapsed to one fixture per distinct path/target/require-instance/base-cardinality variant (12 leafref+identityref+instance-id fixtures total) rather than the ~20 near-duplicates across sources.\n- union: base catalog (types-union-breadth/-resolution/-typedef-chain) + builtin slice + typedef slice all proposed overlapping union fixtures. Collapsed to 8 union fixtures covering heterogeneous quoting, all-scalar-members, resolution-order, nested-typedef-chain+binary, leafref-member, identityref-member, two-distinct-base-identityrefs, enum+scalar. The base catalog's three are subsumed (noted in each fixture).\n- identityref-single-base and types-identityref-same-module from two slices collapsed into types-identityref-single-base; the foreign/cross-module variants collapsed into types-identityref-foreign-module-prefix + identity-cross-module-derivation + identityref-iana-if-type-foreign (kept distinct because owned-tiny vs census-scale-foreign exercise different encoding scale).\n- choice/case: data-node slice + base catalog (ordering-choice-case/-nested) + json-ietf slice overlapped. Schema-side ordering lives in data-node-types fixtures (8), JSON-side case-transparency in one json-ietf fixture; base catalog's two are subsumed.\n- decimal64: base (fd1/2/9/18) + builtin (fd1/2/9/18) + gap (fd3/6) + json-ietf (canonical quoting) reconciled into 5 type fixtures + 1 json-ietf canonical-quoting fixture (no overlap: schema/range vs JSON-byte concerns).\n- numeric quoting: base types-numeric-decimal64 quoting concern folded into json-ietf-scalar-quoting-int-spans (the 32->64-bit boundary) to avoid two fixtures asserting the same RFC 7951 \u00a76.1 rule.\n- augment/deviation/grouping/submodule/import/refine: linkage slice + base catalog + gap-fill heavily overlapped; the base catalog's linkage-augment/-deviation/-refine/-submodule/-grouping-uses are each subsumed by the finer-grained slice fixtures (noted inline). linkage-deviation's 5-in-one split into not-supported/replace-type/add/delete/multi + the gap's replace-default-config.\n- idents: base idents-keywords-wide split into idents-keywords-rust + -go; idents-pathological split into idents-long-name + idents-container-leaf-collision; idents-augment-collision -> augment-cross-module-ident-collision.\n\nHARNESS RECONCILIATION (carried from the prior census, re-verified): byte-goldens go in [case.expected] as xml/json/json_ietf (the json_ietf runner arm is a one-line prereq the prior catalog already assumed; Format::JsonIetf exists in tree.rs; the Go runner reads [case.expected] as a generic map already). Reject cases (CAMBIUM_E0001 schema-load, E0002 parse, E0003 validate + error-app-tag + data-path) and codegen-compile are NOT byte-goldens \u2014 they are per-language Rust+Go unit tests asserting rule-code PARITY per spec/rule-codes.md \u00a7Mapping rule. json-ietf-parse-roundtrip is the first input-format='json' fixture. Every byte-golden inherits the Rust==Go differential gate (I5) anchored by json-object-determinism. Goldens are GENERATED from the real libyang printer and reviewed, never hand-authored from RFC text (the gap-fill empirically verified each sketch + each rejection against the pinned yanglint, including the three fidelity traps: anyxml namespace-rewrite, import-before-revision statement order, and deviate-replace-default requiring a pre-existing default).\n\nGENUINELY OUT OF SCOPE (with reasons):\n1. gNMI / ordering-invariant I6 (atomic SetRequest vs N-scalar-updates, TypedValue): the gNMI codec is Block 2 per kickoff \u00a74.2; no SetRequest/TypedValue path exists (Format only has Xml/Json/JsonIetf). The JSON_IETF array/atomic SHAPE is already locked by leaflist/nested-user fixtures; only the gNMI wire-envelope assertion is deferred. This is the one ordering invariant (of I1\u2013I6) not covered, by design.\n2. Vendor-extension SEMANTIC evaluation (junos:must / junos:posix-pattern / junos:cli-feature behavior): non-XPath, vendor-specific, downstream-consumer concern per AGENTS.md Non-goals. Cambium only PASSES THROUGH vendor extensions opaquely \u2014 that pass-through IS covered (vendor-extension-junos-passthrough, extension-unknown-opaque-passthrough); evaluating their semantics is out of scope.\n3. NETCONF transport envelopes (<edit-config>, confirmed-commit, rollback), gNMI/NETCONF/gRPC session opening, and Terraform-provider emission: explicit AGENTS.md Non-goals \u2014 downstream generation-system repo, not a Cambium deliverable.\n4. Fidelity-mode byte-exact replay of arbitrary ordered-by-system DEVICE order: descoped per spec \u00a73 (system order is canonical, not replayed).\n5. Unicode normalization (NFC/NFD) and identifier translation (snake_case/kebab-case in codegen) beyond RFC 7950 NameStartChar acceptance: Cambium emits identifiers as-declared; normalization is not a YANG-spec concern.\n6. Reflection-based / ygot-style codegen patterns: Cambium codegen is YANG-source-driven, not runtime-reflection; not a conformance-observable surface.\n\nEverything in RFC 7950 (data node types, all 14 builtin types + every restriction, typedef/grouping/uses/refine/augment/deviation/submodule/import, identity, rpc/action/notification, when/must/unique/mandatory/default/feature/if-feature/extension, status/config, yang-version 1.0+1.1), RFC 7951 (\u00a75 structure, \u00a76 every scalar JSON encoding, case-transparency, parse direction), RFC 7952 (instance metadata annotations), RFC 6243 (all four with-defaults modes), and RFC 6991 (real typedef round-trip) is covered by at least one fixture, and every ordering invariant I1\u2013I5 has a dedicated fixture (I6 deferred per kickoff roadmap above)."
+}
