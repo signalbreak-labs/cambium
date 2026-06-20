@@ -5,6 +5,9 @@ vendored libyang + PCRE2 C engine under `/third_party/`, but neither crates.io
 nor `go get` clones git submodules. A release-flatten step copies the C source
 into each publishable unit so end users can build without submodule setup.
 
+Current release-candidate status is tracked in dated notes under `docs/`, such
+as `docs/release-readiness-2026-06-20.md`.
+
 ## Prerequisites
 
 ```bash
