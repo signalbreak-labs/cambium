@@ -1,0 +1,116 @@
+package datatree
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/signalbreak-labs/cambium/go/cambium"
+)
+
+// ValidationError aggregates the structural validation violations found by
+// Tree.Validate, in document/schema order.
+type ValidationError struct {
+	Violations []string
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("datatree: %d validation violation(s): %s",
+		len(e.Violations), strings.Join(e.Violations, "; "))
+}
+
+// Validate checks the structural constraints that need no XPath engine:
+// mandatory leaves present, list / leaf-list min- and max-elements, list keys
+// present in every entry, and list key uniqueness. It returns a *ValidationError
+// listing every violation, or nil if the tree is structurally valid.
+//
+// It does NOT yet check per-leaf value types (range / length / pattern / enum /
+// union / leafref) — that is a later slice — nor must/when XPath, which remain
+// the libyang backend's domain.
+func (t *Tree) Validate() error {
+	var violations []string
+	validateLevel(t.module.TopLevel(), t.roots, "", &violations)
+	if len(violations) == 0 {
+		return nil
+	}
+	return &ValidationError{Violations: violations}
+}
+
+// validateLevel walks the schema children in declaration order and checks each
+// against the data present at this level. Driving from the schema (not the data)
+// is what surfaces absent-but-required nodes.
+func validateLevel(schema cambium.SchemaChildren, data []*node, path string, out *[]string) {
+	present := make(map[string]*node, len(data))
+	for _, d := range data {
+		present[d.name] = d
+	}
+	for sn := range schema.Iter() {
+		childPath := path + "/" + sn.Name()
+		dn := present[sn.Name()]
+		if dn == nil {
+			if sn.IsMandatory() {
+				*out = append(*out, fmt.Sprintf("missing mandatory node %s", childPath))
+			}
+			if min, ok := sn.MinElements(); ok && min > 0 {
+				*out = append(*out, fmt.Sprintf("%s has 0 entries, fewer than min-elements %d", childPath, min))
+			}
+			continue
+		}
+		switch {
+		case sn.IsList():
+			checkElements(sn, len(dn.entries), childPath, out)
+			checkListKeys(sn, dn, childPath, out)
+			for i, entry := range dn.entries {
+				validateLevel(sn.DataChildren(true), entry, fmt.Sprintf("%s[%d]", childPath, i), out)
+			}
+		case sn.IsLeafList():
+			checkElements(sn, len(dn.values), childPath, out)
+		case sn.IsContainer():
+			validateLevel(sn.DataChildren(true), dn.children, childPath, out)
+		}
+	}
+}
+
+func checkElements(sn cambium.SchemaNodeRef, count int, path string, out *[]string) {
+	if min, ok := sn.MinElements(); ok && uint32(count) < min {
+		*out = append(*out, fmt.Sprintf("%s has %d entries, fewer than min-elements %d", path, count, min))
+	}
+	if max, ok := sn.MaxElements(); ok && uint32(count) > max {
+		*out = append(*out, fmt.Sprintf("%s has %d entries, more than max-elements %d", path, count, max))
+	}
+}
+
+// checkListKeys verifies every list entry carries all key leaves and that the
+// key tuples are unique across entries (invariant-neutral: key order in the
+// tuple follows key-statement order, and entries are not reordered).
+func checkListKeys(sn cambium.SchemaNodeRef, dn *node, path string, out *[]string) {
+	keys := sn.KeyNames()
+	if len(keys) == 0 {
+		return
+	}
+	seen := make(map[string]bool, len(dn.entries))
+	for i, entry := range dn.entries {
+		byName := make(map[string]*node, len(entry))
+		for _, e := range entry {
+			byName[e.name] = e
+		}
+		tuple := make([]string, 0, len(keys))
+		complete := true
+		for _, k := range keys {
+			kn := byName[k]
+			if kn == nil {
+				*out = append(*out, fmt.Sprintf("%s[%d] is missing key leaf %q", path, i, k))
+				complete = false
+				continue
+			}
+			tuple = append(tuple, string(kn.value))
+		}
+		if !complete {
+			continue
+		}
+		joined := strings.Join(tuple, "\x00")
+		if seen[joined] {
+			*out = append(*out, fmt.Sprintf("%s has a duplicate key %v", path, tuple))
+		}
+		seen[joined] = true
+	}
+}
