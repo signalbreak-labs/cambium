@@ -1,0 +1,881 @@
+/**
+ * @file plugins_types.h
+ * @author Radek Krejci <rkrejci@cesnet.cz>
+ * @author Michal Vasko <mvasko@cesnet.cz>
+ * @brief API for (user) types plugins
+ *
+ * Copyright (c) 2019 - 2026 CESNET, z.s.p.o.
+ *
+ * This source code is licensed under BSD 3-Clause License (the "License").
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     https://opensource.org/licenses/BSD-3-Clause
+ */
+
+#ifndef LY_PLUGINS_TYPES_H_
+#define LY_PLUGINS_TYPES_H_
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "log.h"
+#include "ly_config.h"
+#include "plugins.h"
+#include "set.h"
+#include "tree.h"
+
+#include "tree_edit.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct ly_ctx;
+struct ly_path;
+struct lyd_node;
+struct lyd_value;
+struct lyd_value_xpath10;
+struct lys_module;
+struct lys_glob_unres;
+struct lysc_ident;
+struct lysc_node;
+struct lysc_pattern;
+struct lysc_range;
+struct lysc_type;
+struct lysc_type_bits;
+struct lysc_type_leafref;
+
+/**
+ * @page howtoPluginsTypes Type Plugins
+ *
+ * Note that the part of the libyang API here is available only by including a separated `<libyang/plugins_types.h>` header
+ * file. Also note that the type plugins API is versioned separately from libyang itself, so backward incompatible changes
+ * can come even without changing libyang major version.
+ *
+ * YANG allows to define new data types via *typedef* statements or even in leaf's/leaf-list's *type* statements.
+ * Such types are derived (directly or indirectly) from a set of [YANG built-in types](https://tools.ietf.org/html/rfc7950#section-4.2.4).
+ * libyang implements all handling of the data values of the YANG types via the Type Plugins API. Internally, there is
+ * implementation of the built-in types and others can be added as an external plugin (see @ref howtoPlugins).
+ *
+ * Type plugin is supposed to
+ *  - store (and canonize) data value,
+ *  - validate it according to the type's restrictions,
+ *  - compare two values (::lyd_value) of the same type,
+ *  - duplicate value (::lyd_value),
+ *  - print it and
+ *  - free the specific data inserted into ::lyd_value.
+ *
+ * These tasks are implemented as callbacks provided to libyang via ::lyplg_type_record structures defined as array using
+ * ::LYPLG_TYPES macro.
+ *
+ * All the callbacks are supposed to do not log directly via libyang logger. Instead, they return ::LY_ERR value and
+ * ::ly_err_item error structure(s) describing the detected error(s) (helper functions ::ly_err_new() and ::ly_err_free()
+ * are available).
+ *
+ * The main functionality is provided via ::lyplg_type_store_clb callback responsible for canonizing and storing
+ * provided string representation of the value in specified format (XML and JSON supported). Valid value is stored in
+ * ::lyd_value structure - its union allows to store data as one of the predefined type or in a custom form behind
+ * the void *ptr member of ::lyd_value structure. The callback is also responsible for storing canonized string
+ * representation of the value as ::lyd_value._canonical. If the type does not define canonical representation, the original
+ * representation is stored. In case there are any differences between the representation in specific input types, the plugin
+ * is supposed to store the value in JSON representation - typically, the difference is in prefix representation and JSON
+ * format uses directly the module names as prefixes.
+ *
+ * Usually, all the validation according to the type's restrictions is done in the store callback. However, in case the type
+ * requires some validation referencing other entities in the data tree, the optional validation callback
+ * ::lyplg_type_validate_clb can be implemented.
+ *
+ * The stored values can be compared in a specific way by providing ::lyplg_type_compare_clb. In case the best way to compare
+ * the values is to compare their canonical string representations, the ::lyplg_type_compare_simple() function can be used.
+ *
+ * Data duplication is done with ::lyplg_type_dup_clb callbacks. Note that the callback is responsible even for duplicating
+ * the ::lyd_value._canonical, so the callback must be always present (the canonical value is always present). If there is
+ * nothing else to duplicate, the plugin can use the generic ::lyplg_type_dup_simple().
+ *
+ * The stored value can be printed into the required format via ::lyplg_type_print_clb implementation. Simple printing
+ * canonical representation of the value is implemented by ::lyplg_type_print_simple().
+ *
+ * And finally freeing any data stored in the ::lyd_value by the plugin is done by implementation of ::lyplg_type_free_clb.
+ * Freeing only the canonical string is implemented by ::lyplg_type_free_simple().
+ *
+ * The plugin information contains also the plugin identifier (::lyplg_type.id). This string can serve to identify the
+ * specific plugin responsible to storing data value. In case the user can recognize the id string, it can access the
+ * plugin specific data with the appropriate knowledge of its structure.
+ *
+ *  - [simple callbacks](@ref pluginsTypesSimple) handling only the canonical strings in the value,
+ *
+ * In addition to these callbacks, the API also provides several functions which can help to implement your own plugin for the
+ * derived YANG types:
+ *
+ * - ::ly_err_new()
+ * - ::ly_err_free()
+ *
+ * - ::lyplg_type_lypath_new()
+ * - ::lyplg_type_lypath_free()
+ *
+ * - ::lyplg_type_prefix_data_new()
+ * - ::lyplg_type_prefix_data_dup()
+ * - ::lyplg_type_prefix_data_free()
+ * - ::lyplg_type_get_prefix()
+ *
+ * - ::lyplg_type_check_hints()
+ * - ::lyplg_type_check_status()
+ * - ::lyplg_type_lypath_check_status()
+ * - ::lyplg_type_identity_isderived()
+ * - ::lyplg_type_identity_module()
+ * - ::lyplg_type_make_implemented()
+ * - ::lyplg_type_parse_dec64()
+ * - ::lyplg_type_parse_int()
+ * - ::lyplg_type_parse_uint()
+ * - ::lyplg_type_resolve_leafref()
+ */
+
+/**
+ * @defgroup pluginsTypes Plugins: Types
+ * @{
+ *
+ * Structures and functions to for libyang plugins implementing specific YANG types defined in YANG modules. For more
+ * information, see @ref howtoPluginsTypes.
+ *
+ * This part of libyang API is available by including `<libyang/plugins_types.h>` header file.
+ */
+
+/**
+ * @brief Type API version
+ */
+#define LYPLG_TYPE_API_VERSION 3
+
+/**
+ * @brief Type of the LYB size of a value of a particular type.
+ */
+enum lyplg_lyb_size_type {
+    LYPLG_LYB_SIZE_FIXED_BITS,      /**< fixed (not changing for a particular type) size in bits */
+    LYPLG_LYB_SIZE_VARIABLE_BITS,   /**< variable size that will be stored in bits */
+    LYPLG_LYB_SIZE_VARIABLE_BYTES   /**< variable size that is always rounded to bytes and also stored in bytes
+                                         (more efficient than using bits) */
+};
+
+/**
+ * @brief Macro to define plugin information in external plugins
+ *
+ * Use as follows:
+ * LYPLG_TYPES = {{<filled information of ::lyplg_type_record>}, ..., {0}};
+ */
+#define LYPLG_TYPES \
+    uint32_t plugins_types_apiver__ = LYPLG_TYPE_API_VERSION; \
+    const struct lyplg_type_record plugins_types__[]
+
+/**
+ * @brief Check whether specific type value needs to be allocated dynamically.
+ *
+ * @param[in] type_val Pointer to specific type value storage.
+ */
+#define LYPLG_TYPE_VAL_IS_DYN(type_val) \
+    (sizeof *(type_val) > LYD_VALUE_FIXED_MEM_SIZE)
+
+/**
+ * @brief Prepare value memory for storing a specific type value, may be allocated dynamically.
+ *
+ * Must be called for values larger than 8 bytes.
+ * To be used in ::lyplg_type_store_clb.
+ *
+ * @param[in] storage Pointer to the value storage to use (struct ::lyd_value *).
+ * @param[in,out] type_val Pointer to specific type value structure.
+ */
+#define LYPLG_TYPE_VAL_INLINE_PREPARE(storage, type_val) \
+    (LYPLG_TYPE_VAL_IS_DYN(type_val) \
+     ? ((type_val) = ((storage)->dyn_mem = calloc(1, sizeof *(type_val)))) \
+     : ((type_val) = memset((storage)->fixed_mem, 0, sizeof *(type_val))))
+
+/**
+ * @brief Destroy a prepared value.
+ *
+ * Must be called for values prepared with ::LYPLG_TYPE_VAL_INLINE_PREPARE.
+ *
+ * @param[in] type_val Pointer to specific type value structure.
+ */
+#define LYPLG_TYPE_VAL_INLINE_DESTROY(type_val) \
+    do { if (LYPLG_TYPE_VAL_IS_DYN(type_val)) free(type_val); } while(0)
+
+/**
+ * @brief Create and fill error structure.
+ *
+ * Helper function for various plugin functions to generate error information structure.
+ *
+ * @param[in,out] err Pointer to store a new error structure filled according to the input parameters. If the storage
+ * already contains error information, the new record is appended into the errors list.
+ * @param[in] ecode Code of the error to fill. In case LY_SUCCESS value, nothing is done and LY_SUCCESS is returned.
+ * @param[in] vecode Validity error code in case of LY_EVALID error code.
+ * @param[in] data_path Path to the data node causing the error.
+ * @param[in] apptag Error-app-tag value.
+ * @param[in] err_format Format string (same like at printf) or string literal.
+ * If you want to print just an unknown string, use "%s" for the @p err_format, otherwise undefined behavior may occur
+ * because the unknown string may contain the % character, which is interpreted as conversion specifier.
+ * @return The given @p ecode value if the @p err is successfully created. The structure can be freed using ::ly_err_free()
+ * or passed back from callback into libyang.
+ * @return LY_EMEM If there is not enough memory for allocating error record, the @p err is not touched in that case.
+ * @return LY_SUCCESS if @p ecode is LY_SUCCESS, the @p err is not touched in this case.
+ */
+LIBYANG_API_DECL LY_ERR ly_err_new(struct ly_err_item **err, LY_ERR ecode, LY_VECODE vecode, char *data_path, char *apptag,
+        const char *err_format, ...) _FORMAT_PRINTF(6, 7);
+
+/**
+ * @brief Destructor for the error records created with ::ly_err_new().
+ *
+ * Compatible with the free(), so usable as a generic callback.
+ *
+ * @param[in] ptr Error record (::ly_err_item, the void pointer is here only for compatibility with a generic free()
+ * function) to free. With the record, also all the records (if any) connected after this one are freed.
+ */
+LIBYANG_API_DECL void ly_err_free(void *ptr);
+
+/**
+ * @brief Convert bits to bytes.
+ *
+ * @param[in] bits Number of bits.
+ * @return Minimum number of bytes that can hold all the bits.
+ */
+#define LYPLG_BITS2BYTES(bits) ((bits) / 8 + ((bits) % 8 ? 1 : 0))
+
+/**
+ * @brief Check a value type in bits is correct and as expected.
+ *
+ * @param[in] type_name Type name for logging.
+ * @param[in] format Value format.
+ * @param[in] value_size_bits Value size in bits.
+ * @param[in] lyb_size_type Type of the LYB value size, relevant only for @p format ::LY_VALUE_LYB. For other formats,
+ * full bytes are always expected.
+ * @param[in] lyb_fixed_size_bits Fixed lyb value size, if relevant.
+ * @param[out] value_size Value size in bytes.
+ * @param[out] err Generated error.
+ * @return LY_SUCCESS on success;
+ * @return LY_ERR value on error, @p err generated.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_check_value_size(const char *type_name, LY_VALUE_FORMAT format,
+        uint64_t value_size_bits, enum lyplg_lyb_size_type lyb_size_type, uint64_t lyb_fixed_size_bits,
+        uint32_t *value_size, struct ly_err_item **err);
+
+/**
+ * @brief Check that the type is suitable for the parser's hints (if any) in the specified format
+ *
+ * Use only in implementations of ::lyplg_type_store_clb which provide all the necessary parameters for this function.
+ *
+ * @param[in] hints Bitmap of [value hints](@ref lydvalhints) of all the allowed value types provided by parsers
+ *            to ::lyplg_type_store_clb.
+ * @param[in] value Lexical representation of the value to be stored.
+ * @param[in] value_len Length (number of bytes) of the given \p value.
+ * @param[in] type Expected base type of the @p value by the caller.
+ * @param[out] base Pointer to store the numeric base for parsing numeric values using strtol()/strtoll() function.
+ * Returned (and required) only for numeric @p type values.
+ * @param[out] err Pointer to store error information in case of failure.
+ * @return LY_ERR value
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_check_hints(uint32_t hints, const char *value, uint32_t value_len, LY_DATA_TYPE type,
+        int *base, struct ly_err_item **err);
+
+/**
+ * @brief Check that the value of a type is allowed based on its status.
+ *
+ * @param[in] ctx_node Context node (which references the value).
+ * @param[in] val_flags Flags fo the value.
+ * @param[in] format Format of the value.
+ * @param[in] prefix_data Prefix data of the value.
+ * @param[in] val_name Name of the value, only for logging.
+ * @param[out] err Pointer to store error information in case of failure.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_check_status(const struct lysc_node *ctx_node, uint16_t val_flags, LY_VALUE_FORMAT format,
+        void *prefix_data, const char *val_name, struct ly_err_item **err);
+
+/**
+ * @brief Check that the lypath instance-identifier value is allowed based on the status of the nodes.
+ *
+ * @param[in] ctx_node Context node (which references the value).
+ * @param[in] path Path of the instance-identifier.
+ * @param[in] format Format of the value.
+ * @param[in] prefix_data Prefix data of the value.
+ * @param[out] err Pointer to store error information in case of failure.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_lypath_check_status(const struct lysc_node *ctx_node, const struct ly_path *path,
+        LY_VALUE_FORMAT format, void *prefix_data, struct ly_err_item **err);
+
+/**
+ * @brief Implement a module (just like ::lys_set_implemented()), but keep maintaining unresolved items.
+ *
+ * Use only in implementations of ::lyplg_type_store_clb which provide all the necessary parameters for this function.
+ *
+ * @param[in] mod Module to implement.
+ * @param[in] features Array of features to enable.
+ * @param[in,out] unres Global unres to add to.
+ * @return LY_ERECOMPILE if the context need to be recompiled, should be returned.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_make_implemented(struct lys_module *mod, const char **features,
+        struct lys_glob_unres *unres);
+
+/**
+ * @brief Check whether a particular bit of a bitmap is set.
+ *
+ * @param[in] bitmap Bitmap to read from.
+ * @param[in] size_bits Size of @p bitmap in bits.
+ * @param[in] bit_position Bit position to check.
+ * @return Whether the bit is set or not.
+ */
+LIBYANG_API_DECL ly_bool lyplg_type_bits_is_bit_set(const char *bitmap, uint32_t size_bits, uint32_t bit_position);
+
+/**
+ * @brief Print xpath1.0 token in the specific format.
+ *
+ * @param[in] token Token to transform.
+ * @param[in] tok_len Lenghth of @p token.
+ * @param[in] is_nametest Whether the token is a nametest, it then always requires a prefix in XML @p get_format.
+ * @param[in,out] context_mod Current context module, may be updated.
+ * @param[in] resolve_ctx Context to use for resolving prefixes.
+ * @param[in] resolve_format Format of the resolved prefixes.
+ * @param[in] resolve_prefix_data Resolved prefixes prefix data.
+ * @param[in] get_format Format of the output prefixes.
+ * @param[in] get_prefix_data Format-specific prefix data for the output.
+ * @param[out] token_p Printed token.
+ * @param[out] err Error structure on error.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_xpath10_print_token(const char *token, uint16_t tok_len, ly_bool is_nametest,
+        const struct lys_module **context_mod, const struct ly_ctx *resolve_ctx, LY_VALUE_FORMAT resolve_format,
+        const void *resolve_prefix_data, LY_VALUE_FORMAT get_format, void *get_prefix_data, char **token_p,
+        struct ly_err_item **err);
+
+/**
+ * @brief Get format-specific prefix for a module.
+ *
+ * Use only in implementations of ::lyplg_type_print_clb which provide all the necessary parameters for this function.
+ *
+ * @param[in] mod Module whose prefix to get - the module somehow connected with the value to print.
+ * @param[in] format Format of the prefix (::lyplg_type_print_clb's format parameter).
+ * @param[in] prefix_data Format-specific data (::lyplg_type_print_clb's prefix_data parameter).
+ * @return Module prefix to print.
+ * @return NULL on using the current module/namespace.
+ */
+LIBYANG_API_DECL const char *lyplg_type_get_prefix(const struct lys_module *mod, LY_VALUE_FORMAT format, void *prefix_data);
+
+/**
+ * @brief Store used prefixes in a string into an internal libyang structure used in ::lyd_value.
+ *
+ * Use only in implementations of ::lyplg_type_store_clb which provide all the necessary parameters for this function.
+ *
+ * If @p prefix_data_p are non-NULL, they are treated as valid according to the @p format_p and new possible
+ * prefixes are simply added. This way it is possible to store prefix data for several strings together.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] value Value to be parsed.
+ * @param[in] value_size Size of @p value in bytes.
+ * @param[in] format Format of the prefixes in the value.
+ * @param[in] prefix_data Format-specific data for resolving any prefixes (see ly_resolve_prefix()).
+ * @param[in,out] format_p Resulting format of the prefixes.
+ * @param[in,out] prefix_data_p Resulting prefix data for the value in format @p format_p.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_prefix_data_new(const struct ly_ctx *ctx, const void *value, uint32_t value_size,
+        LY_VALUE_FORMAT format, const void *prefix_data, LY_VALUE_FORMAT *format_p, void **prefix_data_p);
+/**
+ * @brief Duplicate prefix data.
+ *
+ * Use only in implementations of ::lyplg_type_store_clb which provide all the necessary parameters for this function.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] format Format of the prefixes in the value.
+ * @param[in] orig Prefix data to duplicate.
+ * @param[out] dup Duplicated prefix data.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_prefix_data_dup(const struct ly_ctx *ctx, LY_VALUE_FORMAT format, const void *orig,
+        void **dup);
+
+/**
+ * @brief Free internal prefix data.
+ *
+ * Use only in implementations of ::lyplg_type_store_clb which provide all the necessary parameters for this function.
+ *
+ * @param[in] format Format of the prefixes.
+ * @param[in] prefix_data Format-specific data to free.
+ */
+LIBYANG_API_DECL void lyplg_type_prefix_data_free(LY_VALUE_FORMAT format, void *prefix_data);
+
+/**
+ * @brief Helper function to create internal schema path representation for instance-identifier value representation.
+ *
+ * Use only in implementations of ::lyplg_type_store_clb which provide all the necessary parameters for this function.
+ *
+ * @param[in] ctx libyang Context
+ * @param[in] value Lexical representation of the value to be stored.
+ * @param[in] value_len Length (number of bytes) of the given @p value.
+ * @param[in] options [Type plugin store options](@ref plugintypestoreopts).
+ * @param[in] format Input format of the value.
+ * @param[in] prefix_data Format-specific data for resolving any prefixes (see ly_resolve_prefix()).
+ * @param[in] ctx_node The @p value schema context node.
+ * @param[in,out] unres Global unres structure for newly implemented modules.
+ * @param[out] path Pointer to store the created structure representing the schema path from the @p value.
+ * @param[out] err Pointer to store the error information provided in case of failure.
+ * @return LY_SUCCESS on success,
+ * @return LY_ERECOMPILE if the context need to be recompiled, should be returned.
+ * @return LY_ERR value on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_lypath_new(const struct ly_ctx *ctx, const char *value, uint32_t value_len,
+        uint32_t options, LY_VALUE_FORMAT format, void *prefix_data, const struct lysc_node *ctx_node,
+        struct lys_glob_unres *unres, struct ly_path **path, struct ly_err_item **err);
+
+/**
+ * @brief Convert canonical value into a value in a specific format.
+ *
+ * @param[in] node Node with the type.
+ * @param[in] canon Canonical value.
+ * @param[in] format Value format.
+ * @param[in] prefix_data Format-specific data for resolving prefixes.
+ * @param[out] value Printed value in @p format.
+ * @return LY_ERR value on error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_print_val(const struct lysc_node *node, const char *canon, LY_VALUE_FORMAT format,
+        void *prefix_data, const char **value);
+
+/**
+ * @brief Free ly_path structure used by instanceid value representation.
+ *
+ * The ly_path representation can be created by ::lyplg_type_lypath_new().
+ *
+ * @param[in] path Path structure ([sized array](@ref sizedarrays)) to free.
+ */
+LIBYANG_API_DECL void lyplg_type_lypath_free(struct ly_path *path);
+
+/**
+ * @brief Print xpath1.0 value in the specific format.
+ *
+ * @param[in] xp_val xpath1.0 value structure.
+ * @param[in] format Format to print in.
+ * @param[in] prefix_data Format-specific prefix data.
+ * @param[out] str_value Printed value.
+ * @param[out] err Error structure on error.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_print_xpath10_value(const struct lyd_value_xpath10 *xp_val, LY_VALUE_FORMAT format,
+        void *prefix_data, char **str_value, struct ly_err_item **err);
+
+/**
+ * @brief Callback for learning the size of a LYB value in bits. If of a variable size, -1 is returned.
+ *
+ * @param[in] type Type of the value.
+ * @param[out] size_type Type of LYB size.
+ * @param[out] fixed_size_bits Fixed size size in bits of all the values of this type, only for @p size_type
+ * ::LYPLG_LYB_SIZE_FIXED_BITS.
+ */
+LIBYANG_API_DECL typedef void (*lyplg_type_lyb_size_clb)(const struct lysc_type *type,
+        enum lyplg_lyb_size_type *size_type, uint64_t *fixed_size_bits);
+
+/**
+ * @defgroup plugintypestoreopts Plugins: Type store callback options.
+ *
+ * Options applicable to ::lyplg_type_store_clb().
+ *
+ * @{
+ */
+#define LYPLG_TYPE_STORE_DYNAMIC   0x01 /**< Value was dynamically allocated in its exact size and is supposed to be freed or
+                                             directly inserted into the context's dictionary (e.g. in case of canonization).
+                                             In any case, the caller of the callback does not free the provided
+                                             value after calling the type's store callback with this option. */
+#define LYPLG_TYPE_STORE_IMPLEMENT 0x02 /**< If a foreign module is needed to be implemented to successfully instantiate
+                                             the value, make the module implemented. */
+#define LYPLG_TYPE_STORE_IS_UTF8   0x04 /**< The value is guaranteed to be a valid UTF-8 string, if applicable for the type. */
+#define LYPLG_TYPE_STORE_ONLY      0x08 /**< The value is stored only, type-specific validation is skipped (performed before) */
+/**
+ * @} plugintypestoreopts
+ */
+
+/**
+ * @brief Callback to store the given @p value according to the given @p type.
+ *
+ * Value must always be correctly stored meaning all the other type callbacks (such as print or compare)
+ * must function as expected. However, ::lyd_value._canonical can be left NULL and will be generated
+ * and stored on-demand. But if @p format is ::LY_VALUE_CANON (or another, which must be equal to the canonical
+ * value), the canonical value should be stored so that it does not have to be generated later.
+ *
+ * Note that the @p value is not necessarily used whole (may not be zero-terminated if a string). The provided
+ * @p value_size_bits is always correct. All store functions have to free a dynamically allocated @p value in all
+ * cases (even on error).
+ *
+ * No unnecessary validation tasks should be performed by this callback and left for ::lyplg_type_validate_clb instead.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] type Type of the value being stored.
+ * @param[in] value Value to be stored.
+ * @param[in] value_size_bits Size in bits of the given @p value.
+ * @param[in] options [Type plugin store options](@ref plugintypestoreopts).
+ * @param[in] format Input format of the value, see the description for details.
+ * @param[in] prefix_data Format-specific data for resolving any prefixes (see ly_resolve_prefix()).
+ * @param[in] hints Bitmap of [value hints](@ref lydvalhints) of all the allowed value types.
+ * @param[in] ctx_node Schema context node of @p value, may be NULL for metadata.
+ * @param[out] storage Storage for the value in the type's specific encoding. Except for _canonical_, all the members
+ * should be filled by the plugin (if it fills them at all).
+ * @param[in,out] unres Global unres structure for newly implemented modules.
+ * @param[out] err Optionally provided error information in case of failure. If not provided to the caller, a generic
+ * error message is prepared instead. The error structure can be created by ::ly_err_new().
+ * @return LY_SUCCESS on success,
+ * @return LY_EINCOMPLETE in case the ::lyplg_type_validate_tree_clb is defined and should be called to finish value
+ * validation in data,
+ * @return LY_ERR value on error, @p storage must not have any pointers to dynamic memory.
+ */
+LIBYANG_API_DECL typedef LY_ERR (*lyplg_type_store_clb)(const struct ly_ctx *ctx, const struct lysc_type *type,
+        const void *value, uint64_t value_size_bits, uint32_t options, LY_VALUE_FORMAT format, void *prefix_data, uint32_t hints,
+        const struct lysc_node *ctx_node, struct lyd_value *storage, struct lys_glob_unres *unres, struct ly_err_item **err);
+
+/**
+ * @brief Callback to validate the stored value local semantic constraints of the type.
+ *
+ * This callback should perform any required validation of the value after it is stored. If the stored value is always
+ * valid disregarding the accessible data tree, this callback should not be defined (but ::lyplg_type_validate_tree()
+ * may be).
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] type Original type of the value (not necessarily the stored one) being validated.
+ * @param[in,out] storage Storage of the value successfully filled by ::lyplg_type_store_clb. May be modified.
+ * @param[out] err Optionally provided error information in case of failure. If not provided to the caller, a generic
+ * error message is prepared instead. The error structure can be created by ::ly_err_new().
+ * @return LY_SUCCESS on success,
+ * @return LY_ERR value on error.
+ */
+LIBYANG_API_DECL typedef LY_ERR (*lyplg_type_validate_value_clb)(const struct ly_ctx *ctx, const struct lysc_type *type,
+        struct lyd_value *storage, struct ly_err_item **err);
+
+/**
+ * @brief Callback to validate the stored value in the accessible data tree.
+ *
+ * This callback should perform any final validation that depends on the other data nodes in the accessible tree. If
+ * the other nodes do not affect the validity of this value, this callback should not be defined.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] type Original type of the value (not necessarily the stored one) being validated.
+ * @param[in] ctx_node Value data context node for validation.
+ * @param[in] tree External data tree (e.g. when validating RPC/Notification) with possibly referenced data.
+ * @param[in,out] storage Storage of the value successfully filled by ::lyplg_type_store_clb. May be modified.
+ * @param[out] err Optionally provided error information in case of failure. If not provided to the caller, a generic
+ * error message is prepared instead. The error structure can be created by ::ly_err_new().
+ * @return LY_SUCCESS on success,
+ * @return LY_ERR value on error.
+ */
+LIBYANG_API_DECL typedef LY_ERR (*lyplg_type_validate_tree_clb)(const struct ly_ctx *ctx, const struct lysc_type *type,
+        const struct lyd_node *ctx_node, const struct lyd_node *tree, struct lyd_value *storage, struct ly_err_item **err);
+
+/**
+ * @brief Callback for comparing 2 values of the same type.
+ *
+ * It can be assumed that the same context (dictionary) was used for storing both values and the realtype
+ * member of both the values is the same.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] val1 First value to compare.
+ * @param[in] val2 Second value to compare.
+ * @return LY_SUCCESS if values are considered equal.
+ * @return LY_ENOT if values differ.
+ */
+LIBYANG_API_DECL typedef LY_ERR (*lyplg_type_compare_clb)(const struct ly_ctx *ctx, const struct lyd_value *val1,
+        const struct lyd_value *val2);
+
+/**
+ * @brief Callback for sorting values.
+ *
+ * It can be assumed that the same context (dictionary) was used for storing both values and the realtype
+ * member of both the values is the same.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] val1 First value to compare.
+ * @param[in] val2 Second value to compare.
+ * @return Negative number if val1 < val2,
+ * @return Zero if val1 == val2,
+ * @return Positive number if val1 > val2.
+ */
+LIBYANG_API_DECL typedef int (*lyplg_type_sort_clb)(const struct ly_ctx *ctx, const struct lyd_value *val1,
+        const struct lyd_value *val2);
+
+/**
+ * @brief Callback for getting the value of the data stored in @p value.
+ *
+ * Canonical value (@p format of ::LY_VALUE_CANON) must always be a zero-terminated const string stored in
+ * the dictionary. The ::lyd_value._canonical member should be used for storing (caching) it.
+ *
+ * @param[in] ctx libyang context for storing the canonical value. May not be set for ::LY_VALUE_LYB format.
+ * @param[in] value Value to print.
+ * @param[in] format Format in which the data are supposed to be printed. Formats ::LY_VALUE_SCHEMA and
+ * ::LY_VALUE_SCHEMA_RESOLVED are not supported and should not be implemented.
+ * @param[in] prefix_data Format-specific data for processing prefixes. In case of using one of the built-in's print
+ * callback (or ::lyplg_type_print_simple()), the argument is just simply passed in. If you need to handle prefixes
+ * in the value on your own, there is ::lyplg_type_get_prefix() function to help.
+ * @param[out] dynamic Flag if the returned value is dynamically allocated. In such a case the caller is responsible
+ * for freeing it. Will not be set and should be ignored for @p format ::LY_VALUE_CANON.
+ * @param[out] value_size_bits Optional returned value size in bits. For strings it EXCLUDES the terminating zero.
+ * @return Pointer to @p value in the specified @p format. According to the returned @p dynamic flag, caller
+ * can be responsible for freeing allocated memory.
+ * @return NULL in case of error.
+ */
+LIBYANG_API_DECL typedef const void *(*lyplg_type_print_clb)(const struct ly_ctx *ctx, const struct lyd_value *value,
+        LY_VALUE_FORMAT format, void *prefix_data, ly_bool *dynamic, uint64_t *value_size_bits);
+
+/**
+ * @brief Callback to duplicate data in the data structure.
+ *
+ * @param[in] ctx libyang context of the @p original and @p dup.
+ * @param[in] original Original data structure to be duplicated.
+ * @param[in,out] dup Prepared data structure to be filled with the duplicated data of @p original.
+ * @return LY_SUCCESS after successful duplication.
+ * @return LY_ERR value on error.
+ */
+LIBYANG_API_DECL typedef LY_ERR (*lyplg_type_dup_clb)(const struct ly_ctx *ctx, const struct lyd_value *original,
+        struct lyd_value *dup);
+
+/**
+ * @brief Callback for freeing the user type values stored by ::lyplg_type_store_clb.
+ *
+ * Note that this callback is responsible also for freeing the canonized member in the @p value.
+ *
+ * @param[in] ctx libyang ctx to enable correct manipulation with values that are in the dictionary.
+ * @param[in,out] value Value structure to free the data stored there by the plugin's ::lyplg_type_store_clb callback
+ */
+LIBYANG_API_DECL typedef void (*lyplg_type_free_clb)(const struct ly_ctx *ctx, struct lyd_value *value);
+
+/**
+ * @brief Hold type-specific functions for various operations with the data values.
+ *
+ * libyang includes set of plugins for all the built-in types. They are, by default, inherited to the derived types.
+ * However, if the user type plugin for the specific type is loaded, the plugin can provide it's own functions.
+ * The built-in types plugin callbacks are public, so even the user type plugins can use them to do part of their own
+ * functionality.
+ */
+struct lyplg_type {
+    const char *id;                     /**< Plugin name id, can be used for distinguishing incompatible versions. */
+    lyplg_type_lyb_size_clb lyb_size;   /**< Size of the value in [LYB format](@ref howtoDataLYB) in bits. */
+    lyplg_type_store_clb store;         /**< Storing and canonization callback for the value. */
+    lyplg_type_validate_value_clb validate_value;   /**< Optional value validation callback. */
+    lyplg_type_validate_tree_clb validate_tree;     /**< Optional data tree value validation callback. */
+    lyplg_type_compare_clb compare;     /**< Comparison callback for comparing 2 values of the same type. */
+    lyplg_type_sort_clb sort;           /**< Comparison callback for sorting values. */
+    lyplg_type_print_clb print;         /**< Printer callback for getting value representation in any format. */
+    lyplg_type_dup_clb duplicate;       /**< Value duplication callback. */
+    lyplg_type_free_clb free;           /**< Optional callback for freeing the stored value. */
+};
+
+struct lyplg_type_record {
+    /* plugin identification */
+    const char *module;          /**< name of the module where the type is defined (top-level typedef) */
+    const char *revision;        /**< optional module revision - if not specified, the plugin applies to any revision,
+                                      which is not an optimal approach due to a possible future revisions of the module.
+                                      Instead, there should be defined multiple items in the plugins list, each with the
+                                      different revision, but all with the same pointer to the plugin functions. The
+                                      only valid use case for the NULL revision is the case the module has no revision. */
+    const char *name;            /**< name of the typedef */
+
+    /* runtime data */
+    struct lyplg_type plugin; /**< data to utilize plugin implementation */
+};
+
+/**
+ * @defgroup pluginsTypesSimple Plugins: Simple Types Callbacks
+ * @ingroup pluginsTypes
+ * @{
+ *
+ * Simple functions implementing @ref howtoPluginsTypes callbacks handling types that allocate no dynamic
+ * value and always generate their canonical value (::lyd_value._canonical).
+ */
+
+/**
+ * @brief Implementation of ::lyplg_type_compare_clb for a generic simple type.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_compare_simple(const struct ly_ctx *ctx, const struct lyd_value *val1,
+        const struct lyd_value *val2);
+
+/**
+ * @brief Implementation of ::lyplg_type_sort_clb for a generic simple type.
+ */
+LIBYANG_API_DEF int lyplg_type_sort_simple(const struct ly_ctx *ctx, const struct lyd_value *val1,
+        const struct lyd_value *val2);
+
+/**
+ * @brief Implementation of ::lyplg_type_print_clb for a generic simple type.
+ */
+LIBYANG_API_DECL const void *lyplg_type_print_simple(const struct ly_ctx *ctx, const struct lyd_value *value,
+        LY_VALUE_FORMAT format, void *prefix_data, ly_bool *dynamic, uint64_t *value_size_bits);
+
+/**
+ * @brief Implementation of ::lyplg_type_dup_clb for a generic simple type.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_dup_simple(const struct ly_ctx *ctx, const struct lyd_value *original,
+        struct lyd_value *dup);
+
+/**
+ * @brief Implementation of ::lyplg_type_free_clb for a generic simple type.
+ */
+LIBYANG_API_DECL void lyplg_type_free_simple(const struct ly_ctx *ctx, struct lyd_value *value);
+
+/**
+ * @brief Implementation of ::lyplg_type_lyb_size_clb for a type with variable length in bits.
+ */
+LIBYANG_API_DECL void lyplg_type_lyb_size_variable_bits(const struct lysc_type *type,
+        enum lyplg_lyb_size_type *size_type, uint64_t *fixed_size_bits);
+
+/**
+ * @brief Implementation of ::lyplg_type_lyb_size_clb for a type with variable length rounded to bytes.
+ */
+LIBYANG_API_DECL void lyplg_type_lyb_size_variable_bytes(const struct lysc_type *type,
+        enum lyplg_lyb_size_type *size_type, uint64_t *fixed_size_bits);
+
+/** @} pluginsTypesSimple */
+
+/**
+ * @brief Implementation of ::lyplg_type_free_clb for the built-in instance-identifier type.
+ */
+LIBYANG_API_DECL void lyplg_type_free_instanceid(const struct ly_ctx *ctx, struct lyd_value *value);
+
+/**
+ * @brief Implementation of ::lyplg_type_store_clb for the built-in string type.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_store_string(const struct ly_ctx *ctx, const struct lysc_type *type, const void *value,
+        uint64_t value_size_bits, uint32_t options, LY_VALUE_FORMAT format, void *prefix_data, uint32_t hints,
+        const struct lysc_node *ctx_node, struct lyd_value *storage, struct lys_glob_unres *unres, struct ly_err_item **err);
+
+/**
+ * @brief Implementation of ::lyplg_type_validate_value_clb for the string type.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_validate_value_string(const struct ly_ctx *ctx, const struct lysc_type *type,
+        struct lyd_value *storage, struct ly_err_item **err);
+
+/**
+ * @brief Implementation of ::lyplg_type_print_clb for the ietf-yang-types xpath1.0 type.
+ */
+LIBYANG_API_DECL const void *lyplg_type_print_xpath10(const struct ly_ctx *ctx, const struct lyd_value *value,
+        LY_VALUE_FORMAT format, void *prefix_data, ly_bool *dynamic, uint64_t *value_size_bits);
+
+/**
+ * @brief Implementation of ::lyplg_type_dup_clb for the ietf-yang-types xpath1.0 type.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_dup_xpath10(const struct ly_ctx *ctx, const struct lyd_value *original,
+        struct lyd_value *dup);
+
+/**
+ * @brief Implementation of ::lyplg_type_free_clb for the ietf-yang-types xpath1.0 type.
+ */
+LIBYANG_API_DECL void lyplg_type_free_xpath10(const struct ly_ctx *ctx, struct lyd_value *value);
+
+/**
+ * @brief Unsigned integer value parser and validator.
+ *
+ * @param[in] datatype Type of the integer for logging.
+ * @param[in] base Base of the integer's lexical representation. In case of built-in types, data must be represented in decimal format (base 10),
+ * but default values in schemas can be represented also as hexadecimal or octal values (base 0).
+ * @param[in] min Lower bound of the type.
+ * @param[in] max Upper bound of the type.
+ * @param[in] value Value string to parse.
+ * @param[in] value_len Length of the @p value (mandatory parameter).
+ * @param[out] ret Parsed integer value (optional).
+ * @param[out] err Error information in case of failure. The error structure can be freed by ::ly_err_free().
+ * @return LY_ERR value according to the result of the parsing and validation.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_parse_int(const char *datatype, int base, int64_t min, int64_t max, const char *value,
+        uint32_t value_len, int64_t *ret, struct ly_err_item **err);
+
+/**
+ * @brief Unsigned integer value parser and validator.
+ *
+ * @param[in] datatype Type of the unsigned integer for logging.
+ * @param[in] base Base of the integer's lexical representation. In case of built-in types, data must be represented in decimal format (base 10),
+ * but default values in schemas can be represented also as hexadecimal or octal values (base 0).
+ * @param[in] max Upper bound of the type.
+ * @param[in] value Value string to parse.
+ * @param[in] value_len Length of the @p value (mandatory parameter).
+ * @param[out] ret Parsed unsigned integer value (optional).
+ * @param[out] err Error information in case of failure. The error structure can be freed by ::ly_err_free().
+ * @return LY_ERR value according to the result of the parsing and validation.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_parse_uint(const char *datatype, int base, uint64_t max, const char *value,
+        uint32_t value_len, uint64_t *ret, struct ly_err_item **err);
+
+/**
+ * @brief Convert a string with a decimal64 value into libyang representation:
+ * ret = value * 10^fraction-digits
+ *
+ * @param[in] fraction_digits Fraction-digits of the decimal64 type.
+ * @param[in] value Value string to parse.
+ * @param[in] value_len Length of the @p value (mandatory parameter).
+ * @param[out] ret Parsed decimal64 value representing original value * 10^fraction-digits (optional).
+ * @param[out] err Error information in case of failure. The error structure can be freed by ::ly_err_free().
+ * @return LY_ERR value according to the result of the parsing and validation.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_parse_dec64(uint8_t fraction_digits, const char *value, uint32_t value_len, int64_t *ret,
+        struct ly_err_item **err);
+
+/**
+ * @brief Decide if the @p derived identity is derived from (based on) the @p base identity.
+ *
+ * @param[in] base Expected base identity.
+ * @param[in] derived Expected derived identity.
+ * @return LY_SUCCESS if @p derived IS based on the @p base identity.
+ * @return LY_ENOTFOUND if @p derived IS NOT not based on the @p base identity.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_identity_isderived(const struct lysc_ident *base, const struct lysc_ident *derived);
+
+/**
+ * @brief Data type validator for a range/length-restricted values.
+ *
+ * @param[in] basetype Base built-in type of the type with the range specified to get know if the @p range structure represents range or length restriction.
+ * @param[in] range Range (length) restriction information.
+ * @param[in] value Value to check. In case of basetypes using unsigned integer values, the value is actually cast to uint64_t.
+ * @param[in] strval String representation of the @p value for error logging.
+ * @param[in] strval_len Length of @p strval.
+ * @param[out] err Error information in case of failure. The error structure can be freed by ::ly_err_free().
+ * @return LY_ERR value according to the result of the validation.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_validate_range(LY_DATA_TYPE basetype, struct lysc_range *range, int64_t value,
+        const char *strval, uint32_t strval_len, struct ly_err_item **err);
+
+/**
+ * @brief Data type validator for pattern-restricted string values.
+ *
+ * @param[in] ctx libyang context.
+ * @param[in] patterns ([Sized array](@ref sizedarrays)) of the compiled list of pointers to the pattern restrictions.
+ * The array can be found in the ::lysc_type_str.patterns structure.
+ * @param[in] str String to validate.
+ * @param[in] str_len Length (number of bytes) of the string to validate (mandatory).
+ * @param[out] err Error information in case of failure or non-matching @p str. The error structure can be freed by ::ly_err_free().
+ * @return LY_SUCCESS when @p matches all the patterns.
+ * @return LY_EVALID when @p does not match any of the patterns.
+ * @return LY_ESYS in case of PCRE2 error.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_validate_patterns(const struct ly_ctx *ctx, struct lysc_pattern **patterns,
+        const char *str, uint32_t str_len, struct ly_err_item **err);
+
+/**
+ * @brief Find leafref target in data.
+ *
+ * @param[in] lref Leafref type.
+ * @param[in] node Context node.
+ * @param[in] value Target value.
+ * @param[in] tree Full data tree to search in.
+ * @param[out] targets Pointer to set of target nodes, optional.
+ * @param[out] errmsg Error message in case of error.
+ * @return LY_ERR value.
+ */
+LIBYANG_API_DECL LY_ERR lyplg_type_resolve_leafref(const struct lysc_type_leafref *lref, const struct lyd_node *node,
+        struct lyd_value *value, const struct lyd_node *tree, struct ly_set **targets, char **errmsg);
+
+/**
+ * @brief Learn the position of the highest set bit in a number. Represents also the least amount of bits
+ * required to hold this number.
+ *
+ * @param[in] num Number to use.
+ * @return Position of the highest set bit.
+ */
+LIBYANG_API_DECL uint64_t lyplg_type_get_highest_set_bit_pos(uint64_t num);
+
+/** @} pluginsTypes */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* LY_PLUGINS_TYPES_H_ */
