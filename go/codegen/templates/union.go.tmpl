@@ -1,0 +1,25 @@
+// {{.Name}} is a generated YANG union type for "{{.YangName}}".
+type {{.Name}} interface {
+	is{{.Name}}()
+	XMLValue() string
+	XMLPrefixNS() (string, string, bool)
+	JSONValue() string
+	String() string
+	validate(path string) error
+}
+{{range .Members}}
+{{- if .Fallback}}
+// {{.VariantType}} is the fallback string member of {{$.Name}}.
+type {{.VariantType}} string
+{{- else}}
+// {{.VariantType}} is the {{.Variant}} member of {{$.Name}}.
+{{- if .Wrapper}}
+type {{.VariantType}} struct {
+	Value {{.PayloadType}}
+}
+{{- else}}
+type {{.VariantType}} {{.PayloadType}}
+{{- end}}
+{{- end}}
+{{.Methods}}
+{{end}}

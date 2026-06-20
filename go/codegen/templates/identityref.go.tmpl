@@ -1,0 +1,84 @@
+// {{.Name}} is a generated YANG identityref type for "{{.YangName}}".
+type {{.Name}} int
+
+const (
+{{- range $i, $m := .Members}}
+{{- if eq $i 0}}
+	{{$m.Const}} {{$.Name}} = iota
+{{- else}}
+	{{$m.Const}}
+{{- end}}
+{{- end}}
+)
+
+// AsName returns the bare identity name.
+func (v {{.Name}}) AsName() string {
+	switch v {
+{{- range .Members}}
+	case {{.Const}}:
+		return {{printf "%q" .Name}}
+{{- end}}
+	default:
+		return ""
+	}
+}
+
+// AsJSONName returns the JSON_IETF identity name.
+func (v {{.Name}}) AsJSONName() string {
+	switch v {
+{{- range .Members}}
+	case {{.Const}}:
+		return {{printf "%q" .JSONName}}
+{{- end}}
+	default:
+		return ""
+	}
+}
+
+// XMLPrefixNS returns the XML prefix and namespace for foreign identities.
+func (v {{.Name}}) XMLPrefixNS() (string, string, bool) {
+	switch v {
+{{- range .Members}}
+	case {{.Const}}:
+{{- if .Foreign}}
+		return {{printf "%q" .Prefix}}, {{printf "%q" .Namespace}}, true
+{{- else}}
+		return "", "", false
+{{- end}}
+{{- end}}
+	default:
+		return "", "", false
+	}
+}
+
+// XMLValue returns the XML identity value.
+func (v {{.Name}}) XMLValue() string {
+	switch v {
+{{- range .Members}}
+	case {{.Const}}:
+{{- if .Foreign}}
+		return {{printf "%q" .Prefix}} + ":" + cambiumXMLEscapeText({{printf "%q" .Name}})
+{{- else}}
+		return cambiumXMLEscapeText({{printf "%q" .Name}})
+{{- end}}
+{{- end}}
+	default:
+		return ""
+	}
+}
+
+// String returns the bare identity name.
+func (v {{.Name}}) String() string { return v.AsName() }
+
+// Parse{{.Name}} parses a JSON_IETF identity name.
+func Parse{{.Name}}(name string) ({{.Name}}, bool) {
+	switch name {
+{{- range .Members}}
+	case {{printf "%q" .JSONName}}:
+		return {{.Const}}, true
+{{- end}}
+	default:
+		return 0, false
+	}
+}
+

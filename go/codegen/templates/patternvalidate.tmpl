@@ -1,0 +1,17 @@
+type cambiumStringPattern struct {
+	expr       string
+	nativeExpr string
+	inverted   bool
+}
+
+func cambiumValidateStringPatterns(s string, patterns []cambiumStringPattern) error {
+	for _, p := range patterns {
+		re, err := regexp.Compile("^(?:" + p.nativeExpr + ")$")
+		if err != nil { return fmt.Errorf("invalid pattern expression: %w", err) }
+		matched := re.MatchString(s)
+		if p.inverted { matched = !matched }
+		if !matched { return fmt.Errorf("pattern violation") }
+	}
+	return nil
+}
+

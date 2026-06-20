@@ -1,0 +1,40 @@
+// WithDefaultsMode controls generated JSON_IETF default handling.
+type WithDefaultsMode int
+
+const (
+	WithDefaultsExplicit WithDefaultsMode = iota
+	WithDefaultsTrim
+	WithDefaultsAll
+	WithDefaultsAllTagged
+)
+
+// ValidationError reports the first generated YANG validation failure.
+type ValidationError struct {
+	Path    string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	if e == nil { return "" }
+	if e.Path == "" { return e.Message }
+	return e.Path + ": " + e.Message
+}
+
+func cambiumValidationError(path, message string) error {
+	return &ValidationError{Path: path, Message: message}
+}
+
+func cambiumJoinPath(parent, child string) string {
+	if child == "" { return parent }
+	if parent == "" { return "/" + child }
+	return parent + "/" + child
+}
+
+// CambiumStruct is implemented by every generated YANG data struct.
+type CambiumStruct interface {
+	ToXML() string
+	ToJSONIETF() string
+	ToJSONIETFWithDefaults(WithDefaultsMode) string
+	Validate() error
+}
+

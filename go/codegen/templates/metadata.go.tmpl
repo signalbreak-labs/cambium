@@ -1,0 +1,136 @@
+// MetadataAnnotation is one generated RFC 7952 instance metadata annotation.
+type MetadataAnnotation struct {
+	XMLPrefix    string
+	XMLNamespace string
+	JSONName     string
+	Value        string
+}
+
+// NewMetadataAnnotation creates an instance metadata annotation for generated serializers.
+func NewMetadataAnnotation(xmlPrefix, xmlNamespace, jsonName, value string) MetadataAnnotation {
+	return MetadataAnnotation{XMLPrefix: xmlPrefix, XMLNamespace: xmlNamespace, JSONName: jsonName, Value: value}
+}
+
+func cambiumMetadataModuleBinding(module string) (string, string, bool) {
+	switch module {
+{{- range .Bindings}}
+	case {{printf "%q" .Name}}:
+		return {{printf "%q" .Prefix}}, {{printf "%q" .Namespace}}, true
+{{- end}}
+	default:
+		return "", "", false
+	}
+}
+
+func cambiumMetadataAnnotationDeclared(module, local string) bool {
+{{- if .Annotations}}
+	switch module {
+{{- range .Annotations}}
+	case {{printf "%q" .Module}}:
+		switch local {
+{{- range .Locals}}
+		case {{printf "%q" .}}:
+{{- end}}
+			return true
+		}
+{{- end}}
+	}
+	return false
+{{- else}}
+	return false
+{{- end}}
+}
+
+func cambiumValidateMetadataAnnotation(item MetadataAnnotation) error {
+	if err := cambiumValidateStringValue(item.JSONName); err != nil { return err }
+	if err := cambiumValidateStringValue(item.XMLPrefix); err != nil { return err }
+	if err := cambiumValidateStringValue(item.XMLNamespace); err != nil { return err }
+	if err := cambiumValidateStringValue(item.Value); err != nil { return err }
+	module, local, ok := strings.Cut(item.JSONName, ":")
+	if !ok { return fmt.Errorf("metadata annotation %q must be module-qualified", item.JSONName) }
+	boundPrefix, boundNamespace, ok := cambiumMetadataModuleBinding(module)
+	if !ok { return fmt.Errorf("unknown metadata annotation module %q", module) }
+	if !cambiumMetadataAnnotationDeclared(module, local) { return fmt.Errorf("unknown metadata annotation %q", item.JSONName) }
+	if item.XMLPrefix == "" { return fmt.Errorf("metadata annotation %q is missing XML prefix", item.JSONName) }
+	if item.XMLNamespace == "" { return fmt.Errorf("metadata annotation %q is missing XML namespace", item.JSONName) }
+	if err := cambiumValidateXMLPrefix(item.XMLPrefix); err != nil { return err }
+	if item.XMLNamespace != boundNamespace { return fmt.Errorf("metadata annotation %q has XML namespace %q, want %q", item.JSONName, item.XMLNamespace, boundNamespace) }
+	_ = boundPrefix
+	return nil
+}
+
+func cambiumParseMetadataJSON(raw any, ownerModule, ownerPrefix, ownerNamespace string) ([]MetadataAnnotation, error) {
+	obj, err := cambiumJSONObject(raw, "metadata annotation")
+	if err != nil { return nil, err }
+	keys := make([]string, 0, len(obj))
+	for key := range obj { keys = append(keys, key) }
+	sort.Strings(keys)
+	out := make([]MetadataAnnotation, 0, len(keys))
+	for _, key := range keys {
+		value, err := cambiumJSONString(obj[key], key)
+		if err != nil { return nil, err }
+		xmlPrefix := ""
+		xmlNamespace := ""
+		if module, _, ok := strings.Cut(key, ":"); ok {
+			xmlPrefix = module
+			if module == ownerModule {
+				xmlPrefix = ownerPrefix
+				xmlNamespace = ownerNamespace
+			} else if boundPrefix, boundNamespace, ok := cambiumMetadataModuleBinding(module); ok {
+				xmlPrefix = boundPrefix
+				xmlNamespace = boundNamespace
+			} else {
+				return nil, fmt.Errorf("unknown metadata annotation module %q", module)
+			}
+		} else {
+			return nil, fmt.Errorf("metadata annotation %q must be module-qualified", key)
+		}
+		item := NewMetadataAnnotation(xmlPrefix, xmlNamespace, key, value)
+		if err := cambiumValidateMetadataAnnotation(item); err != nil { return nil, err }
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func cambiumMetadataXMLAttrs(items []MetadataAnnotation) string {
+	if len(items) == 0 { return "" }
+	var b strings.Builder
+	bound := make(map[string]bool)
+	for _, item := range items {
+		if err := cambiumValidateMetadataAnnotation(item); err != nil { continue }
+		local := cambiumMetadataLocalName(item.JSONName)
+		attr := local
+		if item.XMLPrefix != "" {
+			attr = item.XMLPrefix + ":" + local
+			if item.XMLNamespace != "" && !bound[item.XMLPrefix] {
+				b.WriteString(" xmlns:" + item.XMLPrefix + "=\"" + cambiumXMLEscapeAttr(item.XMLNamespace) + "\"")
+				bound[item.XMLPrefix] = true
+			}
+		}
+		b.WriteString(" " + attr + "=\"" + cambiumXMLEscapeAttr(item.Value) + "\"")
+	}
+	return b.String()
+}
+
+func cambiumWriteMetadataJSON(b *strings.Builder, depth int, nodeName string, items []MetadataAnnotation, first *bool) {
+	if len(items) == 0 { return }
+	if !*first { b.WriteByte(',') }
+	*first = false
+	cambiumJSONIndent(b, depth)
+	b.WriteString(cambiumJSONEscape("@" + nodeName) + ": {")
+	for i, item := range items {
+		if i > 0 { b.WriteByte(',') }
+		cambiumJSONIndent(b, depth+1)
+		b.WriteString(cambiumJSONEscape(item.JSONName) + ": " + cambiumJSONEscape(item.Value))
+	}
+	cambiumJSONIndent(b, depth)
+	b.WriteByte('}')
+}
+
+func cambiumMetadataLocalName(name string) string {
+	if i := strings.LastIndexByte(name, ':'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+

@@ -1,0 +1,37 @@
+// AnyData is a generated raw anydata/anyxml value.
+type AnyData struct {
+	xmlValue  string
+	jsonValue string
+}
+
+// NewAnyData creates a raw anydata/anyxml value with separate XML and JSON forms.
+func NewAnyData(xmlValue, jsonValue string) AnyData {
+	return AnyData{xmlValue: xmlValue, jsonValue: jsonValue}
+}
+
+// XMLValue returns raw XML content for the anydata/anyxml value.
+func (a AnyData) XMLValue() string { return a.xmlValue }
+
+// JSONValue returns raw JSON content for the anydata/anyxml value.
+func (a AnyData) JSONValue() string { return a.jsonValue }
+
+func cambiumWriteRawXML(b *strings.Builder, depth int, raw string) {
+	raw = strings.TrimSuffix(raw, "\n")
+	if raw == "" { return }
+	indent := strings.Repeat(" ", depth*2)
+	for _, line := range strings.Split(raw, "\n") {
+		b.WriteString(indent + line + "\n")
+	}
+}
+
+func cambiumWriteRawJSON(b *strings.Builder, depth int, raw string) {
+	raw = strings.TrimSuffix(raw, "\n")
+	if raw == "" { b.WriteString("null"); return }
+	indent := strings.Repeat("  ", depth)
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		if i > 0 { b.WriteByte('\n'); b.WriteString(indent) }
+		b.WriteString(line)
+	}
+}
+

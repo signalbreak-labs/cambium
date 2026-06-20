@@ -1,0 +1,71 @@
+// UserOrderedVec is a positional-only list for YANG ordered-by user nodes.
+type UserOrderedVec[T any] struct {
+	items []T
+}
+
+// NewUserOrderedVec creates a user-ordered vector from items in order.
+func NewUserOrderedVec[T any](items []T) UserOrderedVec[T] {
+	copyItems := append([]T(nil), items...)
+	return UserOrderedVec[T]{items: copyItems}
+}
+
+// InsertFirst inserts value at the first position.
+func (v *UserOrderedVec[T]) InsertFirst(value T) { v.items = append([]T{value}, v.items...) }
+
+// InsertLast inserts value at the last position.
+func (v *UserOrderedVec[T]) InsertLast(value T) { v.items = append(v.items, value) }
+
+// InsertBefore inserts value before index.
+func (v *UserOrderedVec[T]) InsertBefore(index int, value T) {
+	if index < 0 { index = 0 }
+	if index > len(v.items) { index = len(v.items) }
+	v.items = append(v.items[:index], append([]T{value}, v.items[index:]...)...)
+}
+
+// InsertAfter inserts value after index.
+func (v *UserOrderedVec[T]) InsertAfter(index int, value T) { v.InsertBefore(index+1, value) }
+
+// MoveBefore moves one entry before another.
+func (v *UserOrderedVec[T]) MoveBefore(what, point int) {
+	if what < 0 || what >= len(v.items) || point < 0 || point >= len(v.items) || what == point { return }
+	item := v.items[what]
+	v.items = append(v.items[:what], v.items[what+1:]...)
+	if what < point { point-- }
+	v.InsertBefore(point, item)
+}
+
+// MoveAfter moves one entry after another.
+func (v *UserOrderedVec[T]) MoveAfter(what, point int) {
+	if what < 0 || what >= len(v.items) || point < 0 || point >= len(v.items) || what == point { return }
+	item := v.items[what]
+	v.items = append(v.items[:what], v.items[what+1:]...)
+	if what < point { point-- }
+	v.InsertBefore(point+1, item)
+}
+
+// Remove removes and returns index.
+func (v *UserOrderedVec[T]) Remove(index int) T {
+	item := v.items[index]
+	v.items = append(v.items[:index], v.items[index+1:]...)
+	return item
+}
+
+// Len returns the number of entries.
+func (v UserOrderedVec[T]) Len() int { return len(v.items) }
+
+// IsEmpty reports whether the vector has no entries.
+func (v UserOrderedVec[T]) IsEmpty() bool { return len(v.items) == 0 }
+
+// Get returns the entry at index.
+func (v UserOrderedVec[T]) Get(index int) (T, bool) {
+	if index < 0 || index >= len(v.items) { var zero T; return zero, false }
+	return v.items[index], true
+}
+
+// Iter calls yield for each entry in order until yield returns false.
+func (v UserOrderedVec[T]) Iter(yield func(T) bool) {
+	for _, item := range v.items {
+		if !yield(item) { return }
+	}
+}
+

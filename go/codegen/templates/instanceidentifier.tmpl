@@ -1,0 +1,61 @@
+// InstanceIdentifier is a generated YANG instance-identifier value.
+type InstanceIdentifier struct {
+	xmlValue     string
+	jsonValue    string
+	xmlPrefix    string
+	xmlNamespace string
+}
+
+// NewInstanceIdentifier creates an instance-identifier with the same XML and JSON value.
+func NewInstanceIdentifier(value string) InstanceIdentifier {
+	return InstanceIdentifier{xmlValue: value, jsonValue: value}
+}
+
+// NewInstanceIdentifierWithXMLNS creates an instance-identifier with explicit XML/JSON forms and XML namespace binding.
+func NewInstanceIdentifierWithXMLNS(xmlValue, jsonValue, xmlPrefix, xmlNamespace string) InstanceIdentifier {
+	return InstanceIdentifier{xmlValue: xmlValue, jsonValue: jsonValue, xmlPrefix: xmlPrefix, xmlNamespace: xmlNamespace}
+}
+
+// XMLValue returns the XML lexical value.
+func (i InstanceIdentifier) XMLValue() string {
+	value := i.xmlValue
+	if value == "" {
+		value = i.jsonValue
+	}
+	return cambiumXMLEscapeText(value)
+}
+
+// JSONValue returns the JSON_IETF lexical value as a JSON string literal.
+func (i InstanceIdentifier) JSONValue() string {
+	value := i.jsonValue
+	if value == "" {
+		value = i.xmlValue
+	}
+	return cambiumJSONEscape(value)
+}
+
+// XMLPrefixNS returns the XML prefix binding needed by XMLValue.
+func (i InstanceIdentifier) XMLPrefixNS() (string, string, bool) {
+	if i.xmlPrefix == "" || i.xmlNamespace == "" {
+		return "", "", false
+	}
+	return i.xmlPrefix, i.xmlNamespace, true
+}
+
+func (i InstanceIdentifier) validate(path string) error {
+	if i.xmlValue != "" { if err := cambiumValidateStringValue(i.xmlValue); err != nil { return cambiumValidationError(path, err.Error()) } }
+	if i.jsonValue != "" && i.jsonValue != i.xmlValue { if err := cambiumValidateStringValue(i.jsonValue); err != nil { return cambiumValidationError(path, err.Error()) } }
+	if i.xmlPrefix != "" && i.xmlNamespace == "" { return cambiumValidationError(path, "instance-identifier XML namespace binding is missing namespace") }
+	if i.xmlPrefix == "" && i.xmlNamespace != "" { return cambiumValidationError(path, "instance-identifier XML namespace binding is missing prefix") }
+	if err := cambiumValidateXMLPrefix(i.xmlPrefix); err != nil { return cambiumValidationError(path, err.Error()) }
+	return nil
+}
+
+// String returns the JSON_IETF lexical value when present, otherwise the XML lexical value.
+func (i InstanceIdentifier) String() string {
+	if i.jsonValue != "" {
+		return i.jsonValue
+	}
+	return i.xmlValue
+}
+
