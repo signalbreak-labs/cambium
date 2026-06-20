@@ -698,7 +698,7 @@ func unsupportedNativeClassSyntax(runes []rune, start int) (int, string) {
 			if _, end, ok := nativeClassReplacement(runes, start); ok {
 				return end, ""
 			}
-			return i, "character class subtraction is not supported by Go regexp"
+			return i, "unsupported or malformed character class syntax"
 		case ']':
 			return i, ""
 		}
