@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Go default pure gate
+        run: scripts/check-go-default-pure.sh
+      - name: Build static engine
+        run: bash go/internal/libyang/build.sh
+      - name: Go lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: go
+      - name: Go vet + test
+        run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
+      - name: Go conformance runner
+        run: cd go && go run ./cmd/cambium all
+      - name: Engine config diff
+        run: scripts/diff-engine-config.sh
+
+  go-linux-glibc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Go default pure gate
+        run: scripts/check-go-default-pure.sh
+      - name: Build static engine
+        run: bash go/internal/libyang/build.sh
+      - name: Go lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: go
+      - name: Go vet + test
+        run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
+      - name: Go conformance runner
+        run: cd go && go run ./cmd/cambium all
+      - name: Engine config diff
+        run: scripts/diff-engine-config.sh
+
+  go-linux-musl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+      - name: Build static engine for musl
+        env:
+          CAMBIUM_CC: zig cc -target x86_64-linux-musl
+        run: bash go/internal/libyang/build.sh
+      - name: Cross-build Go module for musl
+        env:
+          CGO_ENABLED: 1
+          CC: zig cc -target x86_64-linux-musl
+          GOOS: linux
+          GOARCH: amd64
+        run: cd go && go build -ldflags '-extldflags "-static"' ./...
