@@ -113,9 +113,16 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path string, ou
 			validateLeafValue(*rt, raw, path, out)
 		}
 		// instance existence is a later slice
-	case cambium.ResolvedIdentityRef, cambium.ResolvedInstanceIdentifier:
-		// Deep checks (base derivation, instance resolution) need identity/data
-		// context — a later slice. Verify the JSON shape only.
+	case cambium.ResolvedIdentityRef:
+		s, ok := jsonStringValue(raw)
+		if !ok {
+			*out = append(*out, fmt.Sprintf("%s: expected a JSON string", path))
+			return
+		}
+		validateIdentityRef(r, s, path, out)
+	case cambium.ResolvedInstanceIdentifier:
+		// instance-identifier resolution needs data/XPath context (deferred);
+		// verify the JSON shape only.
 		if _, ok := jsonStringValue(raw); !ok {
 			*out = append(*out, fmt.Sprintf("%s: expected a JSON string", path))
 		}
@@ -155,6 +162,38 @@ func rawDisplay(raw json.RawMessage) string {
 		return strconv.Quote(s)
 	}
 	return string(raw)
+}
+
+// validateIdentityRef checks that value names an identity that is one of the
+// required bases or transitively derived from one. A "module:name" value is
+// matched against qualified names, a bare value against same-module bare names.
+func validateIdentityRef(r cambium.ResolvedIdentityRef, value, path string, out *[]string) {
+	qualified := make(map[string]bool)
+	bare := make(map[string]bool)
+	seen := make(map[string]bool)
+	for _, base := range r.Bases() {
+		collectIdentity(base, qualified, bare, seen)
+	}
+	valid := bare[value]
+	if strings.Contains(value, ":") {
+		valid = qualified[value]
+	}
+	if !valid {
+		*out = append(*out, fmt.Sprintf("%s: %q is not an identity derived from the required base identity", path, value))
+	}
+}
+
+func collectIdentity(id cambium.Identity, qualified, bare, seen map[string]bool) {
+	qn := id.Module().Name() + ":" + id.Name()
+	if seen[qn] {
+		return
+	}
+	seen[qn] = true
+	qualified[qn] = true
+	bare[id.Name()] = true
+	for _, derived := range id.Derived() {
+		collectIdentity(derived, qualified, bare, seen)
+	}
 }
 
 func enumHasName(values []cambium.EnumValue, name string) bool {
