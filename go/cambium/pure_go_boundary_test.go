@@ -134,9 +134,13 @@ func TestPureGoNoGoyangDependencyClosure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("go list cgo-free dependency closure failed:\n%s", out)
 	}
+	const vendoredGoyang = "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream"
 	for _, dep := range strings.Fields(string(out)) {
 		if strings.HasPrefix(dep, "github.com/openconfig/goyang") {
 			t.Fatalf("default dependency closure contains goyang package %q\n%s", dep, out)
+		}
+		if strings.HasPrefix(dep, vendoredGoyang) {
+			t.Fatalf("default dependency closure contains vendored goyang package %q\n%s", dep, out)
 		}
 	}
 }
