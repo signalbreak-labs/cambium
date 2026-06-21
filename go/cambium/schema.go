@@ -3795,6 +3795,17 @@ func (c SchemaChildren) Lookup(name string) (SchemaNodeRef, bool) {
 	return SchemaNodeRef{}, false
 }
 
+// LookupAll returns every child with the given local name in schema order.
+func (c SchemaChildren) LookupAll(name string) SchemaChildren {
+	var out []SchemaNodeRef
+	for _, n := range c.nodes {
+		if n.Name() == name {
+			out = append(out, n)
+		}
+	}
+	return SchemaChildren{nodes: out}
+}
+
 // LookupQualified returns the child with the given defining module and local name.
 func (c SchemaChildren) LookupQualified(module, name string) (SchemaNodeRef, bool) {
 	return c.LookupQName(QualifiedName{Module: module, Name: name})
@@ -3828,6 +3839,16 @@ func (c SchemaChildren) LookupQName(qname QualifiedName) (SchemaNodeRef, bool) {
 	}
 	return SchemaNodeRef{}, false
 }
+
+// QualifiedNames returns each child qualified by its defining module, in schema order.
+func (c SchemaChildren) QualifiedNames() []QualifiedName {
+	out := make([]QualifiedName, len(c.nodes))
+	for i, n := range c.nodes {
+		out[i] = n.QualifiedName()
+	}
+	return out
+}
+
 func (c SchemaChildren) Iter() iter.Seq[SchemaNodeRef] {
 	return func(yield func(SchemaNodeRef) bool) {
 		for _, n := range c.nodes {
