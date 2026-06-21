@@ -138,7 +138,7 @@ func TestCompatParseMatchesGoyangEdgeCases(t *testing.T) {
 	}
 }
 
-func compareCompatStatementsToGoyang(got, want []*compat.Statement) error {
+func compareCompatStatementsToGoyang(got []*compat.Statement, want []*upstream.Statement) error {
 	if len(got) != len(want) {
 		return fmt.Errorf("statement count compat=%d goyang=%d", len(got), len(want))
 	}
@@ -150,7 +150,7 @@ func compareCompatStatementsToGoyang(got, want []*compat.Statement) error {
 	return nil
 }
 
-func compareCompatStatementToGoyang(got, want *compat.Statement, path string) error {
+func compareCompatStatementToGoyang(got *compat.Statement, want *upstream.Statement, path string) error {
 	switch {
 	case got == nil && want == nil:
 		return nil

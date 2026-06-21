@@ -13,8 +13,8 @@ func TestFixChoiceWrapsImplicitCasesLikeGoyangAndMaintainsOrder(t *testing.T) {
 	choiceStmt := &Statement{Keyword: "choice", Argument: "select", HasArgument: true}
 	leafStmt := &Statement{Keyword: "leaf", Argument: "direct", HasArgument: true}
 
-	upstreamChoiceNode := &upstream.Choice{Name: "select", Source: choiceStmt}
-	upstreamLeafNode := &upstream.Leaf{Name: "direct", Source: leafStmt, Parent: upstreamChoiceNode}
+	upstreamChoiceNode := &upstream.Choice{Name: "select"}
+	upstreamLeafNode := &upstream.Leaf{Name: "direct", Parent: upstreamChoiceNode}
 	upstreamChoice := &upstream.Entry{
 		Name:   "select",
 		Kind:   upstream.ChoiceEntry,

@@ -5,7 +5,6 @@ package compat
 
 import (
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
-	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 func compatStatementsFromNative(in []*yangparse.Statement) []*Statement {
@@ -25,7 +24,14 @@ func compatStatementFromNative(in *yangparse.Statement) *Statement {
 	if in == nil {
 		return nil
 	}
-	children := compatStatementsFromNative(in.SubStatements())
 	file, line, col := in.Position()
-	return upstream.CambiumInternalStatement(in.Keyword, in.HasArgument, in.Argument, children, file, line, col)
+	return &Statement{
+		Keyword:     in.Keyword,
+		HasArgument: in.HasArgument,
+		Argument:    in.Argument,
+		statements:  compatStatementsFromNative(in.SubStatements()),
+		file:        file,
+		line:        line,
+		col:         col,
+	}
 }

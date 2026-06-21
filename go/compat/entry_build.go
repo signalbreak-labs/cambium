@@ -32,7 +32,7 @@ type DeviatedEntry struct {
 }
 
 // ToEntry projects a goyang-style AST node into an Entry tree.
-func ToEntry(n Node) *Entry {
+func ToEntry(n any) *Entry {
 	switch value := n.(type) {
 	case nil:
 		return errorEntry(fmt.Errorf("ToEntry called on nil AST node"))
@@ -46,19 +46,25 @@ func ToEntry(n Node) *Entry {
 		return entryFromGroupingNode(value)
 	case *Statement:
 		return entryFromStatement(value, nil)
-	default:
+	case upstream.Node:
 		if native := nativeNodeFromUpstreamNode(value); native != nil {
 			return ToEntry(native)
 		}
-		return entryFromASTNode(value)
+		return errorEntry(fmt.Errorf("ToEntry upstream AST node %q has no native projection", value.NName()))
+	default:
+		node, ok := value.(Node)
+		if !ok {
+			return errorEntry(fmt.Errorf("ToEntry called on unsupported AST node %T", n))
+		}
+		return entryFromASTNode(node)
 	}
 }
 
-func nativeNodeFromUpstreamNode(node Node) Node {
+func nativeNodeFromUpstreamNode(node upstream.Node) Node {
 	if node == nil {
 		return nil
 	}
-	if !isRawUpstreamASTNode(node) {
+	if _, ok := node.(*upstream.Statement); ok {
 		return nil
 	}
 	upstreamRoot := upstream.RootNode(node)
@@ -70,25 +76,15 @@ func nativeNodeFromUpstreamNode(node Node) Node {
 	if stmt == nil {
 		return root
 	}
-	return findNodeByStatement(root, stmt)
+	return findNodeByUpstreamStatement(root, stmt)
 }
 
-func isRawUpstreamASTNode(node Node) bool {
-	typ := reflect.TypeOf(node)
-	if typ == nil || typ.Kind() != reflect.Pointer {
-		return false
-	}
-	if typ.Elem().PkgPath() != "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang" {
-		return false
-	}
-	return typ.Elem().Name() != "Statement"
-}
-
-func findNodeByStatement(node Node, stmt *Statement) Node {
+func findNodeByUpstreamStatement(node Node, stmt *upstream.Statement) Node {
 	if node == nil || stmt == nil {
 		return nil
 	}
-	if node.Statement() == stmt {
+	nodeStmt := node.Statement()
+	if statementsMatchUpstream(nodeStmt, stmt) {
 		return node
 	}
 	value := reflect.ValueOf(node)
@@ -102,12 +98,22 @@ func findNodeByStatement(node Node, stmt *Statement) Node {
 			continue
 		}
 		for _, child := range childNodesFromField(value.Field(i)) {
-			if found := findNodeByStatement(child, stmt); found != nil {
+			if found := findNodeByUpstreamStatement(child, stmt); found != nil {
 				return found
 			}
 		}
 	}
 	return nil
+}
+
+func statementsMatchUpstream(got *Statement, want *upstream.Statement) bool {
+	if got == nil || want == nil {
+		return false
+	}
+	return got.Keyword == want.Keyword &&
+		got.HasArgument == want.HasArgument &&
+		got.Argument == want.Argument &&
+		got.Location() == want.Location()
 }
 
 func entryFromCambiumModule(module cambium.Module) *Entry {

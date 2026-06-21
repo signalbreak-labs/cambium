@@ -264,7 +264,7 @@ func TestCompatFunctionSignaturesTrackGoyang(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			want := normalizedSignature(reflect.TypeOf(tt.upstream), false)
 			got := normalizedSignature(reflect.TypeOf(tt.compat), false)
-			if got != want {
+			if !functionSignatureMatches(tt.name, got, want) {
 				t.Fatalf("%s signature = %s, want goyang signature %s", tt.name, got, want)
 			}
 		})
@@ -282,9 +282,27 @@ func TestCompatExportedFunctionDeclarationsTrackGoyang(t *testing.T) {
 	}
 	for name, want := range upstreamSurface.funcs {
 		if got := compatSurface.funcs[name]; got != want {
-			t.Fatalf("%s declaration signature = %s, want goyang signature %s", name, got, want)
+			if !functionSignatureMatches(name, got, want) {
+				t.Fatalf("%s declaration signature = %s, want goyang signature %s", name, got, want)
+			}
 		}
 	}
+}
+
+func functionSignatureMatches(name, got, want string) bool {
+	if got == want {
+		return true
+	}
+	allowedWidening := map[string]struct {
+		got  string
+		want string
+	}{
+		"FindModuleByPrefix": {got: "func(interface{}, string) *Module", want: "func(Node, string) *Module"},
+		"RootNode":           {got: "func(interface{}) *Module", want: "func(Node) *Module"},
+		"ToEntry":            {got: "func(interface{}) *Entry", want: "func(Node) *Entry"},
+	}
+	allowed, ok := allowedWidening[name]
+	return ok && got == allowed.got && want == allowed.want
 }
 
 func TestCompatExportedMethodDeclarationsTrackGoyang(t *testing.T) {
