@@ -5,6 +5,7 @@ package compat_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -70,6 +71,111 @@ func TestParserHelpersExposeGoyangStatementShape(t *testing.T) {
 		!strings.Contains(got, `container "top"`) {
 		t.Fatalf("Statement.Write output = %q, want module and container", got)
 	}
+}
+
+func TestCompatParseMatchesGoyangEdgeCases(t *testing.T) {
+	const bom = "\ufeff"
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "escaped double quoted argument",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; description \"a\\nb\\tc\\\"d\\\\e\"; } }\n",
+		},
+		{
+			name:   "mixed quoted concatenation",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; description \"x\" + 'y' + \"z\"; } }\n",
+		},
+		{
+			name:   "tabs in multiline quote indentation",
+			source: "module m {\n\tnamespace \"u\";\n\tprefix p;\n\tdescription \"a\n\t            b\";\n}\n",
+		},
+		{
+			name:   "bare CR in quoted argument",
+			source: "module m {\n namespace \"u\"; prefix p;\n description \"a  \r b\";\n}\n",
+		},
+		{
+			name:   "CRLF line endings",
+			source: "module m {\r\n namespace \"u\";\r\n prefix p;\r\n description \"l1\r\n l2\";\r\n}\r\n",
+		},
+		{
+			name:   "empty and comment only input",
+			source: "// only a comment\n/* and a block */\n",
+		},
+		{
+			name:   "leading BOM",
+			source: bom + "module m { namespace \"u\"; prefix p; }\n",
+		},
+		{
+			name:   "unquoted concatenation rejected",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; description foo + bar; } }\n",
+		},
+		{
+			name:   "quoted plus unquoted rejected",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; default \"a\" + b; } }\n",
+		},
+		{
+			name:   "hash comment rejected",
+			source: "module m { namespace \"u\"; prefix p; # not a YANG comment\n}\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := compat.Parse(tt.source, tt.name+".yang")
+			want, wantErr := upstream.Parse(tt.source, tt.name+".yang")
+			if (gotErr == nil) != (wantErr == nil) {
+				t.Fatalf("Parse accept/reject mismatch: compat err=%v goyang err=%v", gotErr, wantErr)
+			}
+			if gotErr != nil {
+				return
+			}
+			if err := compareCompatStatementsToGoyang(got, want); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func compareCompatStatementsToGoyang(got, want []*compat.Statement) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("statement count compat=%d goyang=%d", len(got), len(want))
+	}
+	for i := range got {
+		if err := compareCompatStatementToGoyang(got[i], want[i], fmt.Sprintf("statements[%d]", i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func compareCompatStatementToGoyang(got, want *compat.Statement, path string) error {
+	switch {
+	case got == nil && want == nil:
+		return nil
+	case got == nil || want == nil:
+		return fmt.Errorf("%s nil mismatch compat=%v goyang=%v", path, got == nil, want == nil)
+	case got.Keyword != want.Keyword:
+		return fmt.Errorf("%s keyword compat=%q goyang=%q", path, got.Keyword, want.Keyword)
+	case got.HasArgument != want.HasArgument:
+		return fmt.Errorf("%s has-argument compat=%v goyang=%v", path, got.HasArgument, want.HasArgument)
+	case got.Argument != want.Argument:
+		return fmt.Errorf("%s argument compat=%q goyang=%q", path, got.Argument, want.Argument)
+	case got.Location() != want.Location():
+		return fmt.Errorf("%s location compat=%q goyang=%q", path, got.Location(), want.Location())
+	}
+	gotChildren := got.SubStatements()
+	wantChildren := want.SubStatements()
+	if len(gotChildren) != len(wantChildren) {
+		return fmt.Errorf("%s child count compat=%d goyang=%d", path, len(gotChildren), len(wantChildren))
+	}
+	for i := range gotChildren {
+		if err := compareCompatStatementToGoyang(gotChildren[i], wantChildren[i], fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestPathsWithModules(t *testing.T) {
@@ -338,6 +444,38 @@ func TestFindModuleByPrefixFromSubmoduleMatchesGoyang(t *testing.T) {
 	}
 	if got != nil && (got.Name != want.Name || got.Kind() != want.Kind()) {
 		t.Fatalf("FindModuleByPrefix(submodule owner name) = %s:%s, want goyang %s:%s", got.Kind(), got.Name, want.Kind(), want.Name)
+	}
+}
+
+func TestFindModuleByPrefixDoesNotTreatModuleNameAsPrefix(t *testing.T) {
+	source := `module compat-prefix-name {
+    namespace "urn:compat-prefix-name";
+    prefix cpn;
+
+    container top {
+        leaf value { type string; }
+    }
+}
+`
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-prefix-name.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	upstreamModules := upstream.NewModules()
+	if err := upstreamModules.Parse(source, "compat-prefix-name.yang"); err != nil {
+		t.Fatalf("upstream Parse: %v", err)
+	}
+
+	compatTop := compat.ChildNode(compatModules.Modules["compat-prefix-name"], "top")
+	upstreamTop := upstream.ChildNode(upstreamModules.Modules["compat-prefix-name"], "top")
+	if compatTop == nil || upstreamTop == nil {
+		t.Fatalf("ChildNode(top) = (%#v,%#v), want both non-nil", compatTop, upstreamTop)
+	}
+
+	got := compat.FindModuleByPrefix(compatTop, "compat-prefix-name")
+	want := upstream.FindModuleByPrefix(upstreamTop, "compat-prefix-name")
+	if (got == nil) != (want == nil) {
+		t.Fatalf("FindModuleByPrefix(module name) nil = %v, want goyang %v", got == nil, want == nil)
 	}
 }
 

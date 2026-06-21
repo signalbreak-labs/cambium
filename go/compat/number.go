@@ -7,33 +7,33 @@ import (
 	"errors"
 	"sort"
 
-	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
+	"github.com/signalbreak-labs/cambium/go/cambium"
 )
 
 const (
 	// MaxInt64 corresponds to the maximum value of a signed int64.
-	MaxInt64 = 1<<63 - 1
+	MaxInt64 = cambium.MaxInt64
 	// MinInt64 corresponds to the minimum value of a signed int64.
-	MinInt64 = -1 << 63
+	MinInt64 = cambium.MinInt64
 	// MinDecimal64 and MaxDecimal64 are the decimal64 numeric limits.
-	MinDecimal64 float64 = -922337203685477580.8
-	MaxDecimal64 float64 = 922337203685477580.7
+	MinDecimal64 float64 = cambium.MinDecimal64
+	MaxDecimal64 float64 = cambium.MaxDecimal64
 	// AbsMinInt64 is the absolute value of MinInt64.
-	AbsMinInt64 = 1 << 63
+	AbsMinInt64 = cambium.AbsMinInt64
 	// MaxFractionDigits is the maximum number of decimal64 fraction digits.
-	MaxFractionDigits uint8 = 18
+	MaxFractionDigits uint8 = cambium.MaxFractionDigits
 )
 
 var (
-	Int8Range  = fromUpstreamRange(upstream.Int8Range)
-	Int16Range = fromUpstreamRange(upstream.Int16Range)
-	Int32Range = fromUpstreamRange(upstream.Int32Range)
-	Int64Range = fromUpstreamRange(upstream.Int64Range)
+	Int8Range  = fromCambiumRange(cambium.Int8Range)
+	Int16Range = fromCambiumRange(cambium.Int16Range)
+	Int32Range = fromCambiumRange(cambium.Int32Range)
+	Int64Range = fromCambiumRange(cambium.Int64Range)
 
-	Uint8Range  = fromUpstreamRange(upstream.Uint8Range)
-	Uint16Range = fromUpstreamRange(upstream.Uint16Range)
-	Uint32Range = fromUpstreamRange(upstream.Uint32Range)
-	Uint64Range = fromUpstreamRange(upstream.Uint64Range)
+	Uint8Range  = fromCambiumRange(cambium.Uint8Range)
+	Uint16Range = fromCambiumRange(cambium.Uint16Range)
+	Uint32Range = fromCambiumRange(cambium.Uint32Range)
+	Uint64Range = fromCambiumRange(cambium.Uint64Range)
 )
 
 // Trunc returns the whole part of abs(n).
@@ -101,52 +101,49 @@ func (r YangRange) Contains(s YangRange) bool {
 
 // FromInt creates a Number from an int64.
 func FromInt(i int64) Number {
-	if i < 0 {
-		return Number{Negative: true, Value: uint64(-i)}
-	}
-	return Number{Value: uint64(i)}
+	return fromCambiumNumber(cambium.FromInt(i))
 }
 
 // FromUint creates a Number from a uint64.
 func FromUint(i uint64) Number {
-	return Number{Value: i}
+	return fromCambiumNumber(cambium.FromUint(i))
 }
 
 // FromFloat creates a decimal Number from f using goyang decimal64 behavior.
 func FromFloat(f float64) Number {
-	return fromUpstreamNumber(upstream.FromFloat(f))
+	return fromCambiumNumber(cambium.FromFloat(f))
 }
 
 // ParseInt parses s as a goyang-compatible integer Number.
 func ParseInt(s string) (Number, error) {
-	n, err := upstream.ParseInt(s)
-	return fromUpstreamNumber(n), err
+	n, err := cambium.ParseInt(s)
+	return fromCambiumNumber(n), err
 }
 
 // ParseDecimal parses s as a goyang-compatible decimal64 Number.
 func ParseDecimal(s string, fracDigRequired uint8) (Number, error) {
-	n, err := upstream.ParseDecimal(s, fracDigRequired)
-	return fromUpstreamNumber(n), err
+	n, err := cambium.ParseDecimal(s, fracDigRequired)
+	return fromCambiumNumber(n), err
 }
 
 // ParseRangesInt parses an integer range expression.
 func ParseRangesInt(s string) (YangRange, error) {
-	r, err := upstream.ParseRangesInt(s)
-	return fromUpstreamRange(r), err
+	r, err := cambium.ParseRangesInt(s)
+	return fromCambiumRange(r), err
 }
 
 // ParseRangesDecimal parses a decimal64 range expression.
 func ParseRangesDecimal(s string, fracDigRequired uint8) (YangRange, error) {
-	r, err := upstream.ParseRangesDecimal(s, fracDigRequired)
-	return fromUpstreamRange(r), err
+	r, err := cambium.ParseRangesDecimal(s, fracDigRequired)
+	return fromCambiumRange(r), err
 }
 
 // Frac returns the fractional part of f.
 func Frac(f float64) float64 {
-	return upstream.Frac(f)
+	return cambium.Frac(f)
 }
 
-func fromUpstreamNumber(n upstream.Number) Number {
+func fromCambiumNumber(n cambium.Number) Number {
 	return Number{
 		Value:          n.Value,
 		FractionDigits: n.FractionDigits,
@@ -154,12 +151,12 @@ func fromUpstreamNumber(n upstream.Number) Number {
 	}
 }
 
-func fromUpstreamRange(r upstream.YangRange) YangRange {
+func fromCambiumRange(r cambium.YangRange) YangRange {
 	out := make(YangRange, 0, len(r))
 	for _, part := range r {
 		out = append(out, YRange{
-			Min: fromUpstreamNumber(part.Min),
-			Max: fromUpstreamNumber(part.Max),
+			Min: fromCambiumNumber(part.Min),
+			Max: fromCambiumNumber(part.Max),
 		})
 	}
 	return out

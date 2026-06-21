@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 // TypeKind is the goyang-compatible enumeration of YANG built-in base types.
@@ -242,9 +241,9 @@ func yangTypeForTypeStatement(stmt *Statement, typedefScopes statementTypedefSco
 		typ.Base = &Type{
 			Name:   stmt.Argument,
 			Source: typeStatement(stmt.Argument),
-			YangType: &upstream.YangType{
+			YangType: &YangType{
 				Name: stmt.Argument,
-				Kind: upstream.TypeKind(kind),
+				Kind: kind,
 			},
 		}
 	}
@@ -299,7 +298,7 @@ func yangTypeForTypeStatement(stmt *Statement, typedefScopes statementTypedefSco
 		resolved.Base = &Type{
 			Name:     baseStmt.Argument,
 			Source:   typeStatement(baseStmt.Argument),
-			YangType: upstreamYangTypeFromCompat(base),
+			YangType: base,
 		}
 	}
 	if units := childArgument(typedef.stmt, "units"); units != "" {
@@ -546,23 +545,27 @@ func typedefSeenKey(stmt *Statement, resolver Node) string {
 	return stmt.Keyword + ":" + stmt.Argument
 }
 
-func upstreamYangTypeFromCompat(typ *YangType) *upstream.YangType {
-	if typ == nil {
-		return nil
-	}
-	out := &upstream.YangType{
-		Name:           typ.Name,
-		Kind:           upstream.TypeKind(typ.Kind),
-		Default:        typ.Default,
-		HasDefault:     typ.HasDefault,
-		FractionDigits: typ.FractionDigits,
-		Units:          typ.Units,
-	}
-	if typ.Base != nil {
-		out.Base = &upstream.Type{
-			Name:     typ.Base.Name,
-			Source:   typ.Base.Source,
-			YangType: typ.Base.YangType,
+func newBaseTypedefs() map[string]*Typedef {
+	out := make(map[string]*Typedef, len(TypeKindFromName)-1)
+	for name, kind := range TypeKindFromName {
+		if kind == Ynone {
+			continue
+		}
+		typ := &YangType{
+			Name:  name,
+			Kind:  kind,
+			Range: defaultRangeForTypeKind(kind),
+		}
+		typ.Root = typ
+		out[name] = &Typedef{
+			Name:   name,
+			Source: &Statement{},
+			Type: &Type{
+				Name:     name,
+				Source:   &Statement{},
+				YangType: typ,
+			},
+			YangType: typ,
 		}
 	}
 	return out
@@ -678,14 +681,14 @@ func typeBaseForTypedefChain(chain []string, base cambium.BaseType) *Type {
 	if baseName == "" || baseName == "unknown" {
 		return nil
 	}
-	root := upstreamYangTypeRootForBase(base)
+	root := yangTypeRootForBase(base)
 	nextName := baseName
-	nextYang := upstreamResolvedYangTypeForBase(base, root)
+	nextYang := resolvedYangTypeForBase(base, root)
 	for i := len(chain) - 1; i >= 0; i-- {
 		name := chain[i]
-		nextYang = &upstream.YangType{
+		nextYang = &YangType{
 			Name: name,
-			Kind: upstreamTypeKindForBase(base),
+			Kind: typeKindForBase(base),
 			Base: &Type{
 				Name:     nextName,
 				Source:   typeStatement(nextName),
@@ -702,11 +705,11 @@ func typeBaseForTypedefChain(chain []string, base cambium.BaseType) *Type {
 	}
 }
 
-func upstreamResolvedYangTypeForBase(base cambium.BaseType, root *upstream.YangType) *upstream.YangType {
+func resolvedYangTypeForBase(base cambium.BaseType, root *YangType) *YangType {
 	name := base.String()
-	return &upstream.YangType{
+	return &YangType{
 		Name: name,
-		Kind: upstreamTypeKindForBase(base),
+		Kind: typeKindForBase(base),
 		Base: &Type{
 			Name:     name,
 			Source:   typeStatement(name),
@@ -714,20 +717,6 @@ func upstreamResolvedYangTypeForBase(base cambium.BaseType, root *upstream.YangT
 		},
 		Root: root,
 	}
-}
-
-func upstreamYangTypeRootForBase(base cambium.BaseType) *upstream.YangType {
-	name := base.String()
-	root := &upstream.YangType{
-		Name: name,
-		Kind: upstreamTypeKindForBase(base),
-	}
-	root.Root = root
-	return root
-}
-
-func upstreamTypeKindForBase(base cambium.BaseType) upstream.TypeKind {
-	return upstream.TypeKind(typeKindForBase(base))
 }
 
 func typeStatement(name string) *Statement {

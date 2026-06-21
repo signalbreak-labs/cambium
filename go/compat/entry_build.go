@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
+	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 // UsesStmt associates a uses statement with the grouping entry it references.
@@ -46,8 +47,67 @@ func ToEntry(n Node) *Entry {
 	case *Statement:
 		return entryFromStatement(value, nil)
 	default:
+		if native := nativeNodeFromUpstreamNode(value); native != nil {
+			return ToEntry(native)
+		}
 		return entryFromASTNode(value)
 	}
+}
+
+func nativeNodeFromUpstreamNode(node Node) Node {
+	if node == nil {
+		return nil
+	}
+	if !isRawUpstreamASTNode(node) {
+		return nil
+	}
+	upstreamRoot := upstream.RootNode(node)
+	root := moduleFromUpstreamModule(upstreamRoot)
+	if root == nil {
+		return nil
+	}
+	stmt := node.Statement()
+	if stmt == nil {
+		return root
+	}
+	return findNodeByStatement(root, stmt)
+}
+
+func isRawUpstreamASTNode(node Node) bool {
+	typ := reflect.TypeOf(node)
+	if typ == nil || typ.Kind() != reflect.Pointer {
+		return false
+	}
+	if typ.Elem().PkgPath() != "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang" {
+		return false
+	}
+	return typ.Elem().Name() != "Statement"
+}
+
+func findNodeByStatement(node Node, stmt *Statement) Node {
+	if node == nil || stmt == nil {
+		return nil
+	}
+	if node.Statement() == stmt {
+		return node
+	}
+	value := reflect.ValueOf(node)
+	if value.Kind() != reflect.Pointer || value.IsNil() || value.Elem().Kind() != reflect.Struct {
+		return nil
+	}
+	value = value.Elem()
+	typ := value.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		if typ.Field(i).Tag.Get("yang") == "" {
+			continue
+		}
+		for _, child := range childNodesFromField(value.Field(i)) {
+			if found := findNodeByStatement(child, stmt); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
 }
 
 func entryFromCambiumModule(module cambium.Module) *Entry {
@@ -89,6 +149,12 @@ func entryFromCompatModule(module *Module) *Entry {
 		entry := entryFromCambiumModule(schema)
 		setModuleEntry(module, entry)
 		return entry
+	}
+	if module.Source != nil {
+		if entry := entryFromCompatModuleSource(module); entry != nil {
+			setModuleEntry(module, entry)
+			return entry
+		}
 	}
 	entry := entryFromASTNode(module)
 	if entry != nil {

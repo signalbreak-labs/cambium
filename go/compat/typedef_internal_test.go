@@ -53,7 +53,7 @@ func TestRawASTIncludedTypedefFallback(t *testing.T) {
 	parent.Include = []*Include{{
 		Name:   "compat-raw-typedef-include-sub",
 		Parent: parent,
-		Module: submodule,
+		Module: moduleFromASTModule(submodule),
 	}}
 
 	leaf := ToEntry(parent).Find("value")
@@ -138,7 +138,7 @@ func TestRawASTImportedIdentityRefFallbackMatchesGoyang(t *testing.T) {
 		Name:   "compat-raw-identity-imported",
 		Parent: parent,
 		Prefix: &ASTValue{Name: "crii"},
-		Module: imported,
+		Module: moduleFromASTModule(imported),
 	}}
 
 	compatLeaf := ToEntry(parent).Find("value")
