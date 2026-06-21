@@ -60,6 +60,25 @@ func TestSchemaChildrenLookupQualifiedDisambiguatesAugments(t *testing.T) {
 	}
 
 	children := top.Children()
+	states := children.LookupAll("state")
+	if states.Len() != 2 {
+		t.Fatalf("LookupAll(state).Len() = %d, want 2", states.Len())
+	}
+	firstState, ok := states.Get(0)
+	if !ok || firstState.Module().Name() != "qualified-left" {
+		t.Fatalf("LookupAll(state)[0] = (%q,%v), want qualified-left", firstState.Module().Name(), ok)
+	}
+	secondState, ok := states.Get(1)
+	if !ok || secondState.Module().Name() != "qualified-right" {
+		t.Fatalf("LookupAll(state)[1] = (%q,%v), want qualified-right", secondState.Module().Name(), ok)
+	}
+	if states.QualifiedNames()[0] != (cambium.QualifiedName{Module: "qualified-left", Prefix: "ql", Namespace: "urn:qualified-left", Name: "state"}) {
+		t.Fatalf("LookupAll(state).QualifiedNames()[0] = %#v", states.QualifiedNames()[0])
+	}
+	if children.LookupAll("missing").Len() != 0 {
+		t.Fatal("LookupAll(missing) returned matches")
+	}
+
 	left, ok := children.LookupQualified("qualified-left", "state")
 	if !ok {
 		t.Fatal("LookupQualified(qualified-left, state) not found")
