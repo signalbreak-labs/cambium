@@ -3,8 +3,8 @@
 
 // Package yangparse is Cambium's internal pure-Go YANG parser adapter.
 //
-// It deliberately hides the vendored upstream parser package from public
-// Cambium code so the default Go API owns its parser boundary.
+// It deliberately hides parser implementation details from public Cambium code
+// so the default Go API owns its parser boundary.
 package yangparse
 
 import (
