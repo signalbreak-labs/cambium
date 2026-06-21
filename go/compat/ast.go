@@ -15,8 +15,11 @@ import (
 	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
-// Statement is a generic parsed YANG statement.
-type Statement = yangparse.Statement
+// Statement is a generic parsed YANG statement. The compat layer is the
+// goyang-compatible surface, so it intentionally exposes the upstream-shaped
+// statement type (and parses via upstream) rather than Cambium's own cgo-free
+// parser, which the default schema/codegen tier uses.
+type Statement = upstream.Statement
 
 // Node is the goyang-style parsed AST node interface.
 type Node = upstream.Node
@@ -80,7 +83,23 @@ var BaseTypedefs = upstream.BaseTypedefs
 
 // Parse parses generic YANG source into ordered statements.
 func Parse(input, path string) ([]*Statement, error) {
-	return yangparse.Parse(input, path)
+	return parseStatements(input, path)
+}
+
+// parseStatements parses YANG source into upstream-shaped statements, applying
+// the same pre-parse bounds/safety checks as the default parser. The compat
+// surface deliberately keeps the upstream parser; the default tier does not.
+func parseStatements(input, name string) (stmts []*Statement, err error) {
+	if err := yangparse.CheckInputBounds(input, name); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			stmts = nil
+			err = fmt.Errorf("%s: YANG parser panic: %v", name, recovered)
+		}
+	}()
+	return upstream.Parse(input, name)
 }
 
 // PathsWithModules returns directories under root that contain .yang files.

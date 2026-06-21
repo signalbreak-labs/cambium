@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
 )
 
 var revisionDateSuffixRegex = regexp.MustCompile(`^@\d{4}-\d{2}-\d{2}\.yang$`)
@@ -514,7 +513,7 @@ func (ms *Modules) stageInMemorySources() (stagedInMemorySources, func(), error)
 		if source.path != "" {
 			continue
 		}
-		stmts, err := yangparse.Parse(source.data, source.name)
+		stmts, err := parseStatements(source.data, source.name)
 		if err != nil {
 			cleanup()
 			return stagedInMemorySources{}, func() {}, err
