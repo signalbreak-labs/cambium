@@ -18,16 +18,21 @@ func (e *ValidationError) Error() string {
 		len(e.Violations), strings.Join(e.Violations, "; "))
 }
 
-// Validate checks constraints that need no XPath engine: mandatory leaves present,
-// list / leaf-list min- and max-elements, leaf-list value uniqueness, list keys
-// present in every entry, list key uniqueness, and per-leaf value types. It
-// returns a *ValidationError listing every violation, or nil if the tree is valid.
+// Validate checks: mandatory leaves present, list / leaf-list min- and
+// max-elements, leaf-list value uniqueness, list keys present in every entry,
+// list key uniqueness, per-leaf value types, leafref instance existence, and
+// must/when XPath constraints. It returns a *ValidationError listing every
+// violation, or nil if the tree is valid.
 //
-// It does NOT yet check must/when XPath, leafref instance existence, or
-// instance-identifier resolution, which remain the libyang backend's domain.
+// must/when expressions and leafref paths that use constructs outside the
+// supported XPath subset (unimplemented functions, explicit axes, unresolved
+// prefixes) are SKIPPED rather than mis-evaluated — the engine never produces a
+// wrong verdict, it under-claims coverage. instance-identifier resolution is not
+// yet checked.
 func (t *Tree) Validate() error {
 	var violations []string
 	validateLevel(flattenTopLevel(t.module), [][]*node{t.roots}, "", &violations)
+	t.checkMustWhen(&violations)
 	if len(violations) == 0 {
 		return nil
 	}
