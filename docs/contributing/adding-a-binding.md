@@ -29,7 +29,7 @@ binding implements against:
 
 ## The four steps
 
-1. **Implement under `/<lang>/`** (for example `/rust/`), mirroring `/go/`'s split:
+1. **Implement under `/<lang>/`**, mirroring `/go/`'s split:
    a cgo/FFI-free schema-and-codegen core plus an optional engine-backed data tier.
    The pure core must not depend on the engine, exactly as the Go default surface
    does not.
@@ -45,9 +45,8 @@ binding implements against:
 ## No binding is "primary"
 
 Parity is defined by `/spec` and `/conformance`, not by which language landed first.
-Go is the only shipping binding today, but the layer above is structured so that a
-returning Rust binding (the stack [removed in 2026-06-20](../../AGENTS.md)) — or a
-new one — attaches as an equal peer.
+Go is the only shipping binding today, but the layer above is structured so that any
+additional binding attaches as an equal peer.
 
 ## See also
 

@@ -208,10 +208,9 @@ the boundary rather than hidden behind the domain.
 
 ## The language-neutral shared layer
 
-Cambium began as a Rust-primary plus Go project; the Rust stack was removed and Go
-is the sole shipping target today. What remains deliberately language-neutral is the
-contract layer, kept outside any single binding so a Rust (or other) binding can
-return as a first-class peer rather than a bolt-on.
+Go is the sole shipping target. What remains deliberately language-neutral is the
+contract layer, kept outside any single binding so an additional language binding can
+attach as a first-class peer rather than a bolt-on.
 
 - **`/spec`** — the contract: API shape (`api.md`), the ordering invariants I1–I6
   (`ordering-invariants.md`), and the `CAMBIUM_E####` rule codes (`rule-codes.md`).

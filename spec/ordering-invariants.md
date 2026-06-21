@@ -3,8 +3,8 @@
 > Status: **normative draft v0.2** - Layer: `/spec` (language-neutral contract)
 > - Implemented binding today: **Go** (`go/cambium` + `go/codegen`, optional
 > `go/libyangbackend`). Applies to that binding — and any future `/<lang>/`
-> binding — by the implementation tier named below. The Rust binding was removed
-> 2026-06-20; the invariants stay language-neutral (see `AGENTS.md`).
+> binding — by the implementation tier named below. The invariants stay
+> language-neutral (see `AGENTS.md`).
 >
 > This file is the **single source of truth** for ordering behavior. A PR that
 > changes observable ordering MUST change this file first.
@@ -81,7 +81,7 @@ These rules are engine-neutral and are the oracle for pure-Go schema IR tests:
 
 ## 3. The invariants
 
-Each invariant is testable and backed by `/conformance` fixtures or Go/Rust unit
+Each invariant is testable and backed by `/conformance` fixtures or Go unit
 tests.
 
 ### I1 - `ordered-by user` order is preserved exactly
@@ -97,7 +97,7 @@ Schema IR tier:
 
 1. The child nodes of every schema parent MUST be exposed in effective schema
    declaration order.
-2. The implementation MUST NOT derive child order from a Go map, Rust hash map,
+2. The implementation MUST NOT derive child order from a Go map or any hash map,
    reflected struct order, goyang `Entry.Dir`, or goyang typed child slices such
    as `Leaf []*Leaf` / `Container []*Container`.
 3. Lookup caches such as `childByName` are allowed only when traversal continues
@@ -143,9 +143,9 @@ decomposed into scalar updates that cannot encode order.
 
 Cross-language determinism is tier-scoped:
 
-1. **Schema IR parity:** Go pure-Go schema IR and Rust/backend schema
-   introspection MUST agree on the ordered properties covered by the Schema IR
-   tier for fixtures that both can parse. Assertions are property-level, not
+1. **Schema IR parity:** The pure-Go schema IR and any backend or future-binding
+   schema introspection MUST agree on the ordered properties covered by the Schema
+   IR tier for fixtures that both can parse. Assertions are property-level, not
    printer-byte-level.
 2. **Backend/data byte parity:** Byte-identical XML/JSON/gNMI output is required
    only when both implementations run a comparable Backend/data tier over the
@@ -186,16 +186,16 @@ Schema IR runner contract:
 1. Load the module set.
 2. Build the ordered schema IR.
 3. Assert ordered properties against `expected-ir.json`.
-4. Compare Go/Rust/backend properties only where both tiers expose the same
-   property.
+4. Compare pure-Go and backend (or future-binding) properties only where both
+   expose the same property.
 
 Backend/data runner contract:
 
 1. Parse `input.*` with `mode.toml`.
 2. Serialize to each listed format.
 3. Assert bytes equal the golden output under the fixed formatting profile.
-4. For backend differential fixtures, assert Rust/backend bytes equal Go/backend
-   bytes.
+4. For backend differential fixtures, assert each binding's backend bytes equal
+   the others'.
 
 ## 7. Required edge-case fixtures
 
