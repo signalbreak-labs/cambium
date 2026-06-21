@@ -4,6 +4,7 @@
 package cambium_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
@@ -141,5 +142,70 @@ func TestNativeSchemaNodeFindPathErrors(t *testing.T) {
 		if _, err := value.FindPath(path); err == nil {
 			t.Fatalf("FindPath(%q) succeeded, want error", path)
 		}
+	}
+}
+
+func TestSchemaFindPathReturnsStructuredPathError(t *testing.T) {
+	const source = `module native-path-structured-errors {
+  namespace "urn:native-path-structured-errors";
+  prefix npse;
+  container top {
+    leaf value { type string; }
+  }
+}`
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatalf("NewContextBuilder: %v", err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	mod, err := ctx.Schema("native-path-structured-errors")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	top, ok := mod.TopLevel().Lookup("top")
+	if !ok {
+		t.Fatal("top not found")
+	}
+	value, ok := top.Children().Lookup("value")
+	if !ok {
+		t.Fatal("value not found")
+	}
+
+	_, err = mod.FindPath("/npse:missing")
+	assertSchemaPathError(t, err, cambium.SchemaPathErrorNotFound, "/npse:missing", "npse:missing", "/native-path-structured-errors")
+
+	_, err = value.FindPath("missing")
+	assertSchemaPathError(t, err, cambium.SchemaPathErrorNotFound, "missing", "missing", value.Path())
+
+	_, err = value.FindPath("/")
+	assertSchemaPathError(t, err, cambium.SchemaPathErrorInvalid, "/", "/", value.Path())
+
+	_, err = top.FindPath("../..")
+	assertSchemaPathError(t, err, cambium.SchemaPathErrorNoParent, "../..", "..", "/native-path-structured-errors")
+}
+
+func assertSchemaPathError(t *testing.T, err error, kind cambium.SchemaPathErrorKind, path, segment, from string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("FindPath succeeded, want error")
+	}
+	var ce *cambium.Error
+	if !errors.As(err, &ce) || ce.RuleCode() != cambium.RuleCodeContext {
+		t.Fatalf("FindPath error = %v, want RuleCodeContext", err)
+	}
+	var pe *cambium.SchemaPathError
+	if !errors.As(err, &pe) {
+		t.Fatalf("FindPath error = %v, want SchemaPathError", err)
+	}
+	if pe.Kind != kind || pe.Path != path || pe.Segment != segment || pe.From != from {
+		t.Fatalf("SchemaPathError = {Kind:%q Path:%q Segment:%q From:%q}, want {%q %q %q %q}",
+			pe.Kind, pe.Path, pe.Segment, pe.From, kind, path, segment, from)
 	}
 }
