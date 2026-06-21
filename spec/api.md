@@ -1,87 +1,92 @@
 # Cambium SDK API — Contract
 
 > Status: **normative draft v0.2** · Layer: `/spec` (shared, **language-neutral** contract).
-> **Implemented binding today: Go** (`go/cambium`, `go/codegen`, `go/compat`, optional
-> `go/libyangbackend`). The Rust binding was removed 2026-06-20; this contract stays
-> language-neutral so a Rust (or other) binding can re-attach as a peer (see `AGENTS.md`
-> → "Adding a language binding"). Rust type names below (e.g. `cambium_core::Error`) are
-> retained as illustrative reference shapes for a future binding, not current code.
+> **Implemented binding today: Go** (`go/cambium`, `go/codegen`, `go/compat`, the experimental
+> `go/datatree`, and optional `go/libyangbackend`). This file specifies **behavior**, not
+> signatures: the Go API reference is the package godoc on
+> [pkg.go.dev](https://pkg.go.dev/github.com/signalbreak-labs/cambium/go). Where godoc and this
+> contract disagree on behavior, **`/spec` wins**.
 >
-> Full signatures live in
-> [`docs/sdk-api-design.md`](../docs/sdk-api-design.md); where they disagree, **`/spec` wins**.
-> Cambium is the **goyang successor SDK** — it matches goyang's schema introspection and adds a
-> real data layer, validation, diff/merge, and order-correct typed-struct codegen where the selected
-> tier supports those features. It does **not** send NETCONF or generate Terraform providers (those
-> are downstream consumers; see `AGENTS.md`).
+> The contract is **language-neutral** so a future `/<lang>/` binding can attach as a peer (see
+> `AGENTS.md` → "Adding a language binding"); a few cross-language mapping notes below describe how a
+> non-Go binding would render a construct, and are marked as illustrative.
+>
+> Cambium is the **goyang successor SDK** — it matches goyang's schema introspection and adds a real
+> data layer, validation, diff/merge, and order-correct typed-struct codegen where the selected tier
+> supports those features. It does **not** send NETCONF or generate Terraform providers (those are
+> downstream consumers; see `AGENTS.md`).
 
-## Implementation tiers (2026-06-16 pure-Go rebuild)
+## Implementation tiers
 
 This API contract is tiered:
 
-- **Schema IR tier:** pure-Go default Go package, Rust schema introspection, and optional backend
-  schema introspection. It guarantees libyang-free public handles, effective schema declaration
-  order, type/constraint metadata, module/import/prefix APIs, and codegen input order.
-- **Backend/data tier:** Rust libyang stack and optional Go libyang backend. It guarantees data
-  parsing, validation, serialization, diff/merge, and byte-level conformance fixtures.
+- **Schema-IR tier (pure Go, `CGO_ENABLED=0`):** packages `cambium`, `codegen`, `compat`. Guarantees
+  libyang-free public handles, effective schema declaration order, type/constraint metadata,
+  module/import/prefix APIs, and codegen input order.
+- **Pure-Go data tier (experimental, `CGO_ENABLED=0`):** package `datatree`. A cgo-free generic data
+  tree (parse/serialize JSON_IETF + XML, validation over a partial RFC-7950 scope, defaults). Its API
+  and value representation are **unstable**, and it does not yet provide the complete data-tier
+  guarantees below.
+- **Backend/data tier (optional, cgo):** package `libyangbackend`. Guarantees data parsing, full
+  RFC-7950 validation, serialization, diff/merge, and byte-level conformance fixtures.
 
-The pure-Go Go default MUST build and test with `CGO_ENABLED=0` and MUST NOT import libyang or
-`internal/libyang` through its public package/codegen dependency closure. Rust remains
-libyang-backed until a separate pure-Rust parser/validator is specified. Rust/Go byte-for-byte
-serialization parity applies only to Backend/data-tier runs. Schema IR parity is property-level
-and does not require a pure-Go serializer.
+The pure-Go default packages MUST build and test with `CGO_ENABLED=0` and MUST NOT import libyang or
+`internal/libyang` through their dependency closure. Byte-for-byte serialization parity applies only
+to Backend/data-tier runs. Schema IR parity is property-level. A future non-Go binding remains free
+to implement the data tier over its own engine.
 
-## Ratified decisions (2026-06-13)
+## Governing decisions
 
-These were decided before any signature hardened; they govern the whole surface.
+These decisions govern the whole surface.
 
-- **D-1 — Handle model: BORROWED.** `NodeRef`/`SchemaNode`/`Module` are domain handles; no engine
-  pointer, cgo pointer, `unsafe` value, or backend-internal type crosses the public boundary.
-  **Rust:** `NodeRef<'tree>` borrows the tree immutably, so the borrow checker forbids
-  read-while-mutate aliasing — no stale handle is possible in safe Rust. **Go:** `NodeRef` is a value
-  type carrying a generation tag; using it after a mutation that advances the tree's generation
-  returns `CAMBIUM_E0007` (Stale). Iterators (`children()`, `traverse()`, `select()`) materialize an
+- **D-1 — Handle model: BORROWED.** `NodeRef`/`SchemaNodeRef`/`Module` are domain handles; no engine
+  pointer, cgo pointer, `unsafe` value, or backend-internal type crosses the public boundary. In Go,
+  `NodeRef` is a value type carrying a generation tag; using it after a mutation that advances the
+  tree's generation returns `CAMBIUM_E0007` (Stale). (A binding with compile-time borrow checking may
+  enforce this statically instead.) Iterators (`children()`, `traverse()`, `select()`) materialize an
   **ordered list of handles** from the tier's ordered IR/data tree — never from map iteration and
   never from per-node cgo calls.
-- **D-2 — Borrow discipline.** Reads borrow the tree immutably and return short-lived handles; **all
-  mutation is path-addressed on `&mut DataTree`** (`new_path`/`set_value`/`remove_path`). There is
-  no long-lived mutable node handle.
-- **D-3 — Frozen context as typestate.** A mutable `ContextBuilder` is the only thing that loads
-  modules / sets features; `build()` consumes it into an immutable, `Send + Sync` `Context`. Data
-  trees can only be created from a frozen `Context`, so "no mutation after freeze" is structural,
-  not a doc promise. `DataTree` is `!Sync` (not concurrency-safe).
+- **D-2 — Borrow discipline.** Reads return short-lived handles; **all mutation is path-addressed on
+  the `DataTree`** (`new_path`/`set_value`/`remove_path`). There is no long-lived mutable node handle.
+- **D-3 — Frozen context.** A mutable `ContextBuilder` is the only thing that loads modules / sets
+  features; `Build()` consumes it into an immutable `Context` that is safe to share for reads. Data
+  trees are created from a frozen `Context`, so "no mutation after freeze" is structural, not a doc
+  promise. A `DataTree` is not concurrency-safe.
 - **D-4 — Codegen serialization: NATIVE serializer + CI byte-gate.** Generated typed structs carry a
   per-struct field-order manifest and serialize with a **native walk** (self-contained, no live
   `Context` needed at runtime). CI asserts the generated bytes equal libyang's `LYD_XML`/`LYD_JSON`
   for the same data, so generated order can never silently disagree with the engine. (Engine
   round-trips are reserved for `validate()`/`diff()`, which genuinely need libyang.)
-- **D-5 — Validation typing: RUNTIME.** Validation is `validate(&mut self, mode)`; there is **no**
-  `DataTree<Validated>/<Unvalidated>` typestate (it has no clean Go mirror). On failure it returns a
-  structured `ValidationErrors` list.
+- **D-5 — Validation typing: RUNTIME.** Validation is a runtime `Validate(mode)` call; there is **no**
+  validated/unvalidated typestate. On failure it returns a structured `ValidationErrors` list.
 - **D-6 — Ordering scope.** `ordered-by user` is byte-exact (`UserOrdered`/`UserOrderedLeafList`);
   `ordered-by system` is canonical-deterministic only. No fidelity-replay API.
 
-## Cross-language shape contract
+## Cross-language mapping (illustrative)
 
-The **only** sanctioned differences between the Rust and Go surfaces:
+The Go surface is the reference today. The contract is language-neutral; should a non-Go binding
+attach, it renders the same constructs idiomatically. Illustrative mapping for a hypothetical Rust
+binding:
 
-| Rust | Go |
+| Idiomatic form (e.g. Rust) | Go |
 |---|---|
 | `Result<T, E>` | `(T, error)` |
-| `Drop` (RAII) | `Close()` |
+| RAII drop | `Close()` |
 | `impl Iterator<Item = T>` | `[]T` or `iter.Seq[T]` |
 | `Option<T>` | `(T, ok bool)` |
 | consuming `self` | method taking the owner, returning `(owner, error)` |
-| `SerializeFlags::default()` has `siblings: true` | Go `SerializeFlags{}` has `Siblings: false`; use `DefaultSerializeFlags()` for the default profile |
 
-Everything else MUST be 1:1 inside the applicable tier: type/method names, ordering semantics, and
-error rule-codes. Schema IR parity is asserted on ordered properties. Byte-for-byte serialization
-output is a CI gate only for Backend/data-tier fixtures where both sides have a comparable backend.
+Note the one intentional Go default difference: `SerializeFlags{}` has `Siblings: false`; use
+`DefaultSerializeFlags()` for the default profile (which sets `Siblings: true`). Within a tier,
+type/method names, ordering semantics, and error rule-codes MUST match across bindings. Schema IR
+parity is asserted on ordered properties; byte-for-byte serialization output is a CI gate only for
+Backend/data-tier fixtures where both sides have a comparable backend.
 
-## Area contracts (normative behavior; signatures in `docs/sdk-api-design.md`)
+## Area contracts (normative behavior; Go signatures in the package godoc)
 
 - **A · Context / loading.** `ContextBuilder` (mutable: search paths, `load_module(name, revision?,
   features)`, `load_module_str`, `load_module_path(path)`, flags) → `build()` → frozen `Context`
-  (`Send + Sync`). The frozen context enumerates modules (`modules()`), returns `Module` handles,
+  (safe to share for reads). The frozen context enumerates modules (`modules()`), returns `Module` handles,
   parses data/op documents, and creates empty in-memory trees (`new_data`). `ParseMode`/
   `ValidateMode`/`ContextFlags` are **composable flag structs**, not mutually-exclusive enums.
 
@@ -229,7 +234,7 @@ output is a CI gate only for Backend/data-tier fixtures where both sides have a 
     module in the context, including any modules auto-loaded as dependencies.
     The returned order is stable for a materialized context snapshot but is not a
     semantic ordering contract.
-- **B · Schema introspection.** `Module` and `SchemaNode<'ctx>` are borrowed handles with goyang-grade
+- **B · Schema introspection.** `Module` and `SchemaNodeRef` are borrowed handles with goyang-grade
   metadata (module namespace/prefix/revision/header text, node name, kind,
   config, status, mandatory, presence, description, units, default, min/max
   elements, uniques). `children()`/`top_level()`/`input()`/`output()` walk Cambium's ordered
@@ -918,16 +923,16 @@ output is a CI gate only for Backend/data-tier fixtures where both sides have a 
 - **D · Ordered nodes (Backend/data tier).** `UserOrdered`/`UserOrderedLeafList` are **positional-only**
   — `insert_first/last/before/after`, `move_before/after`, plus a read side (`len`/`get`/`iter`/
   `find_by_key`/`remove`). There is **no** order-agnostic setter. They are reachable only for an
-  `ordered-by user` target; for a system-ordered node the handle is absent (Rust: the method/type
-  doesn't exist → compile error; Go: lookup returns `CAMBIUM_E0005`). This is the I1 mechanism.
-- **E · Validation (Backend/data tier).** `validate(&mut self, mode)`; `ValidateMode { no_state, present, multi_error }`.
+  `ordered-by user` target; for a system-ordered node the handle is absent (in Go, lookup returns
+  `CAMBIUM_E0005`; a binding with compile-time typing may omit the method entirely). This is the I1 mechanism.
+- **E · Validation (Backend/data tier).** `Validate(mode)`; `ValidateMode { NoState, Present, MultiError }`.
   On failure returns `ValidationErrors` — a **list** of `Diagnostic`s (data path, schema path,
-  `error-type`, `error-app-tag`, `validation_code`) — recovered via `errors.As` (Go) / matching the
-  `Error::Validation` variant (Rust). This is the killer feature vs ygot, which has no must/when/mandatory.
+  `error-type`, `error-app-tag`, `validation_code`) — recovered via `errors.As`. Full
+  `must`/`when`/`mandatory`/leafref validation is what this tier adds over the schema-only tiers.
 - **F · Serialization (Backend/data tier).** Every format (XML / JSON / JSON_IETF / LYB) is
   produced by exactly one in-order walk of the backend's ordered data tree (libyang
-  `lyd_node.next/prev` for the libyang backend) or a future pure-Go data tree that satisfies the
-  same invariant. `with_defaults`/`shrink`/`keep_empty_containers` are print options, never a
+  `lyd_node.next/prev` for the libyang backend; the experimental `datatree` walks its own ordered
+  node slices to the same invariant for the formats it supports). `with_defaults`/`shrink`/`keep_empty_containers` are print options, never a
   re-sort. `WithDefaults` is an enum (`Explicit`/`Trim`/`All`/`AllTagged`), not four bools. The
   default profile reproduces Backend/data conformance golden bytes. JSON list/leaf-list members
   carry order; JSON object member order is deterministic under the single selected printer.
@@ -947,10 +952,10 @@ output is a CI gate only for Backend/data-tier fixtures where both sides have a 
   `anydata`/`anyxml` opaque emission, and standalone RPC/action/notification
   operation-document structs. (This is the language-neutral target; a future
   binding under `/<lang>/` implements the same surface — see `AGENTS.md`.)
-  `enumeration`/`identityref`/`union` → generated enums; `bits` → bitflags; `ordered-by user` field →
-  `UserOrderedVec<T>` (positional-only — reorder of an ordinary `Vec` field is a compile error);
-  ranges → range-bounded newtypes; `anydata`/`anyxml` → a raw helper carrying separate XML and
-  JSON forms; mandatory → `T`, optional → `Option<T>`. Native serializers preserve user-ordered
+  `enumeration`/`identityref`/`union` → generated enums; `bits` → bit constants; `ordered-by user`
+  field → `UserOrderedVec[T]` (positional-only — reordering an ordinary slice field is a compile
+  error); ranges → range-bounded newtypes; `anydata`/`anyxml` → a raw helper carrying separate XML and
+  JSON forms; mandatory → a value field, optional → a pointer/nil field. Native serializers preserve user-ordered
   vectors exactly and canonicalize system-ordered leaf-lists by scalar value and keyed system lists
   by key tuple before emitting bytes. Module-level RPCs and notifications emit standalone typed
   operation document structs. RPCs with both `input` and `output` preserve the existing
@@ -1027,49 +1032,37 @@ output is a CI gate only for Backend/data-tier fixtures where both sides have a 
   instance existence, or parse-time data errors. Pure-Go codegen is gated by Schema IR property
   fixtures; byte equality to libyang is a Backend/data compatibility gate only when that backend
   participates in the test.
-- **I · Errors.** `thiserror` with `#[from]`/`#[source]` (preserve the cause chain). Stable `RuleCode`
-  (see `rule-codes.md`), append-only. `Diagnostic` adds machine-readable location + `error-app-tag`
-  as **sub-fields under the stable top-level code** (no renumbering). The adapter maps libyang
-  `ly_err_item` → `Diagnostic` at the boundary; no raw libyang error bubbles up. Go keeps `Unwrap()`
-  so `errors.Is`/`errors.As` work.
+- **I · Errors.** Errors preserve the cause chain (Go `Unwrap()`, so `errors.Is`/`errors.As` work).
+  Stable `RuleCode` (see `rule-codes.md`), append-only. `Diagnostic` adds machine-readable location +
+  `error-app-tag` as **sub-fields under the stable top-level code** (no renumbering). The adapter maps
+  libyang `ly_err_item` → `Diagnostic` at the boundary; no raw libyang error bubbles up.
 
 ## Invariant → mechanism
 
 | Invariant | Mechanism in this contract |
 |---|---|
-| **I1** user-ordered byte-exact | Backend/data `UserOrdered`/`UserOrderedLeafList`/`UserOrderedVec<T>` positional-only; no order-agnostic setter |
+| **I1** user-ordered byte-exact | Backend/data `UserOrderedList`/`UserOrderedLeafList` and generated `UserOrderedVec[T]` positional-only; no order-agnostic setter |
 | **I2** declaration order + canonical | Schema IR walks ordered IR slices; Backend/data and generated native serializers walk ordered data siblings; never a map; system-ordered collections are canonicalized before byte emission |
 | **I3** keys first | `list_keys()` in key-statement order; codegen field-order manifest puts keys first |
 | **I4** RPC/action I/O order | `input()`/`output()` walk ordered schema IR in declaration order |
 | **I5** JSON arrays carry order | Backend/data single-printer output; `select()`/`NodeSet` in document order; byte gate only for comparable backend tiers |
-| **I6** gNMI atomic | Backend/data `DataDiff::is_ordered_by_user()`; `JsonIetf` keeps empty containers; user-ordered serialized as one subtree |
+| **I6** gNMI atomic | Backend/data `DataDiff.IsOrderedByUser()`; JSON_IETF keeps empty containers; user-ordered serialized as one subtree |
 
 ## Error contract
 
 - Stable `CAMBIUM_E####` rule codes — see [`rule-codes.md`](./rule-codes.md). New for this surface:
   **`E0006` DataPath** (data CRUD by path/XPath) and **`E0007` Stale** (handle used after an
-  invalidating mutation — Go runtime check; Rust compile-time via the borrowed lifetime).
+  invalidating mutation — a Go runtime check; a binding with compile-time borrow checking may catch it statically).
 - `ValidationErrors` is a **list**; `error-app-tag`, `data_path`, `schema_path`, and `validation_code`
   are informational sub-fields under the stable top-level code (no renumbering).
-- The same failure yields the **same rule code in both languages** — a conformance assertion.
+- The same failure yields the **same rule code across bindings** — a conformance assertion.
 
-## Acceptance tests (red targets — write the failing test first, then implement)
+## Conformance
 
-Per the TDD house rule, each Phase begins by committing these as failing tests; golden bytes are
-**generated and reviewed at implementation time, never hand-authored**.
-
-- **Phase 1 (schema + types):** `children_declaration_order` (scrambled-children fixture),
-  `list_keys_statement_order`, `rpc_io_schema_order`, `leaf_type_decimal64_fraction_digits`,
-  `leaf_type_enum_values_ordered`, `leaf_type_union_members_recursive`, `leafref_target_resolves`,
-  `identity_derived_closure`, `schema_node_config_status_mandatory`.
-- **Phase 2 (data CRUD + validation):** `new_path_builds_intermediates`,
-  `new_path_then_serialize_declaration_order`, `set_value_reports_changed`, `remove_path_round_trip`,
-  `get_value_typed`, `select_document_order`, `children_one_ffi_walk_ordered`,
-  `validate_must_when_fails_with_path`, `validate_multi_error_returns_list`, `user_ordered_read_side`,
-  `compile_fail_no_set_on_vec_field` (trybuild), `go_stale_handle_after_mutation` (E0007).
-- **Phase 3 (serde + diff):** `serialize_with_defaults_all`, `serialize_keep_empty_container`,
-  `json_object_determinism_rust_eq_go`, `diff_ordered_by_user_atomic`, `merge_conflict_errors`,
-  `diff_apply_round_trip`.
-- **Phase 5 (codegen v2):** `codegen_field_order_manifest_keys_first`,
-  `codegen_user_ordered_field_is_positional`, `codegen_enum_and_union_typed`,
-  `codegen_round_trip_bytes_equal_libyang`.
+Behavior specified here is verified by the shared `/conformance` corpus
+(`manifest.toml` plus golden outputs) and the binding's unit tests — never by
+hand-authored expectations. Every ordering invariant (I1–I6) has at least one
+fixture and coverage is a floor; per the TDD house rule, a change to observable
+behavior lands its failing fixture or test before the implementation. The fixture
+tiers and runner contract are specified in
+[`ordering-invariants.md`](./ordering-invariants.md) §6.
