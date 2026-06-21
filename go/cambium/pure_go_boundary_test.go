@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 package cambium_test
 
 import (
@@ -138,7 +141,7 @@ func TestPureGoNoGoyangDependencyClosure(t *testing.T) {
 	}
 }
 
-func TestVendoredGoyangForkAttribution(t *testing.T) {
+func TestVendoredGoyangAttribution(t *testing.T) {
 	upstreamRoot := filepath.Join(repoRoot(t), "go", "internal", "yangparse", "upstream")
 	for _, name := range []string{"LICENSE", "AUTHORS", "CONTRIBUTORS", "UPSTREAM.md"} {
 		if _, err := os.Stat(filepath.Join(upstreamRoot, name)); err != nil {
@@ -152,7 +155,7 @@ func TestVendoredGoyangForkAttribution(t *testing.T) {
 		"v1.6.3",
 		"274b3b50006c99113ae0670d8d250a4d093536cb",
 		"Patch Log",
-		"Parser behavior changes in this fork are limited",
+		"Parser behavior changes in this vendored copy are limited",
 	} {
 		if !strings.Contains(upstreamDoc, want) {
 			t.Fatalf("UPSTREAM.md missing %q", want)

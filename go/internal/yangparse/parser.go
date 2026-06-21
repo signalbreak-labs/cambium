@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package yangparse is Cambium's internal pure-Go YANG parser adapter.
 //
-// It deliberately hides the forked upstream parser package from public
+// It deliberately hides the vendored upstream parser package from public
 // Cambium code so the default Go API owns its parser boundary.
 package yangparse
 

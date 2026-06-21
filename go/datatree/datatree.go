@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package datatree is a pure-Go, cgo-free generic data tree for YANG instance
 // data. It parses a document against a Cambium schema into an ordered tree and
 // serializes it back in effective schema declaration order, so it requires no

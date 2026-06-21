@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 //go:build cgo
 
 // Package conformance runs Cambium's shared /conformance corpus. It reads

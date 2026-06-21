@@ -1,8 +1,11 @@
-# goyang upstream fork
+# Vendored goyang parser
 
-Cambium vendors a narrow parser/AST fork from `github.com/openconfig/goyang`
-so the default Go package can be a cgo-free goyang replacement without a
-runtime dependency on the upstream module.
+Cambium vendors a narrow parser/AST subset of `github.com/openconfig/goyang`
+(Apache-2.0, copyright Google Inc.) so the default Go package has a cgo-free YANG
+parser without a runtime dependency on the upstream goyang module. This is a
+pinned, attributed vendored copy with a documented patch log below — not a
+divergent fork. Upstream license, AUTHORS, and CONTRIBUTORS are retained
+alongside this file.
 
 ## Upstream
 
@@ -25,7 +28,7 @@ under Cambium's repository license terms.
 1. Adjusted upstream imports from `github.com/openconfig/goyang/pkg/indent` to
    `github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/indent`.
 2. Replaced `github.com/google/go-cmp/cmp` usage in `yangtype.go` with local
-   map equality helpers so Cambium's parser fork has no external Go module
+   map equality helpers so Cambium's vendored parser has no external Go module
    dependencies.
 3. Adjusted unquoted-argument lexing so adjacent `//` and `/* */` comments
    terminate the argument instead of being absorbed into it, and a standalone
@@ -37,13 +40,13 @@ under Cambium's repository license terms.
    unknown escapes fail closed; regex backslashes must be escaped in the YANG
    source just like other double-quoted strings.
 
-Parser behavior changes in this fork are limited to the explicit safety fixes
+Parser behavior changes in this vendored copy are limited to the explicit safety fixes
 listed above.
 
 ## Re-checking against upstream (drift gate)
 
 `go/compat`'s parity tests diff Cambium's compat surface against THIS vendored
-fork, not live `openconfig/goyang`. That catches regressions against the pin but
+vendored copy, not live `openconfig/goyang`. That catches regressions against the pin but
 NOT drift between the pin and upstream HEAD. Re-check on a cadence (e.g. each
 release, or when a relevant goyang issue lands):
 

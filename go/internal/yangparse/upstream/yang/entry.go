@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 // Modified by signalbreak-labs for Cambium: adjusted internal import paths for
-// the vendored parser fork.
+// the vendored parser copy.
 
 package yang
 
