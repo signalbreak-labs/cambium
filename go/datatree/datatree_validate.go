@@ -28,7 +28,7 @@ func (e *ValidationError) Error() string {
 // the libyang backend's domain.
 func (t *Tree) Validate() error {
 	var violations []string
-	validateLevel(t.module.TopLevel(), t.roots, "", &violations)
+	validateLevel(flattenTopLevel(t.module), t.roots, "", &violations)
 	if len(violations) == 0 {
 		return nil
 	}
@@ -38,12 +38,12 @@ func (t *Tree) Validate() error {
 // validateLevel walks the schema children in declaration order and checks each
 // against the data present at this level. Driving from the schema (not the data)
 // is what surfaces absent-but-required nodes.
-func validateLevel(schema cambium.SchemaChildren, data []*node, path string, out *[]string) {
+func validateLevel(schema []cambium.SchemaNodeRef, data []*node, path string, out *[]string) {
 	present := make(map[string]*node, len(data))
 	for _, d := range data {
 		present[d.name] = d
 	}
-	for sn := range schema.Iter() {
+	for _, sn := range schema {
 		childPath := path + "/" + sn.Name()
 		dn := present[sn.Name()]
 		if dn == nil {
@@ -60,7 +60,7 @@ func validateLevel(schema cambium.SchemaChildren, data []*node, path string, out
 			checkElements(sn, len(dn.entries), childPath, out)
 			checkListKeys(sn, dn, childPath, out)
 			for i, entry := range dn.entries {
-				validateLevel(sn.DataChildren(true), entry, fmt.Sprintf("%s[%d]", childPath, i), out)
+				validateLevel(childRefs(sn.DataChildren(true)), entry, fmt.Sprintf("%s[%d]", childPath, i), out)
 			}
 		case sn.IsLeafList():
 			checkElements(sn, len(dn.values), childPath, out)
@@ -70,7 +70,7 @@ func validateLevel(schema cambium.SchemaChildren, data []*node, path string, out
 				}
 			}
 		case sn.IsContainer():
-			validateLevel(sn.DataChildren(true), dn.children, childPath, out)
+			validateLevel(childRefs(sn.DataChildren(true)), dn.children, childPath, out)
 		case sn.IsLeaf():
 			if ti, ok := sn.LeafType(); ok {
 				validateLeafValue(ti, dn.value, childPath, out)
