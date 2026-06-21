@@ -2963,18 +2963,8 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 	return pfx == mod.prefix
 }
 
-func (c *Context) findNodeBySchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, false)
-	return mod, node
-}
-
 func (c *Context) findNodeBySourceSchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
 	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true)
-	return mod, node
-}
-
-func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, strictSource bool) (*moduleData, *schemaNodeData) {
-	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, strictSource)
 	return mod, node
 }
 
