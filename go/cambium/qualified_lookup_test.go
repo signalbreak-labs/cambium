@@ -100,13 +100,13 @@ func TestSchemaChildrenLookupQualifiedDisambiguatesAugments(t *testing.T) {
 		t.Fatalf("right QualifiedName = %#v", right.QualifiedName())
 	}
 
-	leftByQName, ok := children.LookupQName(left.QualifiedName())
+	leftByQName, ok := children.LookupQualifiedName(left.QualifiedName())
 	if !ok || leftByQName.Module().Name() != "qualified-left" {
-		t.Fatalf("LookupQName(left) = (%#v,%v), want qualified-left", leftByQName, ok)
+		t.Fatalf("LookupQualifiedName(left) = (%#v,%v), want qualified-left", leftByQName, ok)
 	}
-	rightByNamespace, ok := children.LookupQName(cambium.QualifiedName{Namespace: "urn:qualified-right", Name: "state"})
+	rightByNamespace, ok := children.LookupQualifiedName(cambium.QualifiedName{Namespace: "urn:qualified-right", Name: "state"})
 	if !ok || rightByNamespace.Module().Name() != "qualified-right" {
-		t.Fatalf("LookupQName(namespace right) = (%#v,%v), want qualified-right", rightByNamespace, ok)
+		t.Fatalf("LookupQualifiedName(namespace right) = (%#v,%v), want qualified-right", rightByNamespace, ok)
 	}
 	if _, ok := children.LookupQualified("qualified-missing", "state"); ok {
 		t.Fatal("LookupQualified(qualified-missing, state) succeeded")

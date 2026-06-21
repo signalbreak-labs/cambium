@@ -3808,11 +3808,11 @@ func (c SchemaChildren) LookupAll(name string) SchemaChildren {
 
 // LookupQualified returns the child with the given defining module and local name.
 func (c SchemaChildren) LookupQualified(module, name string) (SchemaNodeRef, bool) {
-	return c.LookupQName(QualifiedName{Module: module, Name: name})
+	return c.LookupQualifiedName(QualifiedName{Module: module, Name: name})
 }
 
-// LookupQName returns the child matching all non-empty fields of qname.
-func (c SchemaChildren) LookupQName(qname QualifiedName) (SchemaNodeRef, bool) {
+// LookupQualifiedName returns the child matching all non-empty fields of qname.
+func (c SchemaChildren) LookupQualifiedName(qname QualifiedName) (SchemaNodeRef, bool) {
 	if qname.Name == "" ||
 		(qname.Module == "" && qname.Prefix == "" && qname.Namespace == "") ||
 		strings.TrimSpace(qname.Name) != qname.Name ||
@@ -3838,6 +3838,13 @@ func (c SchemaChildren) LookupQName(qname QualifiedName) (SchemaNodeRef, bool) {
 		return n, true
 	}
 	return SchemaNodeRef{}, false
+}
+
+// LookupQName returns the child matching all non-empty fields of qname.
+//
+// Deprecated: use LookupQualifiedName.
+func (c SchemaChildren) LookupQName(qname QualifiedName) (SchemaNodeRef, bool) {
+	return c.LookupQualifiedName(qname)
 }
 
 // QualifiedNames returns each child qualified by its defining module, in schema order.
