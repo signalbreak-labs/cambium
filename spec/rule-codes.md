@@ -1,11 +1,10 @@
 # Cambium — Diagnostic Rule Codes
 
 > Status: **normative draft v0.1** · Layer: `/spec` (shared, language-neutral contract).
-> Implemented binding today: **Go** (`go/cambium`). The codes are language-neutral; a
-> future `/<lang>/` binding implements the same registry identically (the Rust mapping
-> shown below is retained as illustrative reference, not current code).
+> Implemented binding today: **Go** (`go/cambium`). The codes are language-neutral: any
+> future `/<lang>/` binding implements the same registry identically.
 
-Every Cambium error carries a stable `CAMBIUM_E####` rule code. Codes are assigned by the **operation that failed**, so the same failure yields the same code in *both* languages — clippy-style diagnostics: a stable id callers can match on, plus a human message (and, when libyang supplies one, the YANG `error-app-tag`).
+Every Cambium error carries a stable `CAMBIUM_E####` rule code. Codes are assigned by the **operation that failed**, so the same failure yields the same code in every binding — clippy-style diagnostics: a stable id callers can match on, plus a human message (and, when libyang supplies one, the YANG `error-app-tag`).
 
 ## Format
 `CAMBIUM_E####` — `E` + a 4-digit number. The registry is **append-only**; a published code is never reused or renumbered.
@@ -20,12 +19,11 @@ Every Cambium error carries a stable `CAMBIUM_E####` rule code. Codes are assign
 | `CAMBIUM_E0004` | Serialize | serialize | Serialization to XML/JSON failed. |
 | `CAMBIUM_E0005` | OrderedList | user-ordered list lookup + positional ops | A path/positional list op failed (path not found, index out of range, non-user-ordered target). |
 | `CAMBIUM_E0006` | DataPath | new path · get · set value · remove path · select (xpath) | A data-tree access/mutation by path or XPath failed: path not found or not creatable, invalid path/XPath expression, or a type-invalid value on `set_value`/`new_path`. |
-| `CAMBIUM_E0007` | Stale | any data handle (`NodeRef`/`NodeSet`) accessor after an invalidating mutation | A data handle was used after a mutation advanced the owning tree's generation. Primarily a **Go** runtime safety net; in Rust the borrowed `NodeRef<'tree>` lifetime makes this a compile error, so it is rarely observed there. |
+| `CAMBIUM_E0007` | Stale | any data handle (`NodeRef`/`NodeSet`) accessor after an invalidating mutation | A data handle was used after a mutation advanced the owning tree's generation. Primarily a **Go** runtime safety net; a binding with compile-time borrow checking may surface this as a compile error instead, so it is rarely observed there. |
 
-## Mapping rule (identical in both languages)
+## Mapping rule (identical across bindings)
 - **Go**: `cambium.Error.RuleCode() RuleCode`; the error string is `[CAMBIUM_E####] <op>: <cause>`.
-- **Rust**: `cambium_core::Error::rule_code() -> RuleCode`; `Display` is `[CAMBIUM_E####] <cause>`.
-- The code is derived from the operation and is **identical across languages** for the same failure. A conformance check should assert Go and Rust assign the same code to the same input (e.g. loading a missing module → `CAMBIUM_E0001` in both).
+- The code is derived from the **operation** and MUST be **identical across bindings** for the same failure. A conformance check asserts that the same input yields the same code in every binding (e.g. loading a missing module → `CAMBIUM_E0001`).
 
 ## Future (tracked, not v0.1)
 - ~~Refine `E0002`/`E0003` into sub-codes~~ — **resolved by design**: `LY_VECODE` and the
