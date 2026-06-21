@@ -49,6 +49,49 @@ const (
 	SchemaNodeKindUnknown
 )
 
+// SchemaPathErrorKind classifies a failed schema path lookup.
+type SchemaPathErrorKind string
+
+const (
+	// SchemaPathErrorInvalid means the requested path is syntactically invalid
+	// for the lookup method.
+	SchemaPathErrorInvalid SchemaPathErrorKind = "invalid"
+	// SchemaPathErrorNotFound means a path segment did not resolve to a schema
+	// node from the current lookup position.
+	SchemaPathErrorNotFound SchemaPathErrorKind = "not_found"
+	// SchemaPathErrorNoParent means a relative parent step walked above the
+	// schema root.
+	SchemaPathErrorNoParent SchemaPathErrorKind = "no_parent"
+)
+
+// SchemaPathError is the structured cause returned by FindPath failures. Public
+// FindPath methods still wrap it in Error, so callers can use errors.As for
+// either *Error or *SchemaPathError.
+type SchemaPathError struct {
+	Kind    SchemaPathErrorKind
+	Path    string
+	Segment string
+	From    string
+}
+
+func (e *SchemaPathError) Error() string {
+	switch e.Kind {
+	case SchemaPathErrorInvalid:
+		return fmt.Sprintf("invalid schema path %q", e.Path)
+	case SchemaPathErrorNoParent:
+		return fmt.Sprintf("schema path %q walks above %s at %q", e.Path, e.From, e.Segment)
+	default:
+		return fmt.Sprintf("schema path %q not found from %s at %q", e.Path, e.From, e.Segment)
+	}
+}
+
+func schemaNodeDataPath(n *schemaNodeData) string {
+	if n == nil {
+		return ""
+	}
+	return n.path
+}
+
 // Config is read-write vs read-only.
 type Config int
 
@@ -2921,17 +2964,24 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 }
 
 func (c *Context) findNodeBySchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	return c.findNodeBySchemaPathMode(source, path, false)
+	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, false)
+	return mod, node
 }
 
 func (c *Context) findNodeBySourceSchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	return c.findNodeBySchemaPathMode(source, path, true)
+	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true)
+	return mod, node
 }
 
 func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, strictSource bool) (*moduleData, *schemaNodeData) {
+	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, strictSource)
+	return mod, node
+}
+
+func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool) (*moduleData, *schemaNodeData, string, *schemaNodeData) {
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		return nil, nil
+		return nil, nil, path, nil
 	}
 	first := pathStepQName(parts[0])
 	mod := source.resolveQNameModule(first)
@@ -2945,7 +2995,7 @@ func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, stri
 			mod = source
 			parts = parts[1:]
 		} else {
-			return nil, nil
+			return nil, nil, parts[0], source.root
 		}
 	} else if !strictSource && !hasPrefix(first) && (first == mod.prefix || first == mod.name) {
 		parts = parts[1:]
@@ -2979,11 +3029,11 @@ func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, stri
 			}
 		}
 		if next == nil {
-			return mod, nil
+			return mod, nil, part, cur
 		}
 		cur = next
 	}
-	return mod, cur
+	return mod, cur, "", nil
 }
 
 func (c *Context) moduleByPublicQName(qname string) *moduleData {
@@ -3209,11 +3259,21 @@ func (m Module) FindPath(path string) (SchemaNodeRef, error) {
 		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("nil module"))
 	}
 	if !validAbsoluteSchemaNodeID(path, true) {
-		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("invalid schema path: %s", path))
+		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+			Kind:    SchemaPathErrorInvalid,
+			Path:    path,
+			Segment: path,
+			From:    schemaNodeDataPath(m.mod.root),
+		})
 	}
-	_, n := m.mod.ctx.findNodeBySchemaPath(m.mod, path)
+	_, n, segment, from := m.mod.ctx.findNodeBySchemaPathDetail(m.mod, path, false)
 	if n == nil {
-		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("schema path not found: %s", path))
+		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+			Kind:    SchemaPathErrorNotFound,
+			Path:    path,
+			Segment: segment,
+			From:    schemaNodeDataPath(from),
+		})
 	}
 	return SchemaNodeRef{node: n}, nil
 }
@@ -3532,7 +3592,12 @@ func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
 		return n, nil
 	}
 	if path == "/" || strings.HasSuffix(path, "/") {
-		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("invalid path %q", path))
+		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+			Kind:    SchemaPathErrorInvalid,
+			Path:    path,
+			Segment: path,
+			From:    n.Path(),
+		})
 	}
 	if strings.HasPrefix(path, "/") {
 		return n.Module().FindPath(path)
@@ -3541,17 +3606,32 @@ func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
 	cur := n
 	for _, part := range strings.Split(path, "/") {
 		if part == "" {
-			return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("invalid path %q", path))
+			return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+				Kind:    SchemaPathErrorInvalid,
+				Path:    path,
+				Segment: part,
+				From:    cur.Path(),
+			})
 		}
 		if part == ".." {
 			parent, ok := cur.Parent()
 			if !ok {
-				return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf(".. with no parent"))
+				return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+					Kind:    SchemaPathErrorNoParent,
+					Path:    path,
+					Segment: part,
+					From:    cur.Path(),
+				})
 			}
 			for parent.Kind() == SchemaNodeKindChoice || parent.Kind() == SchemaNodeKindCase || parent.Kind() == SchemaNodeKindLeaf {
 				next, ok := parent.Parent()
 				if !ok {
-					return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf(".. with no parent"))
+					return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+						Kind:    SchemaPathErrorNoParent,
+						Path:    path,
+						Segment: part,
+						From:    parent.Path(),
+					})
 				}
 				parent = next
 			}
@@ -3561,7 +3641,12 @@ func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
 		local := localName(part)
 		child, ok := cur.Children().Lookup(local)
 		if !ok {
-			return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("%s: no such element", part))
+			return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+				Kind:    SchemaPathErrorNotFound,
+				Path:    path,
+				Segment: part,
+				From:    cur.Path(),
+			})
 		}
 		cur = child
 	}
