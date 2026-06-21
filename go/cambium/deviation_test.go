@@ -6,6 +6,7 @@ package cambium_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
@@ -394,6 +395,129 @@ func TestDeviationNotSupportedRemovesTopLevelNode(t *testing.T) {
 	if _, err := mod.FindPath("/cdnst:bar"); err != nil {
 		t.Fatalf("FindPath /cdnst:bar: %v", err)
 	}
+}
+
+func TestDeviationAddOnGroupingUseDoesNotAliasOtherUses(t *testing.T) {
+	t.Helper()
+	dir := deviationTestDir(t)
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-grouping-isolation-target.yang"), []byte(`module cambium-deviate-grouping-isolation-target {
+    namespace "urn:cambium:deviate-grouping-isolation-target";
+    prefix cdgit;
+    yang-version 1.1;
+
+    grouping common {
+        list item {
+            key "name";
+            leaf name { type string; }
+        }
+        leaf value {
+            type string;
+        }
+    }
+
+    container c1 {
+        uses common;
+    }
+
+    container c2 {
+        uses common;
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-grouping-isolation-source.yang"), []byte(`module cambium-deviate-grouping-isolation-source {
+    namespace "urn:cambium:deviate-grouping-isolation-source";
+    prefix cdgis;
+    yang-version 1.1;
+
+    import cambium-deviate-grouping-isolation-target {
+        prefix tgt;
+    }
+
+    deviation "/tgt:c1/tgt:item" {
+        deviate add {
+            min-elements 1;
+            max-elements 5;
+        }
+    }
+
+    deviation "/tgt:c2/tgt:value" {
+        deviate add {
+            default "only-c2";
+        }
+    }
+}
+`))
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"cambium-deviate-grouping-isolation-target", "cambium-deviate-grouping-isolation-source"} {
+		if err := ctx.LoadModule(name); err != nil {
+			t.Fatalf("LoadModule %s: %v", name, err)
+		}
+	}
+
+	mod, err := ctx.Schema("cambium-deviate-grouping-isolation-target")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	c1Item := mustFindPath(t, mod, "/cdgit:c1/cdgit:item")
+	c2Item := mustFindPath(t, mod, "/cdgit:c2/cdgit:item")
+	c1Value := mustFindPath(t, mod, "/cdgit:c1/cdgit:value")
+	c2Value := mustFindPath(t, mod, "/cdgit:c2/cdgit:value")
+
+	if got, ok := c1Item.MinElements(); !ok || got != 1 {
+		t.Fatalf("c1 item MinElements() = %d, %v, want 1, true", got, ok)
+	}
+	if got, ok := c1Item.MaxElements(); !ok || got != 5 {
+		t.Fatalf("c1 item MaxElements() = %d, %v, want 5, true", got, ok)
+	}
+	if got, ok := c2Item.MinElements(); ok {
+		t.Fatalf("c2 item MinElements() = %d, true, want unset", got)
+	}
+	if got, ok := c2Item.MaxElements(); ok {
+		t.Fatalf("c2 item MaxElements() = %d, true, want unset", got)
+	}
+	if got := c1Value.DefaultValues(); len(got) != 0 {
+		t.Fatalf("c1 value DefaultValues() = %v, want empty", got)
+	}
+	if got, want := c2Value.DefaultValues(), []string{"only-c2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("c2 value DefaultValues() = %v, want %v", got, want)
+	}
+	if got, want := deviationProperties(c1Item.DeviationProvenance()), []string{"min-elements", "max-elements"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("c1 item deviation properties = %v, want %v", got, want)
+	}
+	if got := len(c2Item.DeviationProvenance()); got != 0 {
+		t.Fatalf("c2 item DeviationProvenance() len = %d, want 0", got)
+	}
+	if got := len(c1Value.DeviationProvenance()); got != 0 {
+		t.Fatalf("c1 value DeviationProvenance() len = %d, want 0", got)
+	}
+	if got, want := deviationProperties(c2Value.DeviationProvenance()), []string{"default"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("c2 value deviation properties = %v, want %v", got, want)
+	}
+}
+
+func mustFindPath(t *testing.T, mod cambium.Module, path string) cambium.SchemaNodeRef {
+	t.Helper()
+	node, err := mod.FindPath(path)
+	if err != nil {
+		t.Fatalf("FindPath %s: %v", path, err)
+	}
+	return node
+}
+
+func deviationProperties(devs []cambium.Deviation) []string {
+	out := make([]string, len(devs))
+	for i, dev := range devs {
+		out[i] = dev.Property()
+	}
+	return out
 }
 
 func assertPattern(t *testing.T, leaf cambium.SchemaNodeRef, wantRegex string) {
