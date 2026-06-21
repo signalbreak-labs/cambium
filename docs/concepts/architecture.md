@@ -7,7 +7,7 @@ boundary between them, the machine-enforced cgo-free import closure that keeps t
 default surface portable, the lifecycle and concurrency contract of the libyang
 backend, and the language-neutral shared layer that lets another language binding
 return as a peer. The driving constraint throughout is the project's one rule:
-order is a structural property of the schema tree (RFC 7950 §7.8.5), so the design
+order is a structural property of the schema tree (RFC 7950 §7.5.7), so the design
 keeps the ordered IR pure and self-contained and treats every IO/FFI dependency as
 something the core never imports.
 
@@ -82,10 +82,13 @@ ordered schema IR and computes everything derivable from it.
   Generated serializers walk the field-order manifest, never native map or struct
   iteration, so output follows compiled YANG declaration order with keys first.
 - **`compat`** — a read-only, goyang-shaped projection (`Entry`, `Modules`,
-  `ToEntry`, the `Node` AST) for callers migrating from `openconfig/goyang`. The
-  one behavioral difference: ordered traversal uses `Entry.Children()` (schema
-  declaration order) rather than iterating the `Entry.Dir` map (alphabetical).
-  `Dir` remains available as a lookup cache.
+  `ToEntry`, the `Node` AST) for callers migrating from `openconfig/goyang`. It
+  reproduces the goyang-shaped Entry/AST with its own native node types and does
+  **not** import `openconfig/goyang` at runtime — which is also why goyang is a
+  forbidden import in the closure check below. The one behavioral difference:
+  ordered traversal uses `Entry.Children()` (schema declaration order) rather than
+  iterating the `Entry.Dir` map (alphabetical). `Dir` remains available as a lookup
+  cache.
 
 Static validation in this tier (`Validate()` on generated structs) covers
 structural and type constraints — cardinality, range, length, pattern, unique,
@@ -169,7 +172,8 @@ The script:
 2. Lists the full transitive dependency closure of those packages with
    `CGO_ENABLED=0 go list -deps` and fails if it contains any forbidden package:
    `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
-   or `github.com/openconfig/goyang`.
+   `github.com/openconfig/goyang`, or the vendored `internal/yangparse/upstream`
+   raw-statement lexer.
 3. Fails if any package in that closure has cgo source files at all.
 
 Because the check inspects the *actual resolved dependency graph*, the cgo-free

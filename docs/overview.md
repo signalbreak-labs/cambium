@@ -7,12 +7,17 @@ implementation tiers, how Cambium relates to openconfig/goyang, who it is for, a
 what it deliberately leaves out. Deeper treatments live in the `concepts/` docs,
 which this page links to.
 
+New to YANG or NETCONF? The [glossary](glossary.md) defines the domain terms used
+here (JSON_IETF, `ordered-by user`, leafref, …), and the
+[quickstart](guides/quickstart.md) is the shortest runnable path — `go get`, load a
+module, walk the tree, generate structs.
+
 ## The domain problem: order is part of the schema
 
 In YANG, the order in which sibling nodes are declared is not cosmetic. RFC 7950
-§7.8.5 specifies that the children of a container or list entry appear in schema
-declaration order, and many NETCONF server implementations expect that order on
-the wire. A model that declares leaves `z`, `m`, `a` describes a tree whose
+specifies that the children of a container (§7.5.7) or list entry (§7.8.5) appear in
+schema declaration order, and many NETCONF servers — NETCONF is the standard
+protocol for configuring network devices — expect that order on the wire. A model that declares leaves `z`, `m`, `a` describes a tree whose
 children are `z`, `m`, `a` — in that order. Two workflows depend directly on
 preserving it:
 
@@ -107,14 +112,11 @@ and XML, validate (mandatory, cardinality, uniqueness, leafref existence,
 `must`/`when` over a core XPath subset), and apply defaults — all without libyang.
 For its supported constructs it preserves **I1/I2/I3/I5**.
 
-> **Experimental.** `datatree` is under active development. Its public API and
-> internal value representation **will change** (a raw-JSON-token representation is
-> being reworked), and its scope is narrower than the libyang backend: no
-> `anydata`/`anyxml`, no RPC/action/notification data, and the XPath engine
-> implements a core subset (it skips `derived-from`, `re-match`, `bit-is-set`, and
-> `deref` rather than mis-evaluating them). Do not depend on its API yet. See the
-> [pure-Go data tree guide](guides/data-tree-pure-go.md) for the exact supported
-> surface, and [the roadmap](contributing/roadmap.md) for status.
+> **Experimental.** `datatree`'s public API and internal value representation **will
+> change**, and its scope is narrower than the libyang backend (no `anydata`/`anyxml`,
+> no RPC/action/notification data, partial XPath). Do not depend on its API yet — the
+> [pure-Go data tree guide](guides/data-tree-pure-go.md) has the exact supported
+> surface and [the roadmap](contributing/roadmap.md) tracks status.
 
 ### libyang data backend tier — optional, requires cgo
 
@@ -126,7 +128,8 @@ requires cgo and a one-time native build (`bash go/internal/libyang/build.sh`),
 stays strictly outside the default cgo-free closure, uses a coarse-grained
 whole-document FFI boundary, treats `ly_ctx` as build-once-then-frozen, and its
 data trees are not concurrency-safe. Guarantees **I1/I2/I3/I4/I5** over real data;
-I6 (gNMI) is future work.
+gNMI output (I6) is not wired yet — its atomic-JSON_IETF mechanism is specified, but
+no tier emits gNMI today.
 
 **Choosing a tier.** Schema and codegen only → Schema-IR tier, no C build. Generic
 data round-trip and validation without a C toolchain, and you can tolerate an

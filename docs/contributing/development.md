@@ -25,10 +25,11 @@ cd go && CGO_ENABLED=0 go vet  ./cambium ./codegen ./compat ./datatree
 scripts/check-go-default-pure.sh
 ```
 
-`scripts/check-go-default-pure.sh` is the load-bearing one: it runs those packages
-with `CGO_ENABLED=0`, then inspects their actual transitive dependency closure and
-fails if anything pulls in `runtime/cgo`, `libyang`, `internal/libyang`,
-`libyangbackend`, or `github.com/openconfig/goyang`. The cgo-free guarantee is
+`scripts/check-go-default-pure.sh` is the load-bearing one: it runs those packages —
+plus the cgo-free fitness tests under `./conformance` and `./internal/...` — with
+`CGO_ENABLED=0`, then inspects their actual transitive dependency closure and fails
+if anything pulls in `runtime/cgo`, `libyang`, `internal/libyang`, `libyangbackend`,
+`github.com/openconfig/goyang`, or the vendored `internal/yangparse/upstream` lexer. The cgo-free guarantee is
 verified against the resolved dependency graph, not asserted — so an accidental
 backend import fails the gate rather than silently dragging in C. See
 [tiers & the cgo boundary](../concepts/tiers-and-cgo.md).
@@ -52,8 +53,9 @@ scripts/green-bar.sh
 ```
 
 `green-bar.sh` runs the full local release bar: the cgo-free purity check first,
-then the cgo test suite, lint, and the conformance runner. Run it before declaring
-a change done.
+then the cgo test suite (`go test -race`), lint, the conformance runner, and a final
+engine-config check (`scripts/diff-engine-config.sh`) that the build flags match the
+pinned `/VERSIONS` cmake_flags. Run it before declaring a change done.
 
 ## Test-driven development
 

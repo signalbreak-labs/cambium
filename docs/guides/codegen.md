@@ -3,8 +3,8 @@
 The pure-Go `codegen` package turns a loaded Cambium schema context into a single,
 deterministic Go source file: typed structs for the module's data nodes, plus the
 serializers, parser, and validator those structs need. It exists so that the
-ordering Cambium computes at the schema level — RFC 7950 §7.8.5 declaration order,
-list keys first, `ordered-by user` insertion order — survives all the way into the
+ordering Cambium computes at the schema level — RFC 7950 declaration order (§7.5.7),
+list keys first (§7.8.5), `ordered-by user` insertion order — survives all the way into the
 code your application ships, without a runtime schema, reflection, or a cgo
 dependency.
 
@@ -93,7 +93,7 @@ normative I1–I6 text.
   `Get`, and `Iter`. There is no API that assigns an absolute sequence to a
   system-ordered node, so treating a system-ordered node as if it were
   user-ordered is a **compile error**, not a runtime check.
-- **RPC/action input and output in schema order (I4).** Generated I/O structs
+- **RPC/action/notification I/O in schema order (I4).** Generated I/O structs
   carry their children in effective schema order through the same field-order
   manifest.
 
