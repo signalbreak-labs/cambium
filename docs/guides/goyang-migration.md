@@ -251,9 +251,9 @@ you are most likely to depend on:
   plus `Lookup`, `Find`, and `GetErrors`).
 - **Type model:** `YangType` and its supporting types.
 - **AST nodes:** `Node` and the common statement node types (`Container`, `Leaf`,
-  `List`, `Grouping`, `Uses`, `RPC`, `Action`, `Notification`, and others) are type
-  aliases to the internal upstream parser, so AST-shaped code carries over.
-  (`Module` is a concrete struct rather than an alias.)
+  `List`, `Grouping`, `Uses`, `RPC`, `Action`, `Notification`, and others) are
+  Cambium-owned, goyang-shaped types. AST-shaped read code carries over, but raw
+  goyang AST values should be loaded through `compat` instead of passed in directly.
 - **Helpers:** `CamelCase`, matching goyang's identifier conversion.
 
 This is a summary, not the contract. The complete, current set of fields, methods,
