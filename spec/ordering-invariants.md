@@ -25,12 +25,15 @@ This contract is tiered because Cambium now has more than one engine:
 | Tier | Applies to | Order authority |
 |---|---|---|
 | **Schema IR tier** | Pure-Go schema/codegen (and any future binding's schema introspection) | Cambium's ordered effective-schema IR |
+| **Pure-Go data tier** (experimental) | Pure-Go `datatree` package | Cambium's ordered data tree, cgo-free, over a partial RFC-7950 scope |
 | **Backend/data tier** | Optional Go libyang backend (and any future binding's engine-backed data tier) | libyang data tree plus Cambium's schema-order contract |
 
-The pure-Go default package is required to satisfy the Schema IR tier without
-cgo. It does not, by itself, promise RFC-complete validation or serialized data
-bytes. Those remain Backend/data-tier guarantees unless a dedicated pure-Go data
-and validation engine is specified later.
+The pure-Go default schema/codegen packages are required to satisfy the Schema IR
+tier without cgo. They do not, by themselves, promise RFC-complete validation or
+serialized data bytes. Those remain Backend/data-tier guarantees. The experimental
+pure-Go `datatree` package is an emerging cgo-free data and validation engine, but
+its scope is partial and its API and value representation are unstable, so it does
+not yet carry the Backend/data-tier guarantees.
 
 ## 1. Definitions
 
@@ -147,9 +150,10 @@ Cross-language determinism is tier-scoped:
 2. **Backend/data byte parity:** Byte-identical XML/JSON/gNMI output is required
    only when both implementations run a comparable Backend/data tier over the
    same fixture, same pinned engine/config, and same formatting profile.
-3. The pure-Go default Go package does not provide a data-tree serializer in the
-   rebuild floor, so it is not part of Backend/data byte parity until such a
-   pure-Go data engine is specified and implemented.
+3. The pure-Go schema/codegen packages do not provide a data-tree serializer, and
+   the experimental `datatree` package — while it serializes cgo-free — is not part
+   of Backend/data byte parity while its scope and value representation are still
+   settling.
 
 ## 5. Explicitly not guaranteed
 
