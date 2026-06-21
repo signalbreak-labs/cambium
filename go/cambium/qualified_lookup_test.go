@@ -92,4 +92,29 @@ func TestSchemaChildrenLookupQualifiedDisambiguatesAugments(t *testing.T) {
 	if _, ok := children.LookupQualified("qualified-missing", "state"); ok {
 		t.Fatal("LookupQualified(qualified-missing, state) succeeded")
 	}
+
+	if got, want := left.QualifiedPath(), "/qualified-target:top/qualified-left:state"; got != want {
+		t.Fatalf("left QualifiedPath = %q, want %q", got, want)
+	}
+	if got, want := right.QualifiedPath(), "/qualified-target:top/qualified-right:state"; got != want {
+		t.Fatalf("right QualifiedPath = %q, want %q", got, want)
+	}
+	if left.QualifiedPath() == right.QualifiedPath() {
+		t.Fatalf("qualified paths collide: %q", left.QualifiedPath())
+	}
+
+	leftFromTarget, err := target.FindPath(left.QualifiedPath())
+	if err != nil {
+		t.Fatalf("target FindPath(left qualified path): %v", err)
+	}
+	if leftFromTarget.QualifiedName() != left.QualifiedName() {
+		t.Fatalf("target FindPath(left qualified path) = %#v, want %#v", leftFromTarget.QualifiedName(), left.QualifiedName())
+	}
+	leftFromOwnModule, err := left.Module().FindPath(left.QualifiedPath())
+	if err != nil {
+		t.Fatalf("left module FindPath(left qualified path): %v", err)
+	}
+	if leftFromOwnModule.QualifiedName() != left.QualifiedName() {
+		t.Fatalf("left module FindPath(left qualified path) = %#v, want %#v", leftFromOwnModule.QualifiedName(), left.QualifiedName())
+	}
 }
