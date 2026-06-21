@@ -1,14 +1,14 @@
 # Ordering
 
 Order correctness is Cambium's reason to exist. This page explains what "order"
-means in YANG, why it is load-bearing rather than cosmetic, the single design rule
+means in YANG, why it matters rather than being cosmetic, the single design rule
 Cambium follows to preserve it, the four ordering facets and how each is handled,
 and the six normative invariants (I1–I6) that pin the behavior down — including
 which tier guarantees which. The normative text lives in
 [`/spec/ordering-invariants.md`](../../spec/ordering-invariants.md); this page is
 the explanation behind it.
 
-## Why order is load-bearing
+## Why order matters
 
 In YANG, the order in which sibling nodes are declared is part of the model's
 meaning. RFC 7950 specifies that the children of a container (§7.5.7) or list entry

@@ -16,8 +16,8 @@ Order is a structural property of the tree — never a sort key, sidecar, or map
 An ordered sibling sequence is the source of truth; any keyed index is a derived
 lookup that is never consulted for traversal, codegen, or serialization. goyang
 stores effective children in a Go map (`Entry.Dir`) and returns them
-alphabetically; Cambium keeps the declaration order RFC 7950 §7.8.5 makes
-semantically load-bearing. This single rule is what the whole toolkit is built to
+alphabetically; Cambium keeps the declaration order RFC 7950 §7.5.7 makes
+semantically significant. This single rule is what the whole toolkit is built to
 protect — see [docs/concepts/ordering.md](docs/concepts/ordering.md).
 
 ## Capability tiers
@@ -130,6 +130,31 @@ under active development and **experimental** — its API and value representati
 will change. Current work and known gaps are tracked in
 [docs/contributing/roadmap.md](docs/contributing/roadmap.md). gNMI support remains
 future work.
+
+## Acknowledgements
+
+Cambium owes a great deal to
+[openconfig/goyang](https://github.com/openconfig/goyang) and the OpenConfig
+community. goyang is the mature, widely used YANG parser and AST library this
+project learned from: its parser is vendored here (see [NOTICE](NOTICE)), and its
+`Entry`/AST shape directly informed Cambium's `compat` surface.
+
+**Why build a new project instead of patching goyang?** The thing Cambium is built
+around — order as a *structural* property of the schema tree — and the enhancements
+that follow from it cannot be added to goyang without breaking changes to its public
+design. goyang exposes a node's children through a `map[string]*Entry` (`Entry.Dir`);
+making declaration order part of the public contract means changing it, and a library
+as widely used as goyang should not have its API broken underneath its users. So
+rather than fork or destabilize it, Cambium is a clean, order-first redesign aimed at
+that one narrower goal. The difference is one of design targets, not of one tool being
+right and the other wrong.
+
+> Personally: goyang is why this exists. It taught me how YANG parsing works in Go
+> and was the tool I reached for until I hit the one wall — declaration order — that
+> pushed me to build the order-correct version I needed. Thank you to everyone who
+> built and maintains it.
+>
+> — VerifiedOrganic
 
 ## License
 

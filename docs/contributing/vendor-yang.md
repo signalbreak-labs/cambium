@@ -126,7 +126,7 @@ keep growing owned coverage for them:
 - [conformance.md](./conformance.md) — the shared corpus, the manifest, and how
   the gates run.
 - [development.md](./development.md) — build/test/lint and the green-bar gate.
-- [../overview.md](../overview.md) — the tiers and why declaration order is
-  load-bearing.
+- [../overview.md](../overview.md) — the tiers and why declaration order
+  matters.
 - [../glossary.md](../glossary.md) — YANG and Cambium terms.
 - [../README.md](../README.md) — documentation index.

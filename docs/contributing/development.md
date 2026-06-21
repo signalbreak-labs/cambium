@@ -25,7 +25,7 @@ cd go && CGO_ENABLED=0 go vet  ./cambium ./codegen ./compat ./datatree
 scripts/check-go-default-pure.sh
 ```
 
-`scripts/check-go-default-pure.sh` is the load-bearing one: it runs those packages —
+`scripts/check-go-default-pure.sh` does the real work: it runs those packages —
 plus the cgo-free fitness tests under `./conformance` and `./internal/...` — with
 `CGO_ENABLED=0`, then inspects their actual transitive dependency closure and fails
 if anything pulls in `runtime/cgo`, `libyang`, `internal/libyang`, `libyangbackend`,
