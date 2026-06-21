@@ -32,11 +32,11 @@ var intImplicitBounds = map[cambium.IntKind][2]string{
 // resolved YANG type and appends any violations. It covers string length and
 // patterns, integer ranges (including the base-type width), decimal64
 // fraction-digits and ranges, boolean and empty shapes, enumeration and bits
-// membership, binary base64 + length, unions (first matching member wins), and
-// leafrefs (delegated to the referenced type). Leafref instance existence,
-// identityref base derivation, and instance-identifier resolution need
-// data/identity context and are later slices; those get a shape check only.
-func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path string, out *[]string) {
+// membership, binary base64 + length, unions (first matching member wins),
+// leafrefs (delegated to the referenced type), and identityref derivation.
+// Leafref instance existence and instance-identifier resolution need data/path
+// context and are later slices; instance-identifiers get a shape check only.
+func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModule string, out *[]string) {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedString:
 		s, ok := jsonStringValue(raw)
@@ -47,9 +47,13 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path string, ou
 		checkLengthRanges(int64(utf8.RuneCountInString(s)), r.Length, path, out)
 		checkPatterns(s, r.Patterns, path, out)
 	case cambium.ResolvedInt:
-		text, ok := numericText(raw)
+		text, ok := integerText(raw, r.Kind)
 		if !ok {
-			*out = append(*out, fmt.Sprintf("%s: expected an integer", path))
+			if integerJSONQuoted(r.Kind) {
+				*out = append(*out, fmt.Sprintf("%s: expected an integer JSON string", path))
+			} else {
+				*out = append(*out, fmt.Sprintf("%s: expected an integer JSON number", path))
+			}
 			return
 		}
 		v, ok := new(big.Int).SetString(text, 10)
@@ -102,7 +106,7 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path string, ou
 		}
 		for _, m := range members {
 			var trial []string
-			validateLeafValue(m, raw, path, &trial)
+			validateLeafValue(m, raw, path, leafModule, &trial)
 			if len(trial) == 0 {
 				return // first matching member type wins
 			}
@@ -110,7 +114,7 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path string, ou
 		*out = append(*out, fmt.Sprintf("%s: %s matches no union member type", path, rawDisplay(raw)))
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
-			validateLeafValue(*rt, raw, path, out)
+			validateLeafValue(*rt, raw, path, leafModule, out)
 		}
 		// instance existence is a later slice
 	case cambium.ResolvedIdentityRef:
@@ -119,7 +123,7 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path string, ou
 			*out = append(*out, fmt.Sprintf("%s: expected a JSON string", path))
 			return
 		}
-		validateIdentityRef(r, s, path, out)
+		validateIdentityRef(r, s, path, leafModule, out)
 	case cambium.ResolvedInstanceIdentifier:
 		// instance-identifier resolution needs data/XPath context (deferred);
 		// verify the JSON shape only.
@@ -144,18 +148,24 @@ func isJSONBool(raw json.RawMessage) bool {
 	return json.Unmarshal(raw, &b) == nil
 }
 
-// numericText returns the integer text whether it was JSON-encoded as a number
-// (int8..32 / uint8..32) or as a string (int64 / uint64, per RFC 7951 §6.1).
-func numericText(raw json.RawMessage) (string, bool) {
-	if s, ok := jsonStringValue(raw); ok {
-		return strings.TrimSpace(s), true
+// integerText returns the integer text only if the JSON token shape matches RFC
+// 7951: int64/uint64 are strings; narrower integer widths are JSON numbers.
+func integerText(raw json.RawMessage, kind cambium.IntKind) (string, bool) {
+	if integerJSONQuoted(kind) {
+		return jsonStringValue(raw)
 	}
 	t := strings.TrimSpace(string(raw))
-	if t == "" {
+	if !jsonIntegerNumberLexical.MatchString(t) {
 		return "", false
 	}
 	return t, true
 }
+
+func integerJSONQuoted(kind cambium.IntKind) bool {
+	return kind == cambium.IntKindI64 || kind == cambium.IntKindU64
+}
+
+var jsonIntegerNumberLexical = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 
 func rawDisplay(raw json.RawMessage) string {
 	if s, ok := jsonStringValue(raw); ok {
@@ -167,12 +177,12 @@ func rawDisplay(raw json.RawMessage) string {
 // validateIdentityRef checks that value names an identity that is one of the
 // required bases or transitively derived from one. A "module:name" value is
 // matched against qualified names, a bare value against same-module bare names.
-func validateIdentityRef(r cambium.ResolvedIdentityRef, value, path string, out *[]string) {
+func validateIdentityRef(r cambium.ResolvedIdentityRef, value, path, leafModule string, out *[]string) {
 	qualified := make(map[string]bool)
 	bare := make(map[string]bool)
 	seen := make(map[string]bool)
 	for _, base := range r.Bases() {
-		collectIdentity(base, qualified, bare, seen)
+		collectIdentity(base, leafModule, qualified, bare, seen)
 	}
 	valid := bare[value]
 	if strings.Contains(value, ":") {
@@ -183,16 +193,18 @@ func validateIdentityRef(r cambium.ResolvedIdentityRef, value, path string, out 
 	}
 }
 
-func collectIdentity(id cambium.Identity, qualified, bare, seen map[string]bool) {
+func collectIdentity(id cambium.Identity, leafModule string, qualified, bare, seen map[string]bool) {
 	qn := id.Module().Name() + ":" + id.Name()
 	if seen[qn] {
 		return
 	}
 	seen[qn] = true
 	qualified[qn] = true
-	bare[id.Name()] = true
+	if id.Module().Name() == leafModule {
+		bare[id.Name()] = true
+	}
 	for _, derived := range id.Derived() {
-		collectIdentity(derived, qualified, bare, seen)
+		collectIdentity(derived, leafModule, qualified, bare, seen)
 	}
 }
 
@@ -328,10 +340,17 @@ func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out
 	for _, v := range values {
 		defined[v.Name()] = true
 	}
+	seen := make(map[string]bool)
 	for _, bit := range strings.Fields(s) {
 		if !defined[bit] {
 			*out = append(*out, fmt.Sprintf("%s: %q is not a defined bit", path, bit))
+			continue
 		}
+		if !seen[bit] {
+			seen[bit] = true
+			continue
+		}
+		*out = append(*out, fmt.Sprintf("%s: duplicate bit %q", path, bit))
 	}
 }
 
@@ -342,7 +361,6 @@ func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out
 var decimal64Lexical = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
 
 func checkDecimal(s string, r cambium.ResolvedDecimal64, path string, out *[]string) {
-	s = strings.TrimSpace(s)
 	if !decimal64Lexical.MatchString(s) {
 		*out = append(*out, fmt.Sprintf("%s: %q is not a valid decimal64", path, s))
 		return

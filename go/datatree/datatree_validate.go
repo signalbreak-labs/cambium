@@ -18,14 +18,13 @@ func (e *ValidationError) Error() string {
 		len(e.Violations), strings.Join(e.Violations, "; "))
 }
 
-// Validate checks the structural constraints that need no XPath engine:
-// mandatory leaves present, list / leaf-list min- and max-elements, list keys
-// present in every entry, and list key uniqueness. It returns a *ValidationError
-// listing every violation, or nil if the tree is structurally valid.
+// Validate checks constraints that need no XPath engine: mandatory leaves present,
+// list / leaf-list min- and max-elements, leaf-list value uniqueness, list keys
+// present in every entry, list key uniqueness, and per-leaf value types. It
+// returns a *ValidationError listing every violation, or nil if the tree is valid.
 //
-// It does NOT yet check per-leaf value types (range / length / pattern / enum /
-// union / leafref) — that is a later slice — nor must/when XPath, which remain
-// the libyang backend's domain.
+// It does NOT yet check must/when XPath, leafref instance existence, or
+// instance-identifier resolution, which remain the libyang backend's domain.
 func (t *Tree) Validate() error {
 	var violations []string
 	validateLevel(flattenTopLevel(t.module), t.roots, "", &violations)
@@ -39,13 +38,13 @@ func (t *Tree) Validate() error {
 // against the data present at this level. Driving from the schema (not the data)
 // is what surfaces absent-but-required nodes.
 func validateLevel(schema []cambium.SchemaNodeRef, data []*node, path string, out *[]string) {
-	present := make(map[string]*node, len(data))
+	present := make(map[nodeKey]*node, len(data))
 	for _, d := range data {
-		present[d.name] = d
+		present[dataNodeKey(d)] = d
 	}
 	for _, sn := range schema {
 		childPath := path + "/" + sn.Name()
-		dn := present[sn.Name()]
+		dn := present[schemaNodeKey(sn)]
 		if dn == nil {
 			if sn.IsMandatory() {
 				*out = append(*out, fmt.Sprintf("missing mandatory node %s", childPath))
@@ -64,16 +63,17 @@ func validateLevel(schema []cambium.SchemaNodeRef, data []*node, path string, ou
 			}
 		case sn.IsLeafList():
 			checkElements(sn, len(dn.values), childPath, out)
+			checkLeafListUnique(dn, childPath, out)
 			if ti, ok := sn.LeafType(); ok {
 				for i, v := range dn.values {
-					validateLeafValue(ti, v, fmt.Sprintf("%s[%d]", childPath, i), out)
+					validateLeafValue(ti, v, fmt.Sprintf("%s[%d]", childPath, i), sn.Module().Name(), out)
 				}
 			}
 		case sn.IsContainer():
 			validateLevel(childRefs(sn.DataChildren(true)), dn.children, childPath, out)
 		case sn.IsLeaf():
 			if ti, ok := sn.LeafType(); ok {
-				validateLeafValue(ti, dn.value, childPath, out)
+				validateLeafValue(ti, dn.value, childPath, sn.Module().Name(), out)
 			}
 		}
 	}
@@ -121,5 +121,17 @@ func checkListKeys(sn cambium.SchemaNodeRef, dn *node, path string, out *[]strin
 			*out = append(*out, fmt.Sprintf("%s has a duplicate key %v", path, tuple))
 		}
 		seen[joined] = true
+	}
+}
+
+func checkLeafListUnique(dn *node, path string, out *[]string) {
+	seen := make(map[string]bool, len(dn.values))
+	for i, v := range dn.values {
+		value := string(v)
+		if seen[value] {
+			*out = append(*out, fmt.Sprintf("%s[%d] has a duplicate leaf-list value", path, i))
+			continue
+		}
+		seen[value] = true
 	}
 }
