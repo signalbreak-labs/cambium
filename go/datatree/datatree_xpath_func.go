@@ -131,12 +131,17 @@ func (ev *evaluator) evalCall(x *xCall, c ectx) (xval, error) {
 		}
 		return xval{kind: kNodeset, ns: []*xnode{ev.current}}, nil
 	case "local-name":
+		if len(args) > 1 {
+			return xval{}, fmt.Errorf("local-name() takes at most 1 argument")
+		}
 		var n *xnode
 		switch {
 		case len(args) == 0:
 			n = c.node
 		case args[0].kind == kNodeset && len(args[0].ns) > 0:
 			n = args[0].ns[0]
+		case args[0].kind != kNodeset:
+			return xval{}, fmt.Errorf("local-name() requires a node-set")
 		}
 		if n == nil {
 			return strVal(""), nil
@@ -160,7 +165,7 @@ func xpathSubstring(args []xval) string {
 	from := xpathRound(args[1].toNum())
 	to := math.Inf(1)
 	if len(args) == 3 {
-		to = from + xpathRound(args[2].toNum())
+		to = xpathRound(args[1].toNum() + args[2].toNum())
 	}
 	var b strings.Builder
 	for i, r := range rs {

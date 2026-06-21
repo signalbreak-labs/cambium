@@ -25,14 +25,14 @@ func (m *moduleData) applyUsesAugment(aug *yangparse.Statement, roots []*schemaN
 	return true
 }
 
-func applyRefine(n *schemaNodeData, refine *yangparse.Statement) {
+func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statement) {
 	defaults := direct(refine, "default")
 	if len(defaults) > 1 {
 		n.recordSchemaError(fmt.Errorf("refine %q has multiple default statements at %s", refine.Argument, defaults[1].Location()))
 		return
 	}
 	if len(defaults) == 1 {
-		n.defaults = []string{defaults[0].Argument}
+		n.defaults = []DefaultValue{{value: defaults[0].Argument, sourceModule: source}}
 	}
 	if description := n.singletonProperty(refine, "description"); description != nil && n.textMetadataPropertyAllowed(description) {
 		n.description = description.Argument
@@ -47,7 +47,7 @@ func applyRefine(n *schemaNodeData, refine *yangparse.Statement) {
 	n.applyConfigProperty(n.singletonProperty(refine, "config"))
 	n.applyPresenceProperty(n.singletonProperty(refine, "presence"))
 	n.applyCardinalityStatements(refine, true)
-	n.musts = append(n.musts, n.mustsFrom(refine)...)
+	n.musts = append(n.musts, n.mustsFrom(source, refine)...)
 	n.refreshAncestorListConstraints()
 }
 
@@ -109,19 +109,90 @@ func (m *moduleData) applyAugmentWhen(aug *yangparse.Statement, roots []*schemaN
 		m.recordSchemaError(err)
 		return
 	}
-	var walk func(*schemaNodeData)
-	walk = func(n *schemaNodeData) {
+	var walk func(*schemaNodeData, int)
+	walk = func(n *schemaNodeData, depth int) {
 		if n == nil {
 			return
 		}
-		n.whens = append(n.whens, when)
+		appendInheritedWhen(n, when.withSourceModule(m).withContextAncestorDepth(depth).withExcludedSubtrees(roots))
+		childDepth := depth
+		if dataTreeContextNode(n) {
+			childDepth++
+		}
 		for _, child := range n.children {
-			walk(child)
+			walk(child, childDepth)
 		}
 	}
 	for _, root := range roots {
-		walk(root)
+		walk(root, 1)
 	}
+}
+
+func dataTreeContextNode(n *schemaNodeData) bool {
+	switch n.kind {
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData:
+		return true
+	default:
+		return false
+	}
+}
+
+func propagateChoiceCaseWhens(n *schemaNodeData) {
+	if n == nil {
+		return
+	}
+	for _, when := range n.whens {
+		propagateWhenToDataDescendants(n.children, when.withExcludedSubtrees(n.children), 1)
+	}
+	for _, child := range n.children {
+		if child == nil || child.kind != SchemaNodeKindCase {
+			continue
+		}
+		for _, when := range child.whens {
+			propagateWhenToDataDescendants(child.children, when.withExcludedSubtrees([]*schemaNodeData{child}), 1)
+		}
+	}
+}
+
+func propagateWhenToDataDescendants(nodes []*schemaNodeData, when WhenConstraint, depth int) {
+	for _, n := range nodes {
+		if n == nil {
+			continue
+		}
+		childDepth := depth
+		if dataTreeContextNode(n) {
+			appendInheritedWhen(n, when.withContextAncestorDepth(depth))
+			childDepth++
+		}
+		propagateWhenToDataDescendants(n.children, when, childDepth)
+	}
+}
+
+func (w WhenConstraint) withContextAncestorDepth(depth int) WhenConstraint {
+	w.contextAncestorDepth = depth
+	return w
+}
+
+func (w WhenConstraint) withExcludedSubtrees(roots []*schemaNodeData) WhenConstraint {
+	w.excludedSubtrees = append([]*schemaNodeData(nil), roots...)
+	return w
+}
+
+func (m MustConstraint) withSourceModule(source *moduleData) MustConstraint {
+	m.sourceModule = source
+	return m
+}
+
+func (w WhenConstraint) withSourceModule(source *moduleData) WhenConstraint {
+	w.sourceModule = source
+	return w
+}
+
+func appendInheritedWhen(n *schemaNodeData, when WhenConstraint) {
+	if n == nil || n.listKey {
+		return
+	}
+	n.whens = append(n.whens, when)
 }
 
 func (m *moduleData) collectDeviations() {
@@ -230,11 +301,11 @@ func (m *moduleData) applyDeviation(targetMod *moduleData, target *schemaNodeDat
 func (m *moduleData) addDeviationProperty(target *schemaNodeData, prop *yangparse.Statement) {
 	switch prop.Keyword {
 	case "default":
-		if containsString(target.defaults, prop.Argument) {
+		if containsDefaultValue(target.defaults, prop.Argument) {
 			target.recordSchemaError(fmt.Errorf("deviate add default %q for %q already exists at %s", prop.Argument, target.name, prop.Location()))
 			return
 		}
-		target.defaults = append(target.defaults, prop.Argument)
+		target.defaults = append(target.defaults, DefaultValue{value: prop.Argument, sourceModule: m})
 	case "units":
 		if !target.unitsPropertyAllowed(prop) {
 			return
@@ -257,7 +328,7 @@ func (m *moduleData) addDeviationProperty(target *schemaNodeData, prop *yangpars
 			target.recordSchemaError(err)
 			return
 		}
-		target.musts = append(target.musts, constraint)
+		target.musts = append(target.musts, constraint.withSourceModule(m))
 	case "unique":
 		target.applyDeviationUniqueProperty(prop, false)
 	case "min-elements":
@@ -288,7 +359,7 @@ func (m *moduleData) replaceDeviationProperty(target *schemaNodeData, prop *yang
 			target.recordSchemaError(fmt.Errorf("deviate replace default for %q has no existing default at %s", target.name, prop.Location()))
 			return
 		}
-		target.defaults = []string{prop.Argument}
+		target.defaults = []DefaultValue{{value: prop.Argument, sourceModule: m}}
 	case "units":
 		if !target.unitsPropertyAllowed(prop) {
 			return
@@ -331,7 +402,7 @@ func (m *moduleData) replaceDeviationProperty(target *schemaNodeData, prop *yang
 			target.recordSchemaError(err)
 			return
 		}
-		target.musts = []MustConstraint{constraint}
+		target.musts = []MustConstraint{constraint.withSourceModule(m)}
 	case "unique":
 		if target.kind == SchemaNodeKindList && len(target.uniqueNames) == 0 {
 			target.recordSchemaError(fmt.Errorf("deviate replace unique for %q has no existing unique at %s", target.name, prop.Location()))
@@ -345,7 +416,7 @@ func deleteDeviationProperty(target *schemaNodeData, prop *yangparse.Statement) 
 	switch prop.Keyword {
 	case "default":
 		before := len(target.defaults)
-		target.defaults = removeString(target.defaults, prop.Argument)
+		target.defaults = removeDefaultValue(target.defaults, prop.Argument)
 		if len(target.defaults) == before {
 			target.recordSchemaError(fmt.Errorf("deviate delete default %q for %q does not exist at %s", prop.Argument, target.name, prop.Location()))
 		}

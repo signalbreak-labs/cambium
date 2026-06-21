@@ -1,0 +1,21 @@
+module schema-augment-deep-base {
+  namespace "urn:cambium:schema-augment-deep-base";
+  prefix sadb;
+  yang-version 1.1;
+
+  container network-instances {
+    list network-instance {
+      key "name";
+      leaf name { type string; }
+      container protocols {
+        list protocol {
+          key "name";
+          leaf name { type string; }
+          container state {
+            leaf oper-state { type string; }
+          }
+        }
+      }
+    }
+  }
+}

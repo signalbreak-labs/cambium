@@ -1,0 +1,15 @@
+module schema-augment-submodule-isis {
+  namespace "urn:cambium:schema-augment-submodule-isis";
+  prefix sasi;
+  yang-version 1.1;
+
+  import schema-augment-submodule-base { prefix base; }
+
+  augment "/base:protocols/base:protocol/base:config" {
+    when "../base:name = 'isis'";
+    leaf level { type uint8; }
+    container timers {
+      leaf hello-interval { type uint16; }
+    }
+  }
+}

@@ -33,7 +33,11 @@ func checkLeafRefInstance(sn cambium.SchemaNodeRef, value string, ancestors [][]
 	if !ok {
 		return
 	}
-	targets, supported := resolveLeafRefTargets(expr, ancestors)
+	sourceModule := lr.SourceModule()
+	if sourceModule.Name() == "" {
+		sourceModule = sn.Module()
+	}
+	targets, supported := resolveLeafRefTargets(expr, ancestors, sourceModule)
 	if !supported {
 		return // unsupported path construct: skip, do not false-reject
 	}
@@ -49,7 +53,7 @@ func checkLeafRefInstance(sn cambium.SchemaNodeRef, value string, ancestors [][]
 // resolveLeafRefTargets resolves a leafref path to the set of target leaf values
 // reachable in the data tree. supported=false means the path used a construct
 // outside the name-step subset and the caller must skip the check.
-func resolveLeafRefTargets(pathExpr string, ancestors [][]*node) (values []string, supported bool) {
+func resolveLeafRefTargets(pathExpr string, ancestors [][]*node, module cambium.Module) (values []string, supported bool) {
 	expr := strings.TrimSpace(pathExpr)
 	if expr == "" || strings.ContainsAny(expr, "[]()") {
 		return nil, false
@@ -74,22 +78,30 @@ func resolveLeafRefTargets(pathExpr string, ancestors [][]*node) (values []strin
 		}
 		start = ancestors[idx]
 	}
-	steps := splitLeafRefSteps(expr)
+	steps, ok := splitLeafRefSteps(expr, module)
+	if !ok {
+		return nil, false
+	}
 	if len(steps) == 0 {
 		return nil, false
 	}
 	return navigateLeafRef([][]*node{start}, steps)
 }
 
+type leafRefStep struct {
+	module string
+	name   string
+}
+
 // navigateLeafRef walks name steps across a set of sibling frames, branching at
 // lists, and collects the terminal leaf / leaf-list values.
-func navigateLeafRef(frames [][]*node, steps []string) ([]string, bool) {
+func navigateLeafRef(frames [][]*node, steps []leafRefStep) ([]string, bool) {
 	for si, step := range steps {
 		last := si == len(steps)-1
 		if last {
 			var values []string
 			for _, frame := range frames {
-				n := findByName(frame, step)
+				n := findByLeafRefStep(frame, step)
 				if n == nil {
 					continue
 				}
@@ -108,7 +120,7 @@ func navigateLeafRef(frames [][]*node, steps []string) ([]string, bool) {
 		}
 		var next [][]*node
 		for _, frame := range frames {
-			n := findByName(frame, step)
+			n := findByLeafRefStep(frame, step)
 			if n == nil {
 				continue
 			}
@@ -126,16 +138,34 @@ func navigateLeafRef(frames [][]*node, steps []string) ([]string, bool) {
 	return nil, true
 }
 
-func splitLeafRefSteps(rest string) []string {
-	var steps []string
+func splitLeafRefSteps(rest string, module cambium.Module) ([]leafRefStep, bool) {
+	var steps []leafRefStep
 	for _, s := range strings.Split(rest, "/") {
 		if s == "" {
 			continue
 		}
+		mod := module
 		if i := strings.LastIndex(s, ":"); i >= 0 {
-			s = s[i+1:] // strip module prefix
+			var ok bool
+			mod, ok = module.ResolvePrefix(s[:i])
+			if !ok {
+				return nil, false
+			}
+			s = s[i+1:]
 		}
-		steps = append(steps, s)
+		if s == "" {
+			return nil, false
+		}
+		steps = append(steps, leafRefStep{module: mod.Name(), name: s})
 	}
-	return steps
+	return steps, true
+}
+
+func findByLeafRefStep(nodes []*node, step leafRefStep) *node {
+	for _, n := range nodes {
+		if n.module == step.module && n.name == step.name {
+			return n
+		}
+	}
+	return nil
 }

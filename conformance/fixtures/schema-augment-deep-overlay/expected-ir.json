@@ -1,0 +1,56 @@
+{
+  "module": "schema-augment-deep-base",
+  "load": [
+    "schema-augment-deep-base",
+    "schema-augment-deep-telemetry",
+    "schema-augment-deep-oam"
+  ],
+  "children": {
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state": [
+      "oper-state",
+      "oper-state",
+      "last-change",
+      "export-policy",
+      "sample-interval",
+      "session-detail",
+      "history"
+    ],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/session-detail": [
+      "single-hop",
+      "multi-hop"
+    ],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/history": [
+      "sequence",
+      "reason"
+    ]
+  },
+  "dataChildrenFlatten": {
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state": [
+      "oper-state",
+      "oper-state",
+      "last-change",
+      "export-policy",
+      "sample-interval",
+      "discriminator",
+      "remote-address",
+      "history"
+    ]
+  },
+  "keys": {
+    "/schema-augment-deep-base/network-instances/network-instance": ["name"],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol": ["name"],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/history": ["sequence"]
+  },
+  "whens": {
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/session-detail": [
+      "../base:name = 'bfd'"
+    ],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/history": [
+      "../base:name = 'bfd'"
+    ],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/history/sequence": [],
+    "/schema-augment-deep-base/network-instances/network-instance/protocols/protocol/state/history/reason": [
+      "../base:name = 'bfd'"
+    ]
+  }
+}

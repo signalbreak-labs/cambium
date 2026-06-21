@@ -48,7 +48,7 @@ func TestXPathParseRejected(t *testing.T) {
 func TestXPathParseShape(t *testing.T) {
 	cases := map[string]string{
 		"../x = 'y'":          "(= ../x 'y')",
-		"count(/a:b/a:c) > 0": "(> count(/b/c) 0)",
+		"count(/a:b/a:c) > 0": "(> count(/a:b/a:c) 0)",
 		"a and b":             "(and a b)",
 		"not(z)":              "not(z)",
 	}
