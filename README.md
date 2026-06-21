@@ -133,5 +133,7 @@ future work.
 
 ## License
 
-BSD-3-Clause. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for vendored third-party
-components (libyang, PCRE2).
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE) for vendored third-party
+components: the pure-Go YANG parser vendors [openconfig/goyang](https://github.com/openconfig/goyang)
+(Apache-2.0), and the optional backend statically links libyang (BSD-3-Clause)
+and PCRE2 (BSD-2-Clause).

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 //go:build cgo
 
 // Structured validation diagnostics for multi-error RFC-7950 validation.

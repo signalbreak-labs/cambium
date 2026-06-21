@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package confmanifest parses the shared /conformance manifest.toml.
 //
 // It lives in an internal package so both the pure-Go schema floor

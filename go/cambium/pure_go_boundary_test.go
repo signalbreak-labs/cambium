@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 package cambium_test
 
 import (
@@ -138,7 +141,27 @@ func TestPureGoNoGoyangDependencyClosure(t *testing.T) {
 	}
 }
 
-func TestVendoredGoyangForkAttribution(t *testing.T) {
+// TestCoreHasNoVendoredGoyangDependency asserts the shipping schema/codegen core
+// is free of the vendored goyang parser and uses Cambium's own native RFC 7950
+// parser instead. compat is intentionally excluded: it is the goyang-compatible
+// surface and deliberately keeps the vendored parser.
+func TestCoreHasNoVendoredGoyangDependency(t *testing.T) {
+	cmd := exec.Command("go", "list", "-deps", "./cambium", "./codegen")
+	cmd.Dir = filepath.Join(repoRoot(t), "go")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list dependency closure failed:\n%s", out)
+	}
+	const vendoredGoyang = "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream"
+	for _, dep := range strings.Fields(string(out)) {
+		if strings.HasPrefix(dep, vendoredGoyang) {
+			t.Fatalf("schema/codegen core depends on vendored goyang package %q; the core must use Cambium's native parser\n%s", dep, out)
+		}
+	}
+}
+
+func TestVendoredGoyangAttribution(t *testing.T) {
 	upstreamRoot := filepath.Join(repoRoot(t), "go", "internal", "yangparse", "upstream")
 	for _, name := range []string{"LICENSE", "AUTHORS", "CONTRIBUTORS", "UPSTREAM.md"} {
 		if _, err := os.Stat(filepath.Join(upstreamRoot, name)); err != nil {
@@ -152,7 +175,7 @@ func TestVendoredGoyangForkAttribution(t *testing.T) {
 		"v1.6.3",
 		"274b3b50006c99113ae0670d8d250a4d093536cb",
 		"Patch Log",
-		"Parser behavior changes in this fork are limited",
+		"Parser behavior changes in this vendored copy are limited",
 	} {
 		if !strings.Contains(upstreamDoc, want) {
 			t.Fatalf("UPSTREAM.md missing %q", want)
