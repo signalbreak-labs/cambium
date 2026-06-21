@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   go-macos:
     runs-on: macos-latest
@@ -17,6 +21,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache-dependency-path: go/go.sum
       - name: Go default pure gate
         run: scripts/check-go-default-pure.sh
       - name: Build static engine
@@ -42,6 +47,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache-dependency-path: go/go.sum
       - name: Go default pure gate
         run: scripts/check-go-default-pure.sh
       - name: Build static engine
@@ -67,6 +73,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+          cache-dependency-path: go/go.sum
       - uses: goto-bus-stop/setup-zig@v2
         with:
           version: 0.13.0

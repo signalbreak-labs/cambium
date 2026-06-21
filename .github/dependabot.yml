@@ -1,0 +1,28 @@
+version: 2
+
+# Note: the vendored C engine (libyang, pcre2) is intentionally NOT managed here.
+# It is pinned by SHA in /VERSIONS; bumps are manual and must re-run the full
+# ordering + conformance suite (see AGENTS.md). Dependabot would not honor that.
+updates:
+  - package-ecosystem: gomod
+    directory: /go
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      go-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns:
+          - "*"

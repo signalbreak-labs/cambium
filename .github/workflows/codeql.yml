@@ -1,0 +1,53 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly resweep so newly-published CodeQL queries run against unchanged code.
+    - cron: "27 4 * * 1"
+
+# Cancel an in-flight analysis when a branch is pushed again.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze Go
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: go/go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          build-mode: manual
+          queries: security-and-quality
+
+      # Build the full module (cgo backend included) so CodeQL sees every path,
+      # not just the cgo-free tiers. Mirrors the engine build used by CI.
+      - name: Build static engine
+        run: bash go/internal/libyang/build.sh
+
+      - name: Build Go module
+        run: cd go && CGO_ENABLED=1 go build ./...
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
