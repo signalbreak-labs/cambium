@@ -768,6 +768,14 @@ type Import struct {
 func (i Import) Description() (string, bool) { return optional(i.description) }
 func (i Import) Reference() (string, bool)   { return optional(i.reference) }
 
+// QualifiedName identifies a schema node by its local name and defining module.
+type QualifiedName struct {
+	Module    string
+	Prefix    string
+	Namespace string
+	Name      string
+}
+
 // Include is a value type for module include metadata.
 type Include struct {
 	Name     string
@@ -3293,6 +3301,19 @@ func (n SchemaNodeRef) Name() string {
 	}
 	return n.node.name
 }
+
+// QualifiedName returns the node's local name and defining module identity.
+func (n SchemaNodeRef) QualifiedName() QualifiedName {
+	if n.node == nil || n.node.module == nil {
+		return QualifiedName{}
+	}
+	return QualifiedName{
+		Module:    n.node.module.name,
+		Prefix:    n.node.module.prefix,
+		Namespace: n.node.module.namespace,
+		Name:      n.node.name,
+	}
+}
 func (n SchemaNodeRef) Kind() SchemaNodeKind {
 	if n.node == nil {
 		return SchemaNodeKindUnknown
@@ -3647,6 +3668,40 @@ func (c SchemaChildren) Lookup(name string) (SchemaNodeRef, bool) {
 		if n.Name() == name {
 			return n, true
 		}
+	}
+	return SchemaNodeRef{}, false
+}
+
+// LookupQualified returns the child with the given defining module and local name.
+func (c SchemaChildren) LookupQualified(module, name string) (SchemaNodeRef, bool) {
+	return c.LookupQName(QualifiedName{Module: module, Name: name})
+}
+
+// LookupQName returns the child matching all non-empty fields of qname.
+func (c SchemaChildren) LookupQName(qname QualifiedName) (SchemaNodeRef, bool) {
+	if qname.Name == "" ||
+		(qname.Module == "" && qname.Prefix == "" && qname.Namespace == "") ||
+		strings.TrimSpace(qname.Name) != qname.Name ||
+		strings.TrimSpace(qname.Module) != qname.Module ||
+		strings.TrimSpace(qname.Prefix) != qname.Prefix ||
+		strings.TrimSpace(qname.Namespace) != qname.Namespace {
+		return SchemaNodeRef{}, false
+	}
+	for _, n := range c.nodes {
+		if n.Name() != qname.Name {
+			continue
+		}
+		got := n.QualifiedName()
+		if qname.Module != "" && got.Module != qname.Module {
+			continue
+		}
+		if qname.Prefix != "" && got.Prefix != qname.Prefix {
+			continue
+		}
+		if qname.Namespace != "" && got.Namespace != qname.Namespace {
+			continue
+		}
+		return n, true
 	}
 	return SchemaNodeRef{}, false
 }
