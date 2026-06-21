@@ -14,7 +14,7 @@ in the same ecosystem; both are good fits for a large class of YANG work — loo
 analysis, validation, OpenConfig-style modeling and codegen.
 
 Cambium targets a narrower use case: workflows where **schema declaration order**
-is load-bearing. RFC 7950 says a container's (§7.5.7) or list entry's (§7.8.5)
+matters. RFC 7950 says a container's (§7.5.7) or list entry's (§7.8.5)
 children appear in schema declaration order, and order-correct, NETCONF-facing serialization plus
 typed-struct codegen need the tree to remember that order. goyang stores a node's
 effective children in a Go map (`Entry.Dir map[string]*Entry`) and returns them

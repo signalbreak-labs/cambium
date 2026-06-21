@@ -1,7 +1,7 @@
 # Cambium overview
 
 Cambium is an order-correct YANG toolkit and SDK for Go. This page explains the
-problem it solves — that schema declaration order is a load-bearing property of a
+problem it solves — that schema declaration order is a significant property of a
 YANG model — the design rule that follows from taking that seriously, the three
 implementation tiers, how Cambium relates to openconfig/goyang, who it is for, and
 what it deliberately leaves out. Deeper treatments live in the `concepts/` docs,
@@ -148,6 +148,12 @@ depend on — and that specific use case is exactly what Cambium targets. The
 difference is one of design targets, not of one tool being right and the other
 wrong.
 
+Making order part of the API could not be done in goyang without changing its
+published `Entry`/`Entry.Dir` contract, and a library many projects depend on should
+not have its API broken underneath them. So rather than fork or destabilize goyang,
+Cambium is a separate, order-first redesign — one it openly learns from and
+[acknowledges](../README.md#acknowledgements).
+
 For teams already on goyang, Cambium ships a `compat` package that mirrors goyang's
 `pkg/yang` surface (the `Entry` tree, `Modules` loader, `ToEntry`, the `Node` AST,
 `YangType`). The one behavioral note to carry over: ordered traversal must go
@@ -156,8 +162,8 @@ through `Entry.Children()` (schema declaration order) rather than iterating the
 
 ## Who Cambium is for
 
-Cambium is for Go engineers building YANG tooling where declaration order is
-load-bearing: order-correct serialization to generic XML / JSON_IETF, and
+Cambium is for Go engineers building YANG tooling where declaration order
+matters: order-correct serialization to generic XML / JSON_IETF, and
 typed-struct codegen whose output a NETCONF-facing device accepts as-is. The
 motivating downstream consumer is a YANG → Terraform-provider generator that emits
 NETCONF; that generator lives in a *separate* repository and consumes Cambium's
