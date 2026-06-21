@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 // Modified by signalbreak-labs for Cambium: removed a production go-cmp
-// dependency from the vendored parser fork.
+// dependency from the vendored parser copy.
 
 package yang
 

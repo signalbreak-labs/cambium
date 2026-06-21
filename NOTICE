@@ -1,7 +1,31 @@
-Cambium vendored third-party software
+Cambium
+Copyright 2026 signalbreak-labs
 
-This project includes the following third-party components, vendored under
-`third_party/` and statically linked by default.
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+----------------------------------------------------------------------
+
+Vendored third-party software
+
+This project includes the following third-party components. The C engine
+(libyang, PCRE2) is vendored under `third_party/` and statically linked by the
+optional backend. The pure-Go YANG parser is a vendored copy of openconfig/goyang
+under `go/internal/yangparse/upstream/`.
+
+## goyang (openconfig/goyang)
+
+- Location: `go/internal/yangparse/upstream`
+- Upstream: https://github.com/openconfig/goyang
+- Version: v1.6.3 (tag SHA 274b3b50006c99113ae0670d8d250a4d093536cb)
+- License: Apache-2.0
+- Copyright: Google Inc.
+
+Cambium's default pure-Go schema package uses a vendored copy of goyang's
+`pkg/yang` and `pkg/indent` as its cgo-free YANG parser, so the default Go
+package has no runtime dependency on the upstream module. The copied source
+retains its upstream Apache-2.0 license headers; the full license text is at
+`go/internal/yangparse/upstream/LICENSE`. Cambium modified some of these files;
+the changes are documented in `go/internal/yangparse/upstream/UPSTREAM.md`.
 
 ## libyang
 

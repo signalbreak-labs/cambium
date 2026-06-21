@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package codegen is the Go side of Cambium's YANG → typed-language generator.
 //
 // v2 consumes the rich goyang-grade Module/SchemaNodeRef API and emits typed

@@ -392,7 +392,7 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     renders children through `Entry.Children()` in effective declaration order,
     never by sorting or ranging over `Entry.Dir`. `TriState.String()` and
     `EntryKind.String()` keep goyang-compatible spellings for existing logging
-    and diagnostics. `BaseTypedefs` exposes the parser fork's goyang-shaped
+    and diagnostics. `BaseTypedefs` exposes the vendored parser's goyang-shaped
     manufactured typedefs for built-in YANG types. `YangType` exposes
     goyang-compatible `TypeKind` constants and common read fields such as
     `Base`, `Root`, `Default`, `HasDefault`, `Units`, `FractionDigits`,
