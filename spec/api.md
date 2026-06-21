@@ -35,9 +35,9 @@ The pure-Go default packages MUST build and test with `CGO_ENABLED=0` and MUST N
 to Backend/data-tier runs. Schema IR parity is property-level. A future non-Go binding remains free
 to implement the data tier over its own engine.
 
-## Ratified decisions (2026-06-13)
+## Governing decisions
 
-These were decided before any signature hardened; they govern the whole surface.
+These decisions govern the whole surface.
 
 - **D-1 — Handle model: BORROWED.** `NodeRef`/`SchemaNodeRef`/`Module` are domain handles; no engine
   pointer, cgo pointer, `unsafe` value, or backend-internal type crosses the public boundary. In Go,
@@ -1057,23 +1057,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   are informational sub-fields under the stable top-level code (no renumbering).
 - The same failure yields the **same rule code across bindings** — a conformance assertion.
 
-## Acceptance tests (red targets — write the failing test first, then implement)
+## Conformance
 
-Per the TDD house rule, each Phase begins by committing these as failing tests; golden bytes are
-**generated and reviewed at implementation time, never hand-authored**.
-
-- **Phase 1 (schema + types):** `children_declaration_order` (scrambled-children fixture),
-  `list_keys_statement_order`, `rpc_io_schema_order`, `leaf_type_decimal64_fraction_digits`,
-  `leaf_type_enum_values_ordered`, `leaf_type_union_members_recursive`, `leafref_target_resolves`,
-  `identity_derived_closure`, `schema_node_config_status_mandatory`.
-- **Phase 2 (data CRUD + validation):** `new_path_builds_intermediates`,
-  `new_path_then_serialize_declaration_order`, `set_value_reports_changed`, `remove_path_round_trip`,
-  `get_value_typed`, `select_document_order`, `children_one_ffi_walk_ordered`,
-  `validate_must_when_fails_with_path`, `validate_multi_error_returns_list`, `user_ordered_read_side`,
-  `compile_fail_no_set_on_vec_field` (trybuild), `go_stale_handle_after_mutation` (E0007).
-- **Phase 3 (serde + diff):** `serialize_with_defaults_all`, `serialize_keep_empty_container`,
-  `json_object_determinism`, `diff_ordered_by_user_atomic`, `merge_conflict_errors`,
-  `diff_apply_round_trip`.
-- **Phase 5 (codegen v2):** `codegen_field_order_manifest_keys_first`,
-  `codegen_user_ordered_field_is_positional`, `codegen_enum_and_union_typed`,
-  `codegen_round_trip_bytes_equal_libyang`.
+Behavior specified here is verified by the shared `/conformance` corpus
+(`manifest.toml` plus golden outputs) and the binding's unit tests — never by
+hand-authored expectations. Every ordering invariant (I1–I6) has at least one
+fixture and coverage is a floor; per the TDD house rule, a change to observable
+behavior lands its failing fixture or test before the implementation. The fixture
+tiers and runner contract are specified in
+[`ordering-invariants.md`](./ordering-invariants.md) §6.
