@@ -60,12 +60,18 @@ cmake -S "$PCRE2_SRC" -B "$BUILD/pcre2-build" \
 cmake --build "$BUILD/pcre2-build" --target install -j "$JOBS"
 
 echo "=== Stage 2: libyang (static) against staged PCRE2 ==="
+# libyang's FindPCRE2 only short-circuits on the PLURAL PCRE2_LIBRARIES/_INCLUDE_DIRS;
+# without them it falls through to find_library and links a system pcre2 (or fails
+# outright under cross-toolchains like zig/musl, where no host pcre2 exists). Seed
+# both spellings so it always uses our pinned static lib.
 cmake -S "$LIBYANG_SRC" -B "$BUILD/libyang-build" \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
   -DENABLE_LYD_PRIV=OFF \
   -DENABLE_TESTS=OFF \
   -DCMAKE_INSTALL_LIBDIR=lib \
+  -DPCRE2_LIBRARIES="$PCRE2_INSTALL/lib/libpcre2-8.a" \
+  -DPCRE2_INCLUDE_DIRS="$PCRE2_INSTALL/include" \
   -DPCRE2_LIBRARY="$PCRE2_INSTALL/lib/libpcre2-8.a" \
   -DPCRE2_INCLUDE_DIR="$PCRE2_INSTALL/include" \
   -DCMAKE_INSTALL_PREFIX="$LIBYANG_INSTALL" \
