@@ -104,6 +104,8 @@ const (
 // BaseType is the precise built-in YANG base type for a leaf or leaf-list.
 type BaseType int
 
+// Built-in YANG base types; BaseTypeUnknown is the zero value for an
+// unresolved or non-leaf node.
 const (
 	BaseTypeUnknown BaseType = iota
 	BaseTypeString
@@ -176,6 +178,7 @@ func (b BaseType) String() string {
 // IntKind classifies signed/unsigned integer types.
 type IntKind int
 
+// Integer kinds covering the eight signed and unsigned YANG integer widths.
 const (
 	IntKindI8 IntKind = iota
 	IntKindI16
@@ -1296,7 +1299,7 @@ func (n SchemaNodeRef) LeafType() (TypeInfo, bool) {
 	if data.kind != SchemaNodeKindLeaf && data.kind != SchemaNodeKindLeafList {
 		return TypeInfo{}, false
 	}
-	return n.forest.resolveType(n.moduleIndex, data.rawTypeInfo), true
+	return n.forest.resolveType(data.rawTypeInfo), true
 }
 
 // Units returns the units substatement, if any.
@@ -1996,7 +1999,7 @@ func (f *schemaForest) resolvePathPrefix(mod *moduleData, prefix string) (string
 	return "", false
 }
 
-func (f *schemaForest) resolveType(moduleIndex int, raw libyang.RawTypeInfo) TypeInfo {
+func (f *schemaForest) resolveType(raw libyang.RawTypeInfo) TypeInfo {
 	base := baseTypeFromRaw(raw.BaseType)
 	info := TypeInfo{
 		base:        base,
@@ -2048,7 +2051,7 @@ func (f *schemaForest) resolveType(moduleIndex int, raw libyang.RawTypeInfo) Typ
 		}
 		var realtype *TypeInfo
 		if raw.LeafrefRealtype != nil {
-			rt := f.resolveType(moduleIndex, *raw.LeafrefRealtype)
+			rt := f.resolveType(*raw.LeafrefRealtype)
 			realtype = &rt
 		}
 		var target *SchemaNodeRef
@@ -2066,7 +2069,7 @@ func (f *schemaForest) resolveType(moduleIndex int, raw libyang.RawTypeInfo) Typ
 	case BaseTypeUnion:
 		members := make([]TypeInfo, len(raw.UnionTypes))
 		for i, member := range raw.UnionTypes {
-			members[i] = f.resolveType(moduleIndex, member)
+			members[i] = f.resolveType(member)
 		}
 		info.resolved = ResolvedUnion{members: members}
 	case BaseTypeBoolean:

@@ -225,7 +225,7 @@ var xmlNameCharRanges = []runeRange{
 	{0x10000, 0xEFFFF},
 }
 
-func nativeEscapeReplacement(runes []rune, slash int, inClass bool) (string, int, bool) {
+func nativeEscapeReplacement(runes []rune, slash int, inClass bool) (expr string, end int, ok bool) {
 	if slash+1 >= len(runes) {
 		return "", slash, false
 	}
@@ -254,7 +254,7 @@ func nativeEscapeReplacement(runes []rune, slash int, inClass bool) (string, int
 	if slash+3 >= len(runes) || (runes[slash+1] != 'p' && runes[slash+1] != 'P') || runes[slash+2] != '{' {
 		return "", slash, false
 	}
-	end := -1
+	end = -1
 	for i := slash + 3; i < len(runes); i++ {
 		if runes[i] == '}' {
 			end = i
@@ -264,8 +264,8 @@ func nativeEscapeReplacement(runes []rune, slash int, inClass bool) (string, int
 	if end == -1 {
 		return "", slash, false
 	}
-	ranges, ok := unicodeBlockClassRanges(string(runes[slash+3:end]), runes[slash+1] == 'P')
-	if !ok {
+	ranges, found := unicodeBlockClassRanges(string(runes[slash+3:end]), runes[slash+1] == 'P')
+	if !found {
 		return "", slash, false
 	}
 	return regexpClassExpr(ranges, inClass), end, true
@@ -282,22 +282,7 @@ func unicodeBlockClassRanges(category string, complement bool) ([]runeRange, boo
 	if !complement {
 		return ranges, true
 	}
-	out := make([]runeRange, 0, len(ranges)+1)
-	next := 0
-	for _, r := range ranges {
-		lo := int(r.lo)
-		hi := int(r.hi)
-		if lo > next {
-			out = append(out, runeRange{lo: rune(next), hi: rune(lo - 1)})
-		}
-		if hi+1 > next {
-			next = hi + 1
-		}
-	}
-	if next <= utf8.MaxRune {
-		out = append(out, runeRange{lo: rune(next), hi: utf8.MaxRune})
-	}
-	return out, true
+	return complementRanges(ranges), true
 }
 
 func regexpClassExpr(ranges []runeRange, inClass bool) string {
@@ -322,7 +307,7 @@ func regexpClassExpr(ranges []runeRange, inClass bool) string {
 	return out.String()
 }
 
-func categoryClassExpr(categories []string, complement bool, inClass bool) string {
+func categoryClassExpr(categories []string, complement, inClass bool) string {
 	var out strings.Builder
 	if !inClass {
 		out.WriteByte('[')
@@ -345,19 +330,22 @@ func categoryClassExpr(categories []string, complement bool, inClass bool) strin
 func complementRanges(ranges []runeRange) []runeRange {
 	ranges = normalizeRanges(ranges)
 	out := make([]runeRange, 0, len(ranges)+1)
-	next := 0
+	var next rune
+	covered := false // whether next has reached past MaxRune
 	for _, r := range ranges {
-		lo := int(r.lo)
-		hi := int(r.hi)
-		if lo > next {
-			out = append(out, runeRange{lo: rune(next), hi: rune(lo - 1)})
+		if r.lo > next {
+			out = append(out, runeRange{lo: next, hi: r.lo - 1})
 		}
-		if hi+1 > next {
-			next = hi + 1
+		if r.hi >= utf8.MaxRune {
+			covered = true
+			break
+		}
+		if r.hi+1 > next {
+			next = r.hi + 1
 		}
 	}
-	if next <= utf8.MaxRune {
-		out = append(out, runeRange{lo: rune(next), hi: utf8.MaxRune})
+	if !covered && next <= utf8.MaxRune {
+		out = append(out, runeRange{lo: next, hi: utf8.MaxRune})
 	}
 	return out
 }
@@ -404,13 +392,14 @@ func subtractRanges(base, sub []runeRange) []runeRange {
 		}
 		for i := subIndex; i < len(sub) && sub[i].lo <= b.hi; i++ {
 			if sub[i].lo > cur {
-				out = append(out, runeRange{lo: cur, hi: rune(int(sub[i].lo) - 1)})
+				// sub[i].lo > cur >= 0, so sub[i].lo-1 is a valid codepoint.
+				out = append(out, runeRange{lo: cur, hi: sub[i].lo - 1})
 			}
 			if sub[i].hi >= b.hi {
-				cur = rune(int(b.hi) + 1)
+				cur = b.hi + 1
 				break
 			}
-			cur = rune(int(sub[i].hi) + 1)
+			cur = sub[i].hi + 1
 		}
 		if cur <= b.hi {
 			out = append(out, runeRange{lo: cur, hi: b.hi})
@@ -419,13 +408,13 @@ func subtractRanges(base, sub []runeRange) []runeRange {
 	return out
 }
 
-func nativeClassReplacement(runes []rune, start int) (string, int, bool) {
-	_, _, _, end, ok := findClassSubtraction(runes, start)
+func nativeClassReplacement(runes []rune, start int) (expr string, end int, ok bool) {
+	_, _, _, end, ok = findClassSubtraction(runes, start)
 	if !ok {
 		return "", start, false
 	}
-	ranges, parsedEnd, ok := parseClassExprRanges(runes, start)
-	if !ok || parsedEnd != end {
+	ranges, parsedEnd, found := parseClassExprRanges(runes, start)
+	if !found || parsedEnd != end {
 		return "", end, false
 	}
 	return regexpClassExpr(ranges, false), end, true
@@ -667,6 +656,9 @@ func unicodeRangeTableRanges(table *unicode.RangeTable) []runeRange {
 		ranges = appendStridedRange(ranges, rune(r.Lo), rune(r.Hi), rune(r.Stride))
 	}
 	for _, r := range table.R32 {
+		if r.Lo > utf8.MaxRune || r.Hi > utf8.MaxRune || r.Stride > utf8.MaxRune {
+			continue
+		}
 		ranges = appendStridedRange(ranges, rune(r.Lo), rune(r.Hi), rune(r.Stride))
 	}
 	return normalizeRanges(ranges)
@@ -686,7 +678,7 @@ func writeRegexpClassRune(out *strings.Builder, r rune) {
 	fmt.Fprintf(out, `\x{%X}`, r)
 }
 
-func unsupportedNativeClassSyntax(runes []rune, start int) (int, string) {
+func unsupportedNativeClassSyntax(runes []rune, start int) (end int, reason string) {
 	for i := start + 1; i < len(runes); i++ {
 		switch runes[i] {
 		case '\\':

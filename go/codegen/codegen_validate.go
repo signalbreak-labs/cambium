@@ -125,16 +125,16 @@ func (g *goEmitter) emitFieldValidation(f fieldInfo, out *strings.Builder) {
 	switch f.node.Kind() {
 	case cambium.SchemaNodeKindLeafList, cambium.SchemaNodeKindList:
 		lenExpr := validationLenExpr("n", f)
-		if min, ok := f.node.MinElements(); ok && min > 0 {
+		if minE, ok := f.node.MinElements(); ok && minE > 0 {
 			if !f.node.IsChoiceDescendant() {
-				fmt.Fprintf(out, "\tif %s < %d {\n", lenExpr, min)
+				fmt.Fprintf(out, "\tif %s < %d {\n", lenExpr, minE)
 				fmt.Fprintf(out, "\t\treturn cambiumValidationError(cambiumJoinPath(path, %q), %q)\n", wire, "min-elements violation")
 				out.WriteString("\t}\n")
 			}
 		}
-		if max, ok := f.node.MaxElements(); ok {
+		if maxE, ok := f.node.MaxElements(); ok {
 			if !f.node.IsChoiceDescendant() {
-				fmt.Fprintf(out, "\tif %s > %d {\n", lenExpr, max)
+				fmt.Fprintf(out, "\tif %s > %d {\n", lenExpr, maxE)
 				fmt.Fprintf(out, "\t\treturn cambiumValidationError(cambiumJoinPath(path, %q), %q)\n", wire, "max-elements violation")
 				out.WriteString("\t}\n")
 			}
@@ -501,13 +501,13 @@ func (g *goEmitter) emitSelectedCaseDescendantValidation(children cambium.Schema
 			}
 			fieldPath := append(append([]string(nil), path...), f.wire)
 			fieldPathExpr := choiceCasePathExpr(fieldPath)
-			if min, ok := child.MinElements(); ok && min > 0 {
-				fmt.Fprintf(out, "%sif %s < %d {\n", indent, validationLenExpr(owner, f), min)
+			if minE, ok := child.MinElements(); ok && minE > 0 {
+				fmt.Fprintf(out, "%sif %s < %d {\n", indent, validationLenExpr(owner, f), minE)
 				fmt.Fprintf(out, "%s\treturn cambiumValidationError(%s, %q)\n", indent, fieldPathExpr, "min-elements violation")
 				fmt.Fprintf(out, "%s}\n", indent)
 			}
-			if max, ok := child.MaxElements(); ok {
-				fmt.Fprintf(out, "%sif %s > %d {\n", indent, validationLenExpr(owner, f), max)
+			if maxE, ok := child.MaxElements(); ok {
+				fmt.Fprintf(out, "%sif %s > %d {\n", indent, validationLenExpr(owner, f), maxE)
 				fmt.Fprintf(out, "%s\treturn cambiumValidationError(%s, %q)\n", indent, fieldPathExpr, "max-elements violation")
 				fmt.Fprintf(out, "%s}\n", indent)
 			}
@@ -768,7 +768,7 @@ func (g *goEmitter) choiceDefaultEmissionGuard(owner string, f fieldInfo, byNode
 	return "(" + caseExpr + " || !(" + anyCaseExpr + "))"
 }
 
-func nearestChoiceCase(node cambium.SchemaNodeRef) (cambium.SchemaNodeRef, cambium.SchemaNodeRef, bool) {
+func nearestChoiceCase(node cambium.SchemaNodeRef) (choice, choiceCase cambium.SchemaNodeRef, found bool) {
 	ancestors := node.Ancestors()
 	for i := len(ancestors) - 1; i >= 0; i-- {
 		if ancestors[i].Kind() != cambium.SchemaNodeKindCase {
@@ -937,7 +937,7 @@ func (g *goEmitter) uniqueLeafAccessor(listField fieldInfo, leaf cambium.SchemaN
 	return uniqueLeafAccessor{}, false
 }
 
-func (g *goEmitter) uniqueFieldEffectivePresenceAndKey(owner string, f fieldInfo, fields []fieldInfo) (string, string) {
+func (g *goEmitter) uniqueFieldEffectivePresenceAndKey(owner string, f fieldInfo, fields []fieldInfo) (presentExpr, keyExpr string) {
 	actualPresent := uniqueFieldPresentExpr(owner, f)
 	actualKey := g.jsonLiteralExpr(uniqueFieldValueExpr(owner, f), f)
 	defaultValue, hasDefault := f.node.DefaultEntry()
@@ -953,8 +953,8 @@ func (g *goEmitter) uniqueFieldEffectivePresenceAndKey(owner string, f fieldInfo
 		effectivePresent = "(" + actualPresent + " || " + defaultPresent + ")"
 	}
 	defaultKey := g.defaultJSONLiteralExpr(f, defaultValue)
-	keyExpr := fmt.Sprintf("func() string { if %s { return %s }; return %s }()", actualPresent, actualKey, defaultKey)
-	return effectivePresent, keyExpr
+	effectiveKey := fmt.Sprintf("func() string { if %s { return %s }; return %s }()", actualPresent, actualKey, defaultKey)
+	return effectivePresent, effectiveKey
 }
 
 func uniqueLeafPath(list, leaf cambium.SchemaNodeRef) ([]cambium.SchemaNodeRef, bool) {
@@ -1064,7 +1064,7 @@ func (g *goEmitter) emitExplicitChoiceCaseParseValidation(owner string, f fieldI
 	fmt.Fprintf(out, "%s}\n", indent)
 }
 
-func decimal64ValidationArgs(info cambium.TypeInfo) (uint8, string) {
+func decimal64ValidationArgs(info cambium.TypeInfo) (fractionDigits uint8, rangeExpr string) {
 	r, ok := info.Resolved().(cambium.ResolvedDecimal64)
 	if !ok {
 		return 0, "nil"

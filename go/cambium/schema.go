@@ -277,22 +277,35 @@ type EnumValue struct {
 	conditional bool
 }
 
-func (e EnumValue) Name() string   { return e.name }
-func (e EnumValue) Value() int64   { return e.value }
+// Name returns the enum or bit name.
+func (e EnumValue) Name() string { return e.name }
+
+// Value returns the assigned enum value or bit position.
+func (e EnumValue) Value() int64 { return e.value }
+
+// Status returns the enum or bit status.
 func (e EnumValue) Status() Status { return e.status }
+
+// IfFeatures returns a copy of the if-feature expressions guarding this value.
 func (e EnumValue) IfFeatures() []string {
 	return append([]string(nil), e.ifFeatures...)
 }
+
+// Description returns the description and whether one was present.
 func (e EnumValue) Description() (string, bool) {
 	return optional(e.description)
 }
+
+// Reference returns the reference and whether one was present.
 func (e EnumValue) Reference() (string, bool) {
 	return optional(e.reference)
 }
-func (d EnumDef) Values() []EnumValue { return append([]EnumValue(nil), d.values...) }
 
 // EnumDef is the definition of an enumeration type.
 type EnumDef struct{ values []EnumValue }
+
+// Values returns the enum values in declaration order.
+func (d EnumDef) Values() []EnumValue { return append([]EnumValue(nil), d.values...) }
 
 // BitsDef is the definition of a bits type.
 type BitsDef struct{ values []EnumValue }
@@ -300,16 +313,25 @@ type BitsDef struct{ values []EnumValue }
 // Values returns the bit values in declaration order.
 func (d BitsDef) Values() []EnumValue { return append([]EnumValue(nil), d.values...) }
 
+// ErrorMessage returns the custom error-message and whether one was present.
 func (p Pattern) ErrorMessage() (string, bool) { return optional(p.errorMessage) }
+
+// ErrorAppTag returns the custom error-app-tag and whether one was present.
 func (p Pattern) ErrorAppTag() (string, bool) {
 	if p.appTag == nil {
 		return "", false
 	}
 	return *p.appTag, true
 }
+
+// Description returns the description and whether one was present.
 func (p Pattern) Description() (string, bool) { return optional(p.description) }
-func (p Pattern) Reference() (string, bool)   { return optional(p.reference) }
-func (p Pattern) IsInverted() bool            { return p.inverted }
+
+// Reference returns the reference and whether one was present.
+func (p Pattern) Reference() (string, bool) { return optional(p.reference) }
+
+// IsInverted reports whether this is an inverted-match pattern.
+func (p Pattern) IsInverted() bool { return p.inverted }
 
 // RangeBound is one bound of a numeric range or length constraint.
 type RangeBound struct {
@@ -321,12 +343,23 @@ type RangeBound struct {
 	reference    string
 }
 
-func (r RangeBound) Min() string                  { return r.min }
-func (r RangeBound) Max() string                  { return r.max }
+// Min returns the lower bound in YANG lexical form.
+func (r RangeBound) Min() string { return r.min }
+
+// Max returns the upper bound in YANG lexical form.
+func (r RangeBound) Max() string { return r.max }
+
+// ErrorMessage returns the custom error-message and whether one was present.
 func (r RangeBound) ErrorMessage() (string, bool) { return optional(r.errorMessage) }
-func (r RangeBound) ErrorAppTag() (string, bool)  { return optional(r.errorAppTag) }
-func (r RangeBound) Description() (string, bool)  { return optional(r.description) }
-func (r RangeBound) Reference() (string, bool)    { return optional(r.reference) }
+
+// ErrorAppTag returns the custom error-app-tag and whether one was present.
+func (r RangeBound) ErrorAppTag() (string, bool) { return optional(r.errorAppTag) }
+
+// Description returns the description and whether one was present.
+func (r RangeBound) Description() (string, bool) { return optional(r.description) }
+
+// Reference returns the reference and whether one was present.
+func (r RangeBound) Reference() (string, bool) { return optional(r.reference) }
 
 // ResolvedType is the sum-type interface for resolved leaf/leaf-list constraints.
 type ResolvedType interface{ resolvedType() }
@@ -346,6 +379,7 @@ type ResolvedDecimal64 struct {
 	Range          []RangeBound
 }
 
+// FractionDigits returns the fixed decimal64 fraction-digits.
 func (r ResolvedDecimal64) FractionDigits() FractionDigits { return r.fractionDigits }
 func (ResolvedDecimal64) resolvedType()                    {}
 
@@ -376,18 +410,21 @@ func (ResolvedString) resolvedType() {}
 // declaration order.
 type ResolvedEnumeration struct{ def EnumDef }
 
+// Values returns the enum values in declaration order.
 func (r ResolvedEnumeration) Values() []EnumValue { return r.def.Values() }
 func (ResolvedEnumeration) resolvedType()         {}
 
 // ResolvedBits is a bits type; Values lists its named bit positions.
 type ResolvedBits struct{ def BitsDef }
 
+// Values returns the named bit positions in declaration order.
 func (r ResolvedBits) Values() []EnumValue { return r.def.Values() }
 func (ResolvedBits) resolvedType()         {}
 
 // ResolvedIdentityRef is an identityref type; Bases lists its base identities.
 type ResolvedIdentityRef struct{ bases []Identity }
 
+// Bases returns the base identities of this identityref.
 func (r ResolvedIdentityRef) Bases() []Identity { return append([]Identity(nil), r.bases...) }
 func (ResolvedIdentityRef) resolvedType()       {}
 
@@ -407,12 +444,15 @@ type ResolvedLeafRef struct {
 	sourceModule    *moduleData
 }
 
+// Target returns the resolved target node and whether the leafref resolved.
 func (r ResolvedLeafRef) Target() (SchemaNodeRef, bool) {
 	if r.target == nil {
 		return SchemaNodeRef{}, false
 	}
 	return *r.target, true
 }
+
+// Realtype returns a copy of the resolved underlying type and whether it is known.
 func (r ResolvedLeafRef) Realtype() (*TypeInfo, bool) {
 	if r.realtype == nil {
 		return nil, false
@@ -420,13 +460,19 @@ func (r ResolvedLeafRef) Realtype() (*TypeInfo, bool) {
 	clone := cloneTypeInfo(*r.realtype)
 	return &clone, true
 }
+
+// RequireInstance reports the require-instance constraint.
 func (r ResolvedLeafRef) RequireInstance() bool { return r.requireInstance }
+
+// Path returns the leafref path expression and whether one was present.
 func (r ResolvedLeafRef) Path() (string, bool) {
 	if r.path == "" {
 		return "", false
 	}
 	return r.path, true
 }
+
+// SourceModule returns the module the leafref path is resolved against.
 func (r ResolvedLeafRef) SourceModule() Module {
 	if r.sourceModule == nil {
 		return Module{}
@@ -438,6 +484,7 @@ func (ResolvedLeafRef) resolvedType() {}
 // ResolvedUnion is a union type; Members lists its member type infos in order.
 type ResolvedUnion struct{ members []TypeInfo }
 
+// Members returns copies of the union member type infos in declaration order.
 func (r ResolvedUnion) Members() []TypeInfo { return cloneTypeInfos(r.members) }
 func (ResolvedUnion) resolvedType()         {}
 
@@ -454,7 +501,11 @@ type TypeInfo struct {
 	resolved     ResolvedType
 }
 
+// Base returns the underlying YANG base type.
 func (t TypeInfo) Base() BaseType { return t.base }
+
+// Resolved returns a copy of the resolved constraints, or ResolvedUnknown if the
+// type could not be resolved.
 func (t TypeInfo) Resolved() ResolvedType {
 	if t.resolved == nil {
 		return ResolvedUnknown{}
@@ -531,14 +582,21 @@ type Extension struct {
 	ifFeatures []string
 }
 
+// Name returns the extension keyword name.
 func (e Extension) Name() string { return e.name }
+
+// Argument returns the extension argument and whether one was present.
 func (e Extension) Argument() (string, bool) {
 	if e.argument == nil {
 		return "", false
 	}
 	return *e.argument, true
 }
+
+// ModuleName returns the name of the module that defines the extension.
 func (e Extension) ModuleName() string { return e.moduleName }
+
+// IfFeatures returns a copy of the if-feature expressions guarding the extension.
 func (e Extension) IfFeatures() []string {
 	return append([]string(nil), e.ifFeatures...)
 }
@@ -559,18 +617,23 @@ type ExtensionDefinition struct {
 	stmt   *yangparse.Statement
 }
 
+// Name returns the declared extension keyword name.
 func (e ExtensionDefinition) Name() string {
 	if e.stmt == nil {
 		return ""
 	}
 	return e.stmt.Argument
 }
+
+// Module returns the module that declares the extension.
 func (e ExtensionDefinition) Module() Module {
 	if e.module == nil {
 		return Module{}
 	}
 	return Module{mod: e.module}
 }
+
+// Argument returns the extension's argument name and whether one was declared.
 func (e ExtensionDefinition) Argument() (string, bool) {
 	arg := first(e.stmt, "argument")
 	if arg == nil {
@@ -578,7 +641,9 @@ func (e ExtensionDefinition) Argument() (string, bool) {
 	}
 	return arg.Argument, true
 }
-func (e ExtensionDefinition) YinElement() (bool, bool) {
+
+// YinElement returns the argument's yin-element value and whether it was declared.
+func (e ExtensionDefinition) YinElement() (yinElement, ok bool) {
 	arg := first(e.stmt, "argument")
 	if arg == nil {
 		return false, false
@@ -589,12 +654,18 @@ func (e ExtensionDefinition) YinElement() (bool, bool) {
 	}
 	return yin.Argument == "true", true
 }
+
+// Description returns the description and whether one was present.
 func (e ExtensionDefinition) Description() (string, bool) {
 	return optional(childArg(e.stmt, "description"))
 }
+
+// Reference returns the reference and whether one was present.
 func (e ExtensionDefinition) Reference() (string, bool) {
 	return optional(childArg(e.stmt, "reference"))
 }
+
+// Status returns the extension status, defaulting to StatusCurrent.
 func (e ExtensionDefinition) Status() Status {
 	if e.stmt == nil {
 		return StatusCurrent
@@ -602,18 +673,23 @@ func (e ExtensionDefinition) Status() Status {
 	return statusFromStatement(e.stmt)
 }
 
+// Name returns the typedef name.
 func (d TypedefDefinition) Name() string {
 	if d.stmt == nil {
 		return ""
 	}
 	return d.stmt.Argument
 }
+
+// Module returns the module that declares the typedef.
 func (d TypedefDefinition) Module() Module {
 	if d.module == nil {
 		return Module{}
 	}
 	return Module{mod: d.module}
 }
+
+// Type returns the typedef's resolved type info and whether it could be resolved.
 func (d TypedefDefinition) Type() (TypeInfo, bool) {
 	if d.module == nil || d.stmt == nil {
 		return TypeInfo{}, false
@@ -628,12 +704,22 @@ func (d TypedefDefinition) Type() (TypeInfo, bool) {
 	}
 	return info, true
 }
-func (d TypedefDefinition) Units() (string, bool)   { return optional(childArg(d.stmt, "units")) }
+
+// Units returns the typedef units and whether one was present.
+func (d TypedefDefinition) Units() (string, bool) { return optional(childArg(d.stmt, "units")) }
+
+// Default returns the typedef default value and whether one was present.
 func (d TypedefDefinition) Default() (string, bool) { return optional(childArg(d.stmt, "default")) }
+
+// Description returns the description and whether one was present.
 func (d TypedefDefinition) Description() (string, bool) {
 	return optional(childArg(d.stmt, "description"))
 }
+
+// Reference returns the reference and whether one was present.
 func (d TypedefDefinition) Reference() (string, bool) { return optional(childArg(d.stmt, "reference")) }
+
+// Status returns the typedef status, defaulting to StatusCurrent.
 func (d TypedefDefinition) Status() Status {
 	if d.stmt == nil {
 		return StatusCurrent
@@ -647,30 +733,42 @@ type GroupingDefinition struct {
 	stmt   *yangparse.Statement
 }
 
+// Name returns the grouping name.
 func (d GroupingDefinition) Name() string {
 	if d.stmt == nil {
 		return ""
 	}
 	return d.stmt.Argument
 }
+
+// Module returns the module that declares the grouping.
 func (d GroupingDefinition) Module() Module {
 	if d.module == nil {
 		return Module{}
 	}
 	return Module{mod: d.module}
 }
+
+// Description returns the description and whether one was present.
 func (d GroupingDefinition) Description() (string, bool) {
 	return optional(childArg(d.stmt, "description"))
 }
+
+// Reference returns the reference and whether one was present.
 func (d GroupingDefinition) Reference() (string, bool) {
 	return optional(childArg(d.stmt, "reference"))
 }
+
+// Status returns the grouping status, defaulting to StatusCurrent.
 func (d GroupingDefinition) Status() Status {
 	if d.stmt == nil {
 		return StatusCurrent
 	}
 	return statusFromStatement(d.stmt)
 }
+
+// ChildNames returns the names of the grouping's direct data-tree children in
+// declaration order.
 func (d GroupingDefinition) ChildNames() []string {
 	if d.stmt == nil {
 		return nil
@@ -687,36 +785,47 @@ func (d GroupingDefinition) ChildNames() []string {
 // Feature is a declared YANG feature on a module.
 type Feature struct{ feature *featureData }
 
+// Name returns the feature name.
 func (f Feature) Name() string {
 	if f.feature == nil {
 		return ""
 	}
 	return f.feature.name
 }
+
+// Module returns the module that declares the feature.
 func (f Feature) Module() Module {
 	if f.feature == nil {
 		return Module{}
 	}
 	return Module{mod: f.feature.module}
 }
+
+// Description returns the description and whether one was present.
 func (f Feature) Description() (string, bool) {
 	if f.feature == nil {
 		return "", false
 	}
 	return optional(f.feature.description)
 }
+
+// Reference returns the reference and whether one was present.
 func (f Feature) Reference() (string, bool) {
 	if f.feature == nil {
 		return "", false
 	}
 	return optional(f.feature.reference)
 }
+
+// IfFeatures returns the if-feature expressions that guard this feature.
 func (f Feature) IfFeatures() []string {
 	if f.feature == nil || f.feature.stmt == nil {
 		return nil
 	}
 	return ifFeatureArgs(f.feature.stmt)
 }
+
+// Status returns the feature status, defaulting to StatusCurrent.
 func (f Feature) Status() Status {
 	if f.feature == nil || f.feature.stmt == nil {
 		return StatusCurrent
@@ -730,11 +839,22 @@ type MustConstraint struct {
 	sourceModule                                            *moduleData
 }
 
-func (m MustConstraint) Expression() string           { return m.cond }
+// Expression returns the must XPath expression.
+func (m MustConstraint) Expression() string { return m.cond }
+
+// ErrorMessage returns the custom error-message and whether one was present.
 func (m MustConstraint) ErrorMessage() (string, bool) { return optional(m.errorMessage) }
-func (m MustConstraint) ErrorAppTag() (string, bool)  { return optional(m.errorAppTag) }
-func (m MustConstraint) Description() (string, bool)  { return optional(m.description) }
-func (m MustConstraint) Reference() (string, bool)    { return optional(m.reference) }
+
+// ErrorAppTag returns the custom error-app-tag and whether one was present.
+func (m MustConstraint) ErrorAppTag() (string, bool) { return optional(m.errorAppTag) }
+
+// Description returns the description and whether one was present.
+func (m MustConstraint) Description() (string, bool) { return optional(m.description) }
+
+// Reference returns the reference and whether one was present.
+func (m MustConstraint) Reference() (string, bool) { return optional(m.reference) }
+
+// SourceModule returns the module the expression's prefixes resolve against.
 func (m MustConstraint) SourceModule() Module {
 	if m.sourceModule == nil {
 		return Module{}
@@ -750,6 +870,7 @@ type WhenConstraint struct {
 	excludedSubtrees             []*schemaNodeData
 }
 
+// Expression returns the when XPath expression.
 func (w WhenConstraint) Expression() string { return w.cond }
 
 // ContextAncestorDepth returns how many data-tree ancestors must be climbed
@@ -759,6 +880,7 @@ func (w WhenConstraint) Expression() string { return w.cond }
 // descendant carrying the condition.
 func (w WhenConstraint) ContextAncestorDepth() int { return w.contextAncestorDepth }
 
+// SourceModule returns the module the expression's prefixes resolve against.
 func (w WhenConstraint) SourceModule() Module {
 	if w.sourceModule == nil {
 		return Module{}
@@ -766,6 +888,7 @@ func (w WhenConstraint) SourceModule() Module {
 	return Module{mod: w.sourceModule}
 }
 
+// ExcludedSubtreeRoots returns the subtree roots exempt from this when condition.
 func (w WhenConstraint) ExcludedSubtreeRoots() []SchemaNodeRef {
 	if len(w.excludedSubtrees) == 0 {
 		return nil
@@ -779,21 +902,40 @@ func (w WhenConstraint) ExcludedSubtreeRoots() []SchemaNodeRef {
 	return out
 }
 
+// Description returns the description and whether one was present.
 func (w WhenConstraint) Description() (string, bool) { return optional(w.description) }
-func (w WhenConstraint) Reference() (string, bool)   { return optional(w.reference) }
+
+// Reference returns the reference and whether one was present.
+func (w WhenConstraint) Reference() (string, bool) { return optional(w.reference) }
 
 // UniqueConstraint is one unique statement on a list.
 type UniqueConstraint struct{ leafs []SchemaNodeRef }
 
+// Leafs returns the leaf references composing the unique constraint, in order.
 func (u UniqueConstraint) Leafs() []SchemaNodeRef { return append([]SchemaNodeRef(nil), u.leafs...) }
 
-func (d Deviation) TargetPath() string          { return d.targetPath }
-func (d Deviation) SourceModule() string        { return d.sourceModule }
-func (d Deviation) Type() string                { return d.devType }
-func (d Deviation) Property() string            { return d.property }
-func (d Deviation) NewValue() string            { return d.newValue }
+// TargetPath returns the schema-node path the deviation targets.
+func (d Deviation) TargetPath() string { return d.targetPath }
+
+// SourceModule returns the name of the module that declares the deviation.
+func (d Deviation) SourceModule() string { return d.sourceModule }
+
+// Type returns the deviate kind (not-supported, add, replace, or delete).
+func (d Deviation) Type() string { return d.devType }
+
+// Property returns the deviated property name, when the deviate targets one.
+func (d Deviation) Property() string { return d.property }
+
+// NewValue returns the deviation's new value for the targeted property.
+func (d Deviation) NewValue() string { return d.newValue }
+
+// Description returns the description and whether one was present.
 func (d Deviation) Description() (string, bool) { return optional(d.description) }
-func (d Deviation) Reference() (string, bool)   { return optional(d.reference) }
+
+// Reference returns the reference and whether one was present.
+func (d Deviation) Reference() (string, bool) { return optional(d.reference) }
+
+// IfFeatures returns the if-feature expressions guarding the deviation.
 func (d Deviation) IfFeatures() []string {
 	return append([]string(nil), d.ifFeatures...)
 }
@@ -808,8 +950,11 @@ type Import struct {
 	reference   string
 }
 
+// Description returns the description and whether one was present.
 func (i Import) Description() (string, bool) { return optional(i.description) }
-func (i Import) Reference() (string, bool)   { return optional(i.reference) }
+
+// Reference returns the reference and whether one was present.
+func (i Import) Reference() (string, bool) { return optional(i.reference) }
 
 // QualifiedName identifies a schema node by its local name and defining module.
 type QualifiedName struct {
@@ -828,8 +973,11 @@ type Include struct {
 	reference   string
 }
 
+// Description returns the description and whether one was present.
 func (i Include) Description() (string, bool) { return optional(i.description) }
-func (i Include) Reference() (string, bool)   { return optional(i.reference) }
+
+// Reference returns the reference and whether one was present.
+func (i Include) Reference() (string, bool) { return optional(i.reference) }
 
 // Revision is a module revision statement plus optional metadata.
 type Revision struct {
@@ -838,9 +986,14 @@ type Revision struct {
 	reference   string
 }
 
-func (r Revision) Date() string                { return r.date }
+// Date returns the revision date.
+func (r Revision) Date() string { return r.date }
+
+// Description returns the description and whether one was present.
 func (r Revision) Description() (string, bool) { return optional(r.description) }
-func (r Revision) Reference() (string, bool)   { return optional(r.reference) }
+
+// Reference returns the reference and whether one was present.
+func (r Revision) Reference() (string, bool) { return optional(r.reference) }
 
 type moduleData struct {
 	ctx         *Context
@@ -2968,13 +3121,13 @@ func (c *Context) findNodeBySourceSchemaPath(source *moduleData, path string) (*
 	return mod, node
 }
 
-func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool) (*moduleData, *schemaNodeData, string, *schemaNodeData) {
+func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool) (mod *moduleData, node *schemaNodeData, segment string, from *schemaNodeData) {
 	parts := splitPath(path)
 	if len(parts) == 0 {
 		return nil, nil, path, nil
 	}
 	first := pathStepQName(parts[0])
-	mod := source.resolveQNameModule(first)
+	mod = source.resolveQNameModule(first)
 	if strictSource {
 		mod = source.resolveSourceQNameModule(first)
 	} else if mod == nil {
@@ -3040,36 +3193,47 @@ func (c *Context) moduleByPublicQName(qname string) *moduleData {
 // Module is a borrowed handle to a loaded module.
 type Module struct{ mod *moduleData }
 
+// Name returns the module name.
 func (m Module) Name() string {
 	if m.mod == nil {
 		return ""
 	}
 	return m.mod.name
 }
+
+// Namespace returns the module namespace URI.
 func (m Module) Namespace() string {
 	if m.mod == nil {
 		return ""
 	}
 	return m.mod.namespace
 }
+
+// Prefix returns the module's own prefix.
 func (m Module) Prefix() string {
 	if m.mod == nil {
 		return ""
 	}
 	return m.mod.prefix
 }
+
+// Revision returns the module's latest revision date and whether one was declared.
 func (m Module) Revision() (string, bool) {
 	if m.mod == nil || m.mod.revision == "" {
 		return "", false
 	}
 	return m.mod.revision, true
 }
+
+// Location returns the source location of the module statement, or "unknown".
 func (m Module) Location() string {
 	if m.mod == nil || m.mod.stmt == nil {
 		return "unknown"
 	}
 	return m.mod.stmt.Location()
 }
+
+// Revisions returns all revision statements in declaration order.
 func (m Module) Revisions() []Revision {
 	if m.mod == nil || m.mod.stmt == nil {
 		return nil
@@ -3085,23 +3249,37 @@ func (m Module) Revisions() []Revision {
 	}
 	return out
 }
+
+// Organization returns the organization statement and whether one was present.
 func (m Module) Organization() (string, bool) { return m.headerMetadata("organization") }
-func (m Module) Contact() (string, bool)      { return m.headerMetadata("contact") }
-func (m Module) Description() (string, bool)  { return m.headerMetadata("description") }
-func (m Module) Reference() (string, bool)    { return m.headerMetadata("reference") }
+
+// Contact returns the contact statement and whether one was present.
+func (m Module) Contact() (string, bool) { return m.headerMetadata("contact") }
+
+// Description returns the description and whether one was present.
+func (m Module) Description() (string, bool) { return m.headerMetadata("description") }
+
+// Reference returns the reference and whether one was present.
+func (m Module) Reference() (string, bool) { return m.headerMetadata("reference") }
 func (m Module) headerMetadata(keyword string) (string, bool) {
 	if m.mod == nil || m.mod.stmt == nil {
 		return "", false
 	}
 	return optional(childArg(m.mod.stmt, keyword))
 }
+
+// YangVersion returns the module's yang-version, defaulting to "1".
 func (m Module) YangVersion() string {
 	if m.mod == nil {
 		return "1"
 	}
 	return m.mod.yangVersionForStatement(m.mod.stmt)
 }
+
+// IsImplemented reports whether the module is implemented rather than only imported.
 func (m Module) IsImplemented() bool { return m.mod != nil && m.mod.implemented }
+
+// Features returns the module's declared features in declaration order.
 func (m Module) Features() []Feature {
 	if m.mod == nil {
 		return nil
@@ -3112,7 +3290,10 @@ func (m Module) Features() []Feature {
 	}
 	return out
 }
-func (m Module) FeatureValue(name string) (bool, bool) {
+
+// FeatureValue reports whether the named feature is enabled and whether it is
+// declared by this module.
+func (m Module) FeatureValue(name string) (enabled, known bool) {
 	if m.mod == nil {
 		return false, false
 	}
@@ -3125,12 +3306,16 @@ func (m Module) FeatureValue(name string) (bool, bool) {
 	}
 	return m.mod.featureEnabled(local), true
 }
+
+// Imports returns the module's imports in declaration order.
 func (m Module) Imports() []Import {
 	if m.mod == nil {
 		return nil
 	}
 	return append([]Import(nil), m.mod.imports...)
 }
+
+// Includes returns the module's submodule includes in declaration order.
 func (m Module) Includes() []Include {
 	if m.mod == nil || m.mod.stmt == nil {
 		return nil
@@ -3147,15 +3332,22 @@ func (m Module) Includes() []Include {
 	}
 	return out
 }
+
+// Extensions returns the top-level extension instances on the module statement.
 func (m Module) Extensions() []Extension {
 	if m.mod == nil {
 		return nil
 	}
 	return m.mod.topLevelExtensionInstances()
 }
+
+// MatchingExtensions returns the top-level extensions matching the given defining
+// module and keyword name.
 func (m Module) MatchingExtensions(module, name string) []Extension {
 	return matchingExtensions(m.Extensions(), module, name)
 }
+
+// ExtensionDefinitions returns the module's extension definitions in declaration order.
 func (m Module) ExtensionDefinitions() []ExtensionDefinition {
 	if m.mod == nil {
 		return nil
@@ -3166,6 +3358,8 @@ func (m Module) ExtensionDefinitions() []ExtensionDefinition {
 	}
 	return out
 }
+
+// GroupingDefinitions returns the module's groupings in declaration order.
 func (m Module) GroupingDefinitions() []GroupingDefinition {
 	if m.mod == nil {
 		return nil
@@ -3176,6 +3370,10 @@ func (m Module) GroupingDefinitions() []GroupingDefinition {
 	}
 	return out
 }
+
+// ResolvePrefix returns the module bound to prefix within this module's import
+// scope, and whether it resolved. An empty prefix or the module's own prefix or
+// name resolves to the module itself.
 func (m Module) ResolvePrefix(prefix string) (Module, bool) {
 	if m.mod == nil {
 		return Module{}, false
@@ -3189,6 +3387,8 @@ func (m Module) ResolvePrefix(prefix string) (Module, bool) {
 	}
 	return Module{mod: mod}, true
 }
+
+// DeviatedBy returns the names of modules that deviate this module.
 func (m Module) DeviatedBy() []string {
 	if m.mod == nil {
 		return nil
@@ -3205,30 +3405,41 @@ func (m Module) TopLevel() SchemaChildren {
 	}
 	return refs(m.mod.top)
 }
+
+// Children returns the module's direct schema-tree children in declaration order.
 func (m Module) Children() SchemaChildren {
 	if m.mod == nil || m.mod.root == nil {
 		return SchemaChildren{}
 	}
 	return refs(m.mod.root.children)
 }
+
+// RPCs returns the module's rpc nodes in declaration order.
 func (m Module) RPCs() SchemaChildren {
 	if m.mod == nil {
 		return SchemaChildren{}
 	}
 	return refs(m.mod.rpcs)
 }
+
+// Actions returns the module's action nodes in declaration order.
 func (m Module) Actions() SchemaChildren {
 	if m.mod == nil {
 		return SchemaChildren{}
 	}
 	return refs(m.mod.actions)
 }
+
+// Notifications returns the module's notification nodes in declaration order.
 func (m Module) Notifications() SchemaChildren {
 	if m.mod == nil {
 		return SchemaChildren{}
 	}
 	return refs(m.mod.notifs)
 }
+
+// Identities iterates the module's identities, skipping those excluded by
+// if-feature.
 func (m Module) Identities() iter.Seq[Identity] {
 	return func(yield func(Identity) bool) {
 		if m.mod == nil {
@@ -3244,6 +3455,9 @@ func (m Module) Identities() iter.Seq[Identity] {
 		}
 	}
 }
+
+// FindPath resolves an absolute schema-node identifier to a node reference, or
+// returns a *SchemaPathError describing where resolution failed.
 func (m Module) FindPath(path string) (SchemaNodeRef, error) {
 	if m.mod == nil {
 		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("nil module"))
@@ -3271,42 +3485,55 @@ func (m Module) FindPath(path string) (SchemaNodeRef, error) {
 // Identity is a handle to a YANG identity.
 type Identity struct{ id *identityData }
 
+// Name returns the identity name.
 func (i Identity) Name() string {
 	if i.id == nil {
 		return ""
 	}
 	return i.id.name
 }
+
+// Module returns the module that declares the identity.
 func (i Identity) Module() Module {
 	if i.id == nil {
 		return Module{}
 	}
 	return Module{mod: i.id.module}
 }
+
+// Description returns the description and whether one was present.
 func (i Identity) Description() (string, bool) {
 	if i.id == nil || i.id.stmt == nil {
 		return "", false
 	}
 	return optional(childArg(i.id.stmt, "description"))
 }
+
+// Reference returns the reference and whether one was present.
 func (i Identity) Reference() (string, bool) {
 	if i.id == nil || i.id.stmt == nil {
 		return "", false
 	}
 	return optional(childArg(i.id.stmt, "reference"))
 }
+
+// IfFeatures returns the if-feature expressions guarding the identity.
 func (i Identity) IfFeatures() []string {
 	if i.id == nil || i.id.stmt == nil {
 		return nil
 	}
 	return ifFeatureArgs(i.id.stmt)
 }
+
+// Status returns the identity status, defaulting to StatusCurrent.
 func (i Identity) Status() Status {
 	if i.id == nil || i.id.stmt == nil {
 		return StatusCurrent
 	}
 	return statusFromStatement(i.id.stmt)
 }
+
+// Bases returns the identity's direct base identities.
 func (i Identity) Bases() []Identity {
 	if i.id == nil {
 		return nil
@@ -3317,6 +3544,9 @@ func (i Identity) Bases() []Identity {
 	}
 	return out
 }
+
+// Derived returns the identities that directly derive from this one, skipping
+// those excluded by if-feature.
 func (i Identity) Derived() []Identity {
 	if i.id == nil {
 		return nil
@@ -3339,8 +3569,10 @@ type DefaultValue struct {
 	sourceModule *moduleData
 }
 
+// Value returns the lexical default value.
 func (d DefaultValue) Value() string { return d.value }
 
+// SourceModule returns the module whose statement supplied the default.
 func (d DefaultValue) SourceModule() Module {
 	if d.sourceModule == nil {
 		return Module{}
@@ -3358,6 +3590,7 @@ func (d DefaultValue) sourceOr(fallback *moduleData) *moduleData {
 // SchemaNodeRef is a handle to an ordered schema IR node.
 type SchemaNodeRef struct{ node *schemaNodeData }
 
+// Name returns the node's local name.
 func (n SchemaNodeRef) Name() string {
 	if n.node == nil {
 		return ""
@@ -3377,75 +3610,121 @@ func (n SchemaNodeRef) QualifiedName() QualifiedName {
 		Name:      n.node.name,
 	}
 }
+
+// Kind returns the node's schema kind.
 func (n SchemaNodeRef) Kind() SchemaNodeKind {
 	if n.node == nil {
 		return SchemaNodeKindUnknown
 	}
 	return n.node.kind
 }
+
+// Module returns the module that defines the node.
 func (n SchemaNodeRef) Module() Module {
 	if n.node == nil {
 		return Module{}
 	}
 	return Module{mod: n.node.module}
 }
+
+// Location returns the source location of the node statement, or "unknown".
 func (n SchemaNodeRef) Location() string {
 	if n.node == nil || n.node.stmt == nil {
 		return "unknown"
 	}
 	return n.node.stmt.Location()
 }
+
+// Description returns the description and whether one was present.
 func (n SchemaNodeRef) Description() (string, bool) {
 	if n.node == nil {
 		return "", false
 	}
 	return optional(n.node.description)
 }
+
+// Reference returns the reference and whether one was present.
 func (n SchemaNodeRef) Reference() (string, bool) {
 	if n.node == nil {
 		return "", false
 	}
 	return optional(n.node.reference)
 }
+
+// Status returns the node status, defaulting to StatusCurrent.
 func (n SchemaNodeRef) Status() Status {
 	if n.node == nil {
 		return StatusCurrent
 	}
 	return n.node.status
 }
+
+// Config returns the effective config value, defaulting to ConfigRw.
 func (n SchemaNodeRef) Config() Config {
 	if n.node == nil {
 		return ConfigRw
 	}
 	return n.node.config
 }
+
+// YangVersion returns the defining module's yang-version, defaulting to "1".
 func (n SchemaNodeRef) YangVersion() string {
 	if n.node == nil || n.node.module == nil {
 		return "1"
 	}
 	return n.node.module.yangVersionForStatement(n.node.stmt)
 }
-func (n SchemaNodeRef) IsMandatory() bool         { return n.node != nil && n.node.mandatory }
+
+// IsMandatory reports whether the node is mandatory.
+func (n SchemaNodeRef) IsMandatory() bool { return n.node != nil && n.node.mandatory }
+
+// IsPresenceContainer reports whether the node is a presence container.
 func (n SchemaNodeRef) IsPresenceContainer() bool { return n.node != nil && n.node.presence }
+
+// OrderedBy returns the node's ordered-by value, defaulting to OrderedBySystem.
 func (n SchemaNodeRef) OrderedBy() OrderedBy {
 	if n.node == nil {
 		return OrderedBySystem
 	}
 	return n.node.orderedBy
 }
-func (n SchemaNodeRef) IsListKey() bool      { return n.node != nil && n.node.listKey }
-func (n SchemaNodeRef) IsLeaf() bool         { return n.Kind() == SchemaNodeKindLeaf }
-func (n SchemaNodeRef) IsLeafList() bool     { return n.Kind() == SchemaNodeKindLeafList }
-func (n SchemaNodeRef) IsContainer() bool    { return n.Kind() == SchemaNodeKindContainer }
-func (n SchemaNodeRef) IsList() bool         { return n.Kind() == SchemaNodeKindList }
-func (n SchemaNodeRef) IsChoice() bool       { return n.Kind() == SchemaNodeKindChoice }
-func (n SchemaNodeRef) IsCase() bool         { return n.Kind() == SchemaNodeKindCase }
-func (n SchemaNodeRef) IsRPC() bool          { return n.Kind() == SchemaNodeKindRPC }
-func (n SchemaNodeRef) IsAction() bool       { return n.Kind() == SchemaNodeKindAction }
+
+// IsListKey reports whether the node is a key leaf of its parent list.
+func (n SchemaNodeRef) IsListKey() bool { return n.node != nil && n.node.listKey }
+
+// IsLeaf reports whether the node is a leaf.
+func (n SchemaNodeRef) IsLeaf() bool { return n.Kind() == SchemaNodeKindLeaf }
+
+// IsLeafList reports whether the node is a leaf-list.
+func (n SchemaNodeRef) IsLeafList() bool { return n.Kind() == SchemaNodeKindLeafList }
+
+// IsContainer reports whether the node is a container.
+func (n SchemaNodeRef) IsContainer() bool { return n.Kind() == SchemaNodeKindContainer }
+
+// IsList reports whether the node is a list.
+func (n SchemaNodeRef) IsList() bool { return n.Kind() == SchemaNodeKindList }
+
+// IsChoice reports whether the node is a choice.
+func (n SchemaNodeRef) IsChoice() bool { return n.Kind() == SchemaNodeKindChoice }
+
+// IsCase reports whether the node is a case.
+func (n SchemaNodeRef) IsCase() bool { return n.Kind() == SchemaNodeKindCase }
+
+// IsRPC reports whether the node is an rpc.
+func (n SchemaNodeRef) IsRPC() bool { return n.Kind() == SchemaNodeKindRPC }
+
+// IsAction reports whether the node is an action.
+func (n SchemaNodeRef) IsAction() bool { return n.Kind() == SchemaNodeKindAction }
+
+// IsNotification reports whether the node is a notification.
 func (n SchemaNodeRef) IsNotification() bool { return n.Kind() == SchemaNodeKindNotification }
+
+// RepresentsConfigurationData reports whether the node carries configuration data.
 func (n SchemaNodeRef) RepresentsConfigurationData() bool {
 	return n.node != nil && n.node.representsConfigurationData()
 }
+
+// IsDir reports whether the node may have child data nodes.
 func (n SchemaNodeRef) IsDir() bool {
 	switch n.Kind() {
 	case SchemaNodeKindModule, SchemaNodeKindContainer, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindRPC, SchemaNodeKindAction, SchemaNodeKindInput, SchemaNodeKindOutput, SchemaNodeKindNotification:
@@ -3454,13 +3733,19 @@ func (n SchemaNodeRef) IsDir() bool {
 		return false
 	}
 }
+
+// ReadOnly reports whether the node is config false (read-only state data).
 func (n SchemaNodeRef) ReadOnly() bool { return n.Config() == ConfigRo }
+
+// Namespace returns the defining module's namespace URI.
 func (n SchemaNodeRef) Namespace() string {
 	if n.node == nil || n.node.module == nil {
 		return ""
 	}
 	return n.node.module.namespace
 }
+
+// IfFeatures returns the if-feature expressions guarding the node.
 func (n SchemaNodeRef) IfFeatures() []string {
 	if n.node == nil {
 		return nil
@@ -3484,24 +3769,32 @@ func (n SchemaNodeRef) KeyNames() []string {
 	}
 	return append([]string(nil), n.node.keyNames...)
 }
+
+// MinElements returns the min-elements constraint and whether one was declared.
 func (n SchemaNodeRef) MinElements() (uint32, bool) {
 	if n.node == nil || n.node.minElements == nil {
 		return 0, false
 	}
 	return *n.node.minElements, true
 }
+
+// MaxElements returns the max-elements constraint and whether one was declared.
 func (n SchemaNodeRef) MaxElements() (uint32, bool) {
 	if n.node == nil || n.node.maxElements == nil {
 		return 0, false
 	}
 	return *n.node.maxElements, true
 }
+
+// LeafType returns the leaf or leaf-list type info and whether the node has one.
 func (n SchemaNodeRef) LeafType() (TypeInfo, bool) {
 	if n.node == nil || n.node.typeInfo == nil {
 		return TypeInfo{}, false
 	}
 	return *n.node.typeInfo, true
 }
+
+// Units returns the units string and whether one was present.
 func (n SchemaNodeRef) Units() (string, bool) {
 	if n.node == nil {
 		return "", false
@@ -3536,13 +3829,20 @@ func (n SchemaNodeRef) DataChildren(flattenChoices bool) SchemaChildren {
 	}
 	return SchemaChildren{nodes: out}
 }
+
+// IsChoiceDescendant reports whether the node descends from a choice.
 func (n SchemaNodeRef) IsChoiceDescendant() bool { return n.node != nil && n.node.choiceDesc }
+
+// GroupingOrigin returns the name of the grouping the node was expanded from and
+// whether it originated in one.
 func (n SchemaNodeRef) GroupingOrigin() (string, bool) {
 	if n.node == nil {
 		return "", false
 	}
 	return optional(n.node.groupOrigin)
 }
+
+// Path returns the node's absolute schema path.
 func (n SchemaNodeRef) Path() string {
 	if n.node == nil {
 		return ""
@@ -3574,6 +3874,9 @@ func (n SchemaNodeRef) QualifiedPath() string {
 	}
 	return "/" + strings.Join(parts, "/")
 }
+
+// FindPath resolves path relative to this node, or absolutely when it begins
+// with "/". It returns a *SchemaPathError describing where resolution failed.
 func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
 	if n.node == nil {
 		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("nil schema node"))
@@ -3642,12 +3945,17 @@ func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
 	}
 	return cur, nil
 }
+
+// Parent returns the node's parent and whether one exists.
 func (n SchemaNodeRef) Parent() (SchemaNodeRef, bool) {
 	if n.node == nil || n.node.parent == nil {
 		return SchemaNodeRef{}, false
 	}
 	return SchemaNodeRef{node: n.node.parent}, true
 }
+
+// Ancestors returns the node's ancestors from outermost to the immediate parent,
+// stopping below the module root.
 func (n SchemaNodeRef) Ancestors() []SchemaNodeRef {
 	if n.node == nil {
 		return nil
@@ -3662,30 +3970,42 @@ func (n SchemaNodeRef) Ancestors() []SchemaNodeRef {
 	}
 	return out
 }
+
+// DefaultValue returns the first effective default value and whether one exists.
 func (n SchemaNodeRef) DefaultValue() (string, bool) {
 	if n.node == nil || len(n.node.defaults) == 0 {
 		return "", false
 	}
 	return n.node.defaults[0].value, true
 }
+
+// DefaultValues returns all effective default values in order (leaf-list defaults).
 func (n SchemaNodeRef) DefaultValues() []string {
 	if n.node == nil {
 		return nil
 	}
 	return defaultValueStrings(n.node.defaults)
 }
+
+// DefaultEntry returns the first effective default with its source module, and
+// whether one exists.
 func (n SchemaNodeRef) DefaultEntry() (DefaultValue, bool) {
 	if n.node == nil || len(n.node.defaults) == 0 {
 		return DefaultValue{}, false
 	}
 	return n.node.defaults[0], true
 }
+
+// DefaultEntries returns all effective defaults with their source modules, in order.
 func (n SchemaNodeRef) DefaultEntries() []DefaultValue {
 	if n.node == nil {
 		return nil
 	}
 	return append([]DefaultValue(nil), n.node.defaults...)
 }
+
+// TypeDefaultValue returns the default inherited from the node's typedef chain and
+// whether one exists.
 func (n SchemaNodeRef) TypeDefaultValue() (string, bool) {
 	if n.node == nil || n.node.typeStmt == nil {
 		return "", false
@@ -3699,15 +4019,23 @@ func (n SchemaNodeRef) TypeDefaultValue() (string, bool) {
 	}
 	return typeModule.typedefDefaultFrom(n.node.typeStmt.Argument, n.node.typeStmt)
 }
+
+// Extensions returns the extension instances attached to the node, in order.
 func (n SchemaNodeRef) Extensions() []Extension {
 	if n.node == nil {
 		return nil
 	}
 	return append([]Extension(nil), n.node.extensions...)
 }
+
+// MatchingExtensions returns the node's extensions matching the given defining
+// module and keyword name.
 func (n SchemaNodeRef) MatchingExtensions(module, name string) []Extension {
 	return matchingExtensions(n.Extensions(), module, name)
 }
+
+// Extension returns the first extension with the given keyword name and whether
+// one was found.
 func (n SchemaNodeRef) Extension(name string) (Extension, bool) {
 	if n.node == nil {
 		return Extension{}, false
@@ -3719,18 +4047,24 @@ func (n SchemaNodeRef) Extension(name string) (Extension, bool) {
 	}
 	return Extension{}, false
 }
+
+// Musts returns the node's must constraints in declaration order.
 func (n SchemaNodeRef) Musts() []MustConstraint {
 	if n.node == nil {
 		return nil
 	}
 	return append([]MustConstraint(nil), n.node.musts...)
 }
+
+// Whens returns the node's when constraints in declaration order.
 func (n SchemaNodeRef) Whens() []WhenConstraint {
 	if n.node == nil {
 		return nil
 	}
 	return append([]WhenConstraint(nil), n.node.whens...)
 }
+
+// UniqueConstraints returns a list node's unique constraints, or nil for other kinds.
 func (n SchemaNodeRef) UniqueConstraints() []UniqueConstraint {
 	if n.node == nil || n.node.kind != SchemaNodeKindList {
 		return nil
@@ -3747,9 +4081,13 @@ func (n SchemaNodeRef) Children() SchemaChildren {
 	}
 	return refs(n.node.children)
 }
+
+// Input returns an rpc or action's input node and whether one is present.
 func (n SchemaNodeRef) Input() (SchemaNodeRef, bool) {
 	return n.operationChild(SchemaNodeKindInput)
 }
+
+// Output returns an rpc or action's output node and whether one is present.
 func (n SchemaNodeRef) Output() (SchemaNodeRef, bool) {
 	return n.operationChild(SchemaNodeKindOutput)
 }
@@ -3768,14 +4106,21 @@ func (n SchemaNodeRef) operationChild(kind SchemaNodeKind) (SchemaNodeRef, bool)
 // SchemaChildren is an ordered child slice.
 type SchemaChildren struct{ nodes []SchemaNodeRef }
 
-func (c SchemaChildren) Len() int      { return len(c.nodes) }
+// Len returns the number of children.
+func (c SchemaChildren) Len() int { return len(c.nodes) }
+
+// IsEmpty reports whether there are no children.
 func (c SchemaChildren) IsEmpty() bool { return len(c.nodes) == 0 }
+
+// Get returns the child at index i and whether i is in range.
 func (c SchemaChildren) Get(i int) (SchemaNodeRef, bool) {
 	if i < 0 || i >= len(c.nodes) {
 		return SchemaNodeRef{}, false
 	}
 	return c.nodes[i], true
 }
+
+// Lookup returns the first child with the given local name and whether one was found.
 func (c SchemaChildren) Lookup(name string) (SchemaNodeRef, bool) {
 	for _, n := range c.nodes {
 		if n.Name() == name {
@@ -3846,6 +4191,7 @@ func (c SchemaChildren) QualifiedNames() []QualifiedName {
 	return out
 }
 
+// Iter iterates the children in schema order.
 func (c SchemaChildren) Iter() iter.Seq[SchemaNodeRef] {
 	return func(yield func(SchemaNodeRef) bool) {
 		for _, n := range c.nodes {
@@ -3862,18 +4208,23 @@ type SchemaNode struct {
 	children []*SchemaNode
 }
 
+// Name returns the node's local name.
 func (n *SchemaNode) Name() string {
 	if n == nil {
 		return ""
 	}
 	return n.ref.Name()
 }
+
+// Kind returns the node's schema kind.
 func (n *SchemaNode) Kind() SchemaNodeKind {
 	if n == nil {
 		return SchemaNodeKindUnknown
 	}
 	return n.ref.Kind()
 }
+
+// Children returns the node's children in schema order.
 func (n *SchemaNode) Children() []*SchemaNode {
 	if n == nil {
 		return nil
@@ -3884,6 +4235,7 @@ func (n *SchemaNode) Children() []*SchemaNode {
 // SchemaTree is the legacy tree wrapper.
 type SchemaTree struct{ root *SchemaNode }
 
+// SchemaTree builds the legacy schema-tree wrapper for the named module.
 func (c *Context) SchemaTree(module string) (*SchemaTree, error) {
 	mod, err := c.Schema(module)
 	if err != nil {
@@ -3902,6 +4254,8 @@ func (c *Context) SchemaTree(module string) (*SchemaTree, error) {
 	return &SchemaTree{root: root}, nil
 }
 
+// Find walks the tree by the given name path and returns the matching node, or
+// nil if any segment is missing.
 func (t *SchemaTree) Find(path []string) *SchemaNode {
 	if t == nil || t.root == nil {
 		return nil
@@ -3923,6 +4277,7 @@ func (t *SchemaTree) Find(path []string) *SchemaNode {
 	return cur
 }
 
+// PreOrder visits each node in pre-order, stopping early when fn returns false.
 func (t *SchemaTree) PreOrder(fn func(*SchemaNode) bool) {
 	if t == nil || t.root == nil || fn == nil {
 		return
@@ -4463,7 +4818,7 @@ func (n *schemaNodeData) applyOrderedByProperty(prop *yangparse.Statement) {
 	}
 }
 
-func parseYangBool(st *yangparse.Statement) (bool, bool) {
+func parseYangBool(st *yangparse.Statement) (value, ok bool) {
 	if st == nil {
 		return false, false
 	}
@@ -4607,7 +4962,7 @@ func (n *schemaNodeData) directChildByQName(source *moduleData, qname string) *s
 	return nil
 }
 
-func (n *schemaNodeData) descendantUniqueLeaf(path string) (*schemaNodeData, *schemaNodeData) {
+func (n *schemaNodeData) descendantUniqueLeaf(path string) (leaf, nestedList *schemaNodeData) {
 	if n == nil || path == "" {
 		return nil, nil
 	}
@@ -4736,7 +5091,7 @@ func requireInstance(st *yangparse.Statement) (bool, error) {
 	return true, nil
 }
 
-func requireInstanceOverride(st *yangparse.Statement) (bool, bool, error) {
+func requireInstanceOverride(st *yangparse.Statement) (value, present bool, err error) {
 	reqs := direct(st, "require-instance")
 	if len(reqs) == 0 {
 		return false, false, nil
@@ -5151,19 +5506,19 @@ func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeB
 		if lo == "" || hi == "" {
 			return nil, fmt.Errorf("%s expression %q has missing bound in segment %q", keyword, expr, part)
 		}
-		min, err := normalizeBound(lo, keyword, base, fractionDigits)
+		lower, err := normalizeBound(lo, keyword, base, fractionDigits)
 		if err != nil {
 			return nil, err
 		}
-		max, err := normalizeBound(hi, keyword, base, fractionDigits)
+		upper, err := normalizeBound(hi, keyword, base, fractionDigits)
 		if err != nil {
 			return nil, err
 		}
-		if !boundsOrdered(keyword, base, min, max) {
+		if !boundsOrdered(keyword, base, lower, upper) {
 			return nil, fmt.Errorf("%s segment %q has lower bound greater than upper bound", keyword, part)
 		}
 		if prevMax != "" {
-			cmp, ok := compareBounds(keyword, base, prevMax, min)
+			cmp, ok := compareBounds(keyword, base, prevMax, lower)
 			if !ok {
 				return nil, fmt.Errorf("%s expression %q has uncomparable segment %q", keyword, expr, part)
 			}
@@ -5172,10 +5527,10 @@ func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeB
 			}
 		}
 		out = append(out, RangeBound{
-			min: min,
-			max: max,
+			min: lower,
+			max: upper,
 		})
-		prevMax = max
+		prevMax = upper
 	}
 	return out, nil
 }
@@ -5223,8 +5578,8 @@ func normalizeBound(s, keyword string, base BaseType, fractionDigits uint8) (str
 	return s, nil
 }
 
-func boundsOrdered(keyword string, base BaseType, min, max string) bool {
-	cmp, ok := compareBounds(keyword, base, min, max)
+func boundsOrdered(keyword string, base BaseType, lower, upper string) bool {
+	cmp, ok := compareBounds(keyword, base, lower, upper)
 	return ok && cmp <= 0
 }
 
@@ -5928,7 +6283,7 @@ func (m *moduleData) yang10SingleIfFeatureRef(expr string, from *yangparse.State
 	return singleIfFeatureRefArg(expr, false)
 }
 
-func (p *ifFeatureParser) parseOr() (bool, bool) {
+func (p *ifFeatureParser) parseOr() (value, ok bool) {
 	left, ok := p.parseAnd()
 	if !ok {
 		return false, false
@@ -5944,7 +6299,7 @@ func (p *ifFeatureParser) parseOr() (bool, bool) {
 	return left, true
 }
 
-func (p *ifFeatureParser) parseAnd() (bool, bool) {
+func (p *ifFeatureParser) parseAnd() (value, ok bool) {
 	left, ok := p.parseNot()
 	if !ok {
 		return false, false
@@ -5960,16 +6315,16 @@ func (p *ifFeatureParser) parseAnd() (bool, bool) {
 	return left, true
 }
 
-func (p *ifFeatureParser) parseNot() (bool, bool) {
+func (p *ifFeatureParser) parseNot() (value, ok bool) {
 	if p.peek(ifFeatureTokenNot) {
 		p.pos++
-		value, ok := p.parseNot()
-		return !value, ok
+		inner, innerOK := p.parseNot()
+		return !inner, innerOK
 	}
 	return p.parsePrimary()
 }
 
-func (p *ifFeatureParser) parsePrimary() (bool, bool) {
+func (p *ifFeatureParser) parsePrimary() (value, ok bool) {
 	if p.pos >= len(p.tokens) {
 		return false, false
 	}
@@ -6033,7 +6388,7 @@ func (m *moduleData) featureEnabled(qname string) bool {
 	return ok && enabled
 }
 
-func (m *moduleData) featureEnabledSeen(qname string, from *yangparse.Statement, resolving map[string]bool) (bool, bool) {
+func (m *moduleData) featureEnabledSeen(qname string, from *yangparse.Statement, resolving map[string]bool) (enabled, known bool) {
 	if m == nil || m.ctx == nil {
 		return false, false
 	}
@@ -6049,11 +6404,11 @@ func (m *moduleData) featureEnabledSeen(qname string, from *yangparse.Statement,
 	if mod == m && !m.definitionVisibleFrom(feature.stmt, from) {
 		return false, false
 	}
-	enabled := m.ctx.enabledFeatures[mod.name]
-	if len(enabled) == 0 {
+	enabledSet := m.ctx.enabledFeatures[mod.name]
+	if len(enabledSet) == 0 {
 		return false, true
 	}
-	if _, ok := enabled[local]; !ok {
+	if _, ok := enabledSet[local]; !ok {
 		return false, true
 	}
 	key := moduleKey(mod.name, local)

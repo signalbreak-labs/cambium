@@ -105,7 +105,7 @@ func TestRuleCodeValidateInt32Gap(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ctx.Close()
-	moduleDir := filepath.Join(conformanceDir(), "fixtures/types-int-int32-range-multipart/module")
+	moduleDir := filepath.Join(conformanceDir(), "fixtures", "types-int-int32-range-multipart", "module")
 	if err := ctx.SetSearchPath(moduleDir); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestRuleCodeValidatePortZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer ctx.Close()
-	moduleDir := filepath.Join(conformanceDir(), "fixtures/types-uint-uint16-range-port/module")
+	moduleDir := filepath.Join(conformanceDir(), "fixtures", "types-uint-uint16-range-port", "module")
 	if err := ctx.SetSearchPath(moduleDir); err != nil {
 		t.Fatal(err)
 	}

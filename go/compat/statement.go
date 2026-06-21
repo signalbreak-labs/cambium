@@ -21,6 +21,7 @@ type Statement struct {
 	col  int
 }
 
+// NName returns the statement argument.
 func (s *Statement) NName() string {
 	if s == nil {
 		return ""
@@ -28,6 +29,7 @@ func (s *Statement) NName() string {
 	return s.Argument
 }
 
+// Kind returns the statement keyword.
 func (s *Statement) Kind() string {
 	if s == nil {
 		return ""
@@ -35,10 +37,13 @@ func (s *Statement) Kind() string {
 	return s.Keyword
 }
 
+// Statement returns s itself.
 func (s *Statement) Statement() *Statement { return s }
 
+// ParentNode returns nil; a statement does not track its parent.
 func (s *Statement) ParentNode() Node { return nil }
 
+// Exts returns nil; a statement carries no separate extension list.
 func (s *Statement) Exts() []*Statement { return nil }
 
 // Arg returns the optional argument to s. It returns false if s has no argument.

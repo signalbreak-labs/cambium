@@ -16,7 +16,7 @@ import (
 	cambium "github.com/signalbreak-labs/cambium/go/libyangbackend"
 )
 
-func loadValidationContext(t *testing.T) (*cambium.Context, string) {
+func loadValidationContext(t *testing.T) (ctx *cambium.Context, moduleName string) {
 	t.Helper()
 	dir := t.TempDir()
 	module := filepath.Join(dir, "cambium-validation-demo.yang")
@@ -45,7 +45,7 @@ func loadValidationContext(t *testing.T) (*cambium.Context, string) {
     }
   }
 }`
-	if err := os.WriteFile(module, []byte(src), 0644); err != nil {
+	if err := os.WriteFile(module, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ctx, err := cambium.NewContext()
@@ -73,9 +73,9 @@ func parseValidationData(t *testing.T, ctx *cambium.Context, innerXML string) *c
 	return tree
 }
 
-func validationCodes(errors *cambium.ValidationErrors) []cambium.ValidationCode {
+func validationCodes(verrs *cambium.ValidationErrors) []cambium.ValidationCode {
 	var out []cambium.ValidationCode
-	for _, d := range errors.Diagnostics() {
+	for _, d := range verrs.Diagnostics() {
 		if d.ValidationCode != cambium.ValidationNone {
 			out = append(out, d.ValidationCode)
 		}

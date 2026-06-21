@@ -20,6 +20,8 @@ import (
 // Tier separates schema-IR conformance cases from backend/data cases.
 type Tier string
 
+// Tier values: TierBackendData marks libyang backend/data cases; TierSchemaIR
+// marks pure-Go schema-IR cases.
 const (
 	TierBackendData Tier = "backend-data"
 	TierSchemaIR    Tier = "schema-ir"
@@ -152,7 +154,7 @@ func (t Tier) validate() error {
 	}
 }
 
-func splitKeyValue(line string) (string, string, bool) {
+func splitKeyValue(line string) (key, value string, ok bool) {
 	i := strings.IndexByte(line, '=')
 	if i < 0 {
 		return "", "", false

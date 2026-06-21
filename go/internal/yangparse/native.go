@@ -252,7 +252,7 @@ func (p *parser) scanArgument() (string, error) {
 }
 
 // scanString reads one string operand and reports whether it was quoted.
-func (p *parser) scanString() (string, bool, error) {
+func (p *parser) scanString() (value string, quoted bool, err error) {
 	switch p.peek() {
 	case '"':
 		s, err := p.scanDoubleQuoted()

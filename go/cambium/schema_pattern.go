@@ -21,6 +21,7 @@ type Pattern struct {
 	inverted                             bool
 }
 
+// Regex returns the pattern's regular expression.
 func (p Pattern) Regex() string { return p.regex }
 func (m *moduleData) patternModifierRequiresYang11(st *yangparse.Statement) bool {
 	if st == nil || st.Keyword != "modifier" || st.Argument != "invert-match" {
@@ -292,7 +293,7 @@ func recordYANGPatternClassRune(frame *yangPatternClassFrame, runes []rune, i in
 	frame.havePrev = true
 }
 
-func parseYANGPatternQuantifier(runes []rune, start int) (int, bool, error) {
+func parseYANGPatternQuantifier(runes []rune, start int) (end int, ok bool, err error) {
 	i := start + 1
 	if i >= len(runes) || !isYANGPatternDigit(runes[i]) {
 		return 0, false, nil
@@ -301,7 +302,7 @@ func parseYANGPatternQuantifier(runes []rune, start int) (int, bool, error) {
 	for i < len(runes) && isYANGPatternDigit(runes[i]) {
 		i++
 	}
-	min := string(runes[minStart:i])
+	minimum := string(runes[minStart:i])
 	if i >= len(runes) {
 		return 0, false, nil
 	}
@@ -329,7 +330,7 @@ func parseYANGPatternQuantifier(runes []rune, start int) (int, bool, error) {
 		return 0, false, nil
 	}
 	maximum := string(runes[maxStart:i])
-	if compareYANGPatternDecimal(min, maximum) > 0 {
+	if compareYANGPatternDecimal(minimum, maximum) > 0 {
 		return 0, true, fmt.Errorf("reversed quantifier range")
 	}
 	return i, true, nil

@@ -8911,7 +8911,7 @@ func TestImportedPrefixBuiltinLookingTypeReturnsContextRuleCode(t *testing.T) {
 
 const introspectionModuleName = "cambium-introspection-demo"
 
-func introspectionContext(t *testing.T) (*cambium.Context, func()) {
+func introspectionContext(t *testing.T) (ctx *cambium.Context, cleanup func()) {
 	t.Helper()
 	dir := schemaIntrospectionModuleDir(t)
 	path := filepath.Join(dir, introspectionModuleName+".yang")
@@ -9392,13 +9392,13 @@ func TestSchemaNodeConfigStatusMandatory(t *testing.T) {
 	if ll.OrderedBy() != cambium.OrderedByUser {
 		t.Fatalf("typed-leaf-list ordered-by = %v, want User", ll.OrderedBy())
 	}
-	min, ok := ll.MinElements()
-	if !ok || min != 1 {
-		t.Fatalf("typed-leaf-list min = %d, ok=%v, want 1", min, ok)
+	minElems, ok := ll.MinElements()
+	if !ok || minElems != 1 {
+		t.Fatalf("typed-leaf-list min = %d, ok=%v, want 1", minElems, ok)
 	}
-	max, ok := ll.MaxElements()
-	if !ok || max != 10 {
-		t.Fatalf("typed-leaf-list max = %d, ok=%v, want 10", max, ok)
+	maxElems, ok := ll.MaxElements()
+	if !ok || maxElems != 10 {
+		t.Fatalf("typed-leaf-list max = %d, ok=%v, want 10", maxElems, ok)
 	}
 
 	// Regression: libyang sets LYS_ORDBY_SYSTEM (0x80) on every system-ordered
@@ -11624,12 +11624,12 @@ func TestLeafrefRealtypeResolves(t *testing.T) {
 	if !r.RequireInstance() {
 		t.Fatal("leafref should require instance")
 	}
-	real, ok := r.Realtype()
+	realType, ok := r.Realtype()
 	if !ok {
 		t.Fatal("expected leafref realtype")
 	}
-	if real.Base() != cambium.BaseTypeString {
-		t.Fatalf("realtype base = %v, want String", real.Base())
+	if realType.Base() != cambium.BaseTypeString {
+		t.Fatalf("realtype base = %v, want String", realType.Base())
 	}
 }
 
@@ -11852,12 +11852,12 @@ func TestRelativeLeafrefTargetResolves(t *testing.T) {
 	if got, want := target.Path(), "/cambium-relative-leafref/top/target"; got != want {
 		t.Fatalf("target.Path() = %q, want %q", got, want)
 	}
-	real, ok := leafref.Realtype()
+	realType, ok := leafref.Realtype()
 	if !ok {
 		t.Fatal("expected relative leafref realtype")
 	}
-	if real.Base() != cambium.BaseTypeString {
-		t.Fatalf("realtype base = %v, want String", real.Base())
+	if realType.Base() != cambium.BaseTypeString {
+		t.Fatalf("realtype base = %v, want String", realType.Base())
 	}
 }
 
@@ -11882,12 +11882,12 @@ func TestLeafrefCurrentPredicateTargetResolves(t *testing.T) {
 	if got, want := target.Path(), "/types-leafref-current-context/proto/name"; got != want {
 		t.Fatalf("target.Path() = %q, want %q", got, want)
 	}
-	real, ok := leafref.Realtype()
+	realType, ok := leafref.Realtype()
 	if !ok {
 		t.Fatal("expected current() predicate leafref realtype")
 	}
-	if real.Base() != cambium.BaseTypeString {
-		t.Fatalf("realtype base = %v, want String", real.Base())
+	if realType.Base() != cambium.BaseTypeString {
+		t.Fatalf("realtype base = %v, want String", realType.Base())
 	}
 }
 
@@ -11912,12 +11912,12 @@ func TestLeafrefDerefTargetResolves(t *testing.T) {
 	if got, want := target.Path(), "/types-leafref-deref-function/user/home"; got != want {
 		t.Fatalf("target.Path() = %q, want %q", got, want)
 	}
-	real, ok := leafref.Realtype()
+	realType, ok := leafref.Realtype()
 	if !ok {
 		t.Fatal("expected deref() leafref realtype")
 	}
-	if real.Base() != cambium.BaseTypeString {
-		t.Fatalf("realtype base = %v, want String", real.Base())
+	if realType.Base() != cambium.BaseTypeString {
+		t.Fatalf("realtype base = %v, want String", realType.Base())
 	}
 }
 
@@ -11945,12 +11945,12 @@ func TestLeafrefCrossModuleTargetResolves(t *testing.T) {
 	if got, want := target.Module().Name(), "types-leafref-cross-module-base"; got != want {
 		t.Fatalf("target.Module().Name() = %q, want %q", got, want)
 	}
-	real, ok := leafref.Realtype()
+	realType, ok := leafref.Realtype()
 	if !ok {
 		t.Fatal("expected cross-module leafref realtype")
 	}
-	if real.Base() != cambium.BaseTypeString {
-		t.Fatalf("realtype base = %v, want String", real.Base())
+	if realType.Base() != cambium.BaseTypeString {
+		t.Fatalf("realtype base = %v, want String", realType.Base())
 	}
 }
 
@@ -14019,7 +14019,7 @@ func TestYang11SubmoduleCanReferenceSiblingDefinitionReferences(t *testing.T) {
 	}
 }
 
-func importContext(t *testing.T) (*cambium.Context, func()) {
+func importContext(t *testing.T) (ctx *cambium.Context, cleanup func()) {
 	t.Helper()
 	dir := schemaIntrospectionModuleDir(t)
 
@@ -14536,7 +14536,7 @@ func assertModuleImportsAndResolvePrefix(t *testing.T) {
 	}
 }
 
-func augmentDeviationContext(t *testing.T) (*cambium.Context, func()) {
+func augmentDeviationContext(t *testing.T) (ctx *cambium.Context, cleanup func()) {
 	t.Helper()
 	dir := schemaIntrospectionModuleDir(t)
 
@@ -14674,11 +14674,11 @@ func TestModuleAugmentDeviationProvenance(t *testing.T) {
 
 const groupingModuleName = "cambium-grouping-demo"
 
-func writeGroupingModule(t *testing.T) (string, string) {
+func writeGroupingModule(t *testing.T) (dir, groupingPath string) {
 	t.Helper()
-	dir := schemaIntrospectionModuleDir(t)
+	dir = schemaIntrospectionModuleDir(t)
 
-	groupingPath := filepath.Join(dir, groupingModuleName+".yang")
+	groupingPath = filepath.Join(dir, groupingModuleName+".yang")
 	groupingYang := `module cambium-grouping-demo {
     namespace "urn:cambium:grouping";
     prefix cgd;
@@ -14716,7 +14716,7 @@ func writeGroupingModule(t *testing.T) (string, string) {
 	return dir, groupingPath
 }
 
-func groupingContext(t *testing.T) (*cambium.Context, func()) {
+func groupingContext(t *testing.T) (ctx *cambium.Context, cleanup func()) {
 	t.Helper()
 	_, groupingPath := writeGroupingModule(t)
 
@@ -14920,7 +14920,7 @@ func TestModuleGroupingDefinitionMetadataAccessors(t *testing.T) {
 const deviationTargetModuleName = "cambium-deviation-target"
 const deviationSourceModuleName = "cambium-deviation-source"
 
-func deviationContext(t *testing.T) (*cambium.Context, func()) {
+func deviationContext(t *testing.T) (ctx *cambium.Context, cleanup func()) {
 	t.Helper()
 	dir := schemaIntrospectionModuleDir(t)
 
@@ -15423,7 +15423,7 @@ func TestDeviationConfigFalseInheritedByDescendants(t *testing.T) {
 	}
 }
 
-func ifFeatureContext(t *testing.T) (*cambium.Context, func()) {
+func ifFeatureContext(t *testing.T) (ctx *cambium.Context, cleanup func()) {
 	t.Helper()
 	dir := schemaIntrospectionModuleDir(t)
 

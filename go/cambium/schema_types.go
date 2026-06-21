@@ -10,12 +10,17 @@ import (
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
 )
 
+// TypedefName returns the immediate typedef name and whether the type came from
+// a named typedef rather than a built-in.
 func (t TypeInfo) TypedefName() (string, bool) {
 	if t.typedefName == nil {
 		return "", false
 	}
 	return *t.typedefName, true
 }
+
+// TypedefChain returns the typedef names traversed to reach the base type, from
+// outermost to innermost.
 func (t TypeInfo) TypedefChain() []string { return append([]string(nil), t.typedefChain...) }
 
 // TypedefDefinition is a declared top-level or included YANG typedef.
@@ -253,6 +258,7 @@ func (m *moduleData) resolveIdentity(id *identityData) {
 	id.resolved = true
 }
 
+// TypedefDefinitions returns the module's typedefs in declaration order.
 func (m Module) TypedefDefinitions() []TypedefDefinition {
 	if m.mod == nil {
 		return nil

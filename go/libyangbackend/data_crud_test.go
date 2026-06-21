@@ -85,7 +85,7 @@ func loadCRUDContext(t *testing.T) (*cambium.Context, *cambium.DataTree) {
     }
 }
 `
-	if err := os.WriteFile(module, []byte(source), 0644); err != nil {
+	if err := os.WriteFile(module, []byte(source), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

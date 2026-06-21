@@ -1217,7 +1217,7 @@ func TestContextBuilderFailedLoadModuleRollsBackFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build after failed LoadModule retained feature state: %v", err)
 	}
-	defer ctx.Close()
+	ctx.Close()
 }
 
 func TestContextBuilderSearchPathReadbackAndUnset(t *testing.T) {

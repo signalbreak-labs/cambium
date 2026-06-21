@@ -1189,11 +1189,11 @@ func TestCompatNumberAndRangeHelpers(t *testing.T) {
 	if got, err := neg.Int(); err != nil || got != -42 {
 		t.Fatalf("FromInt(-42).Int() = (%d,%v), want -42,nil", got, err)
 	}
-	min := compat.FromInt(compat.MinInt64)
-	if got := min.String(); got != "-9223372036854775808" {
+	minNum := compat.FromInt(compat.MinInt64)
+	if got := minNum.String(); got != "-9223372036854775808" {
 		t.Fatalf("FromInt(MinInt64).String() = %q, want -9223372036854775808", got)
 	}
-	if got, err := min.Int(); err != nil || got != compat.MinInt64 {
+	if got, err := minNum.Int(); err != nil || got != compat.MinInt64 {
 		t.Fatalf("FromInt(MinInt64).Int() = (%d,%v), want MinInt64,nil", got, err)
 	}
 	if _, err := (compat.Number{Value: uint64(compat.MaxInt64) + 1}).Int(); err == nil {

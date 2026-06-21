@@ -60,8 +60,8 @@ func validateLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, ancestor
 			if active && sn.IsMandatory() {
 				*out = append(*out, fmt.Sprintf("missing mandatory node %s", childPath))
 			}
-			if min, ok := sn.MinElements(); active && ok && min > 0 {
-				*out = append(*out, fmt.Sprintf("%s has 0 entries, fewer than min-elements %d", childPath, min))
+			if minE, ok := sn.MinElements(); active && ok && minE > 0 {
+				*out = append(*out, fmt.Sprintf("%s has 0 entries, fewer than min-elements %d", childPath, minE))
 			}
 			continue
 		}
@@ -168,11 +168,11 @@ func appendFrame(ancestors [][]*node, frame []*node) [][]*node {
 }
 
 func checkElements(sn cambium.SchemaNodeRef, count int, path string, out *[]string) {
-	if min, ok := sn.MinElements(); ok && uint32(count) < min {
-		*out = append(*out, fmt.Sprintf("%s has %d entries, fewer than min-elements %d", path, count, min))
+	if minE, ok := sn.MinElements(); ok && int64(count) < int64(minE) {
+		*out = append(*out, fmt.Sprintf("%s has %d entries, fewer than min-elements %d", path, count, minE))
 	}
-	if max, ok := sn.MaxElements(); ok && uint32(count) > max {
-		*out = append(*out, fmt.Sprintf("%s has %d entries, more than max-elements %d", path, count, max))
+	if maxE, ok := sn.MaxElements(); ok && int64(count) > int64(maxE) {
+		*out = append(*out, fmt.Sprintf("%s has %d entries, more than max-elements %d", path, count, maxE))
 	}
 }
 

@@ -709,7 +709,7 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 		if realtype, ok := r.Realtype(); ok {
 			return g.emitJSONParseUnionMemberAttempt(targetVar, matchedVar, variantType, payloadType, rawExpr, keyExpr, *realtype, out, indent)
 		}
-		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, "candidate", false, member, out, indent)
+		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, false, member, out, indent)
 		return true
 	case cambium.ResolvedString:
 		patterns := stringPatternLiteral(member)
@@ -720,9 +720,9 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 			fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 			fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
 			if patterns != "nil" {
-				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { %s = %s; %s = true } } }\n", indent, payloadType, patterns, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { %s = %s; %s = true } } }\n", indent, payloadType, patterns, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			} else {
-				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			}
 			out.WriteString(indent + "}\n")
 			return true
@@ -730,32 +730,32 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 		if patterns != "nil" {
 			fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 			fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
-			fmt.Fprintf(out, "%s\tif err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { candidate := s; %s = %s; %s = true } }\n", indent, patterns, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+			fmt.Fprintf(out, "%s\tif err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { candidate := s; %s = %s; %s = true } }\n", indent, patterns, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			out.WriteString(indent + "}\n")
 			return true
 		}
-		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, "candidate", false, member, out, indent)
+		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, false, member, out, indent)
 		return true
 	case cambium.ResolvedUnknown:
-		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, "candidate", false, member, out, indent)
+		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, false, member, out, indent)
 		return true
 	case cambium.ResolvedBinary:
 		g.helpers["binaryParse"] = true
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\tcandidate, err := cambiumJSONBinary(%s, %s, %s)\n", indent, rawExpr, keyExpr, binaryLengthRangeLiteral(member))
-		fmt.Fprintf(out, "%s\tif err == nil { %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedBoolean:
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\tcandidate, err := cambiumJSONBool(%s, %s)\n", indent, rawExpr, keyExpr)
-		fmt.Fprintf(out, "%s\tif err == nil { %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedEmpty:
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\terr := cambiumJSONEmpty(%s, %s)\n", indent, rawExpr, keyExpr)
-		fmt.Fprintf(out, "%s\tif err == nil { candidate := struct{}{}; %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { candidate := struct{}{}; %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedInt:
@@ -764,16 +764,16 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 		if isSignedIntKind(r.Kind) {
 			fmt.Fprintf(out, "%s\tparsed, err := cambiumJSONInt(%s, %s, %d, %t)\n", indent, rawExpr, keyExpr, intKindBitSize(r.Kind), quoted)
 			if len(r.Range) > 0 {
-				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(%s(parsed)); err == nil { %s = %s; %s = true } }\n", indent, payloadType, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(%s(parsed)); err == nil { %s = %s; %s = true } }\n", indent, payloadType, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			} else {
-				fmt.Fprintf(out, "%s\tif err == nil { candidate := %s(parsed); %s = %s; %s = true }\n", indent, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { candidate := %s(parsed); %s = %s; %s = true }\n", indent, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			}
 		} else {
 			fmt.Fprintf(out, "%s\tparsed, err := cambiumJSONUint(%s, %s, %d, %t)\n", indent, rawExpr, keyExpr, intKindBitSize(r.Kind), quoted)
 			if len(r.Range) > 0 {
-				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(%s(parsed)); err == nil { %s = %s; %s = true } }\n", indent, payloadType, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(%s(parsed)); err == nil { %s = %s; %s = true } }\n", indent, payloadType, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			} else {
-				fmt.Fprintf(out, "%s\tif err == nil { candidate := %s(parsed); %s = %s; %s = true }\n", indent, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { candidate := %s(parsed); %s = %s; %s = true }\n", indent, goTypeForIntKind(r.Kind), targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			}
 		}
 		out.WriteString(indent + "}\n")
@@ -782,29 +782,29 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 		fd, ranges := decimal64ValidationArgs(member)
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\tcandidate, err := cambiumJSONDecimal64(%s, %s, %d)\n", indent, rawExpr, keyExpr, fd)
-		fmt.Fprintf(out, "%s\tif err == nil { if err := cambiumValidateDecimal64Value(candidate, %d, %s); err == nil { %s = %s; %s = true } }\n", indent, fd, ranges, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { if err := cambiumValidateDecimal64Value(candidate, %d, %s); err == nil { %s = %s; %s = true } }\n", indent, fd, ranges, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedEnumeration:
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
-		fmt.Fprintf(out, "%s\tif err == nil { if candidate, ok := Parse%s(s); ok { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { if candidate, ok := Parse%s(s); ok { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedBits:
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
-		fmt.Fprintf(out, "%s\tif err == nil { if bitNames, err := cambiumBitsNames(s); err == nil { if candidate, err := New%s(bitNames); err == nil { %s = %s; %s = true } } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { if bitNames, err := cambiumBitsNames(s); err == nil { if candidate, err := New%s(bitNames); err == nil { %s = %s; %s = true } } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedIdentityRef:
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 		fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
-		fmt.Fprintf(out, "%s\tif err == nil { if candidate, ok := Parse%s(s); ok { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { if candidate, ok := Parse%s(s); ok { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	case cambium.ResolvedInstanceIdentifier:
-		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, "candidate", true, member, out, indent)
+		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, true, member, out, indent)
 		return true
 	case cambium.ResolvedUnion:
 		fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
@@ -817,7 +817,7 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 			nestedPayloadType := unionPayloadTypeName(payloadType, variant, nested)
 			g.emitJSONParseUnionMemberAttempt("nestedValue", "nestedMatched", nestedVariantType, nestedPayloadType, rawExpr, keyExpr, nested, out, indent+"\t")
 		}
-		fmt.Fprintf(out, "%s\tif nestedMatched { candidate := nestedValue; %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member, "candidate"), matchedVar)
+		fmt.Fprintf(out, "%s\tif nestedMatched { candidate := nestedValue; %s = %s; %s = true }\n", indent, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 		out.WriteString(indent + "}\n")
 		return true
 	default:
@@ -825,13 +825,14 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 	}
 }
 
-func (g *goEmitter) emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, candidate string, instanceIdentifier bool, member cambium.TypeInfo, out *strings.Builder, indent string) {
+func (g *goEmitter) emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr string, instanceIdentifier bool, member cambium.TypeInfo, out *strings.Builder, indent string) {
+	const candidate = "candidate"
 	fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 	fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
 	if instanceIdentifier {
-		fmt.Fprintf(out, "%s\tif err == nil { %s := NewInstanceIdentifier(s); %s = %s; %s = true }\n", indent, candidate, targetVar, unionVariantAssignExpr(variantType, member, candidate), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { %s := NewInstanceIdentifier(s); %s = %s; %s = true }\n", indent, candidate, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 	} else {
-		fmt.Fprintf(out, "%s\tif err == nil { %s := s; %s = %s; %s = true }\n", indent, candidate, targetVar, unionVariantAssignExpr(variantType, member, candidate), matchedVar)
+		fmt.Fprintf(out, "%s\tif err == nil { %s := s; %s = %s; %s = true }\n", indent, candidate, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 	}
 	out.WriteString(indent + "}\n")
 }
@@ -884,7 +885,8 @@ func unionStringLengthPayloadTypeName(unionName, variant string) string {
 	return unionName + variant + "Length"
 }
 
-func unionVariantAssignExpr(variantType string, member cambium.TypeInfo, candidate string) string {
+func unionVariantAssignExpr(variantType string, member cambium.TypeInfo) string {
+	const candidate = "candidate"
 	if unionMemberNeedsWrapper(member) {
 		return fmt.Sprintf("%s{Value: %s}", variantType, candidate)
 	}

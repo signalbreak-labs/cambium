@@ -10,8 +10,17 @@ type ErrorNode struct {
 	Error error
 }
 
-func (ErrorNode) Kind() string             { return "error" }
-func (s *ErrorNode) ParentNode() Node      { return s.Parent }
-func (s *ErrorNode) NName() string         { return "error" }
+// Kind reports the node kind, always "error".
+func (ErrorNode) Kind() string { return "error" }
+
+// ParentNode returns the enclosing AST node.
+func (s *ErrorNode) ParentNode() Node { return s.Parent }
+
+// NName returns "error".
+func (s *ErrorNode) NName() string { return "error" }
+
+// Statement returns an empty placeholder statement.
 func (s *ErrorNode) Statement() *Statement { return &Statement{} }
-func (s *ErrorNode) Exts() []*Statement    { return nil }
+
+// Exts returns nil; an error node carries no extensions.
+func (s *ErrorNode) Exts() []*Statement { return nil }

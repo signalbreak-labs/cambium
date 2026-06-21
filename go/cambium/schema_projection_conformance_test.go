@@ -298,7 +298,7 @@ func projectionConformanceMandatoryNode(node cambium.SchemaNodeRef) bool {
 		return true
 	}
 	if node.IsList() || node.IsLeafList() {
-		if min, ok := node.MinElements(); ok && min > 0 {
+		if minElems, ok := node.MinElements(); ok && minElems > 0 {
 			return true
 		}
 	}

@@ -216,7 +216,7 @@ func TestValueTypedLeaves(t *testing.T) {
     leaf bin { type binary; }
     leaf empty { type empty; }
   }
-}`), 0644); err != nil {
+}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	data := []byte(`<c xmlns="urn:td">
@@ -374,7 +374,7 @@ func TestNodeRefValueStrAndIsDefault(t *testing.T) {
   namespace "urn:dd";
   prefix dd;
   container c { leaf x { type string; default "hello"; } }
-}`), 0644); err != nil {
+}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ctx, err := cambium.NewContext()

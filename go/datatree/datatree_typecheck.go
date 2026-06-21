@@ -168,7 +168,7 @@ func integerJSONQuoted(kind cambium.IntKind) bool {
 	return kind == cambium.IntKindI64 || kind == cambium.IntKindU64
 }
 
-var jsonIntegerNumberLexical = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
+var jsonIntegerNumberLexical = regexp.MustCompile(`^-?(0|[1-9]\d*)$`)
 
 func rawDisplay(raw json.RawMessage) string {
 	if s, ok := jsonStringValue(raw); ok {
@@ -361,7 +361,7 @@ func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out
 // integer digits, optional fractional part). It rejects forms big.Rat would
 // otherwise accept but YANG does not: hex (0x10), exponent (1.5e1), rational
 // (1/2), and underscore-separated (1_000) literals.
-var decimal64Lexical = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
+var decimal64Lexical = regexp.MustCompile(`^[+-]?\d+(\.\d+)?$`)
 
 func checkDecimal(s string, r cambium.ResolvedDecimal64, path string, out *[]string) {
 	if !decimal64Lexical.MatchString(s) {
@@ -375,8 +375,8 @@ func checkDecimal(s string, r cambium.ResolvedDecimal64, path string, out *[]str
 	}
 	if dot := strings.IndexByte(s, '.'); dot >= 0 {
 		frac := len(s) - dot - 1
-		if max := int(r.FractionDigits().Value()); frac > max {
-			*out = append(*out, fmt.Sprintf("%s: %s has %d fraction digits, more than fraction-digits %d", path, s, frac, max))
+		if maxFrac := int(r.FractionDigits().Value()); frac > maxFrac {
+			*out = append(*out, fmt.Sprintf("%s: %s has %d fraction digits, more than fraction-digits %d", path, s, frac, maxFrac))
 		}
 	}
 	if len(r.Range) > 0 && !ratInRanges(val, r.Range) {

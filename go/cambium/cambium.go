@@ -532,7 +532,7 @@ func (c *Context) findModulePathRevision(name, revision string) (string, error) 
 	return "", fmt.Errorf("module %q not found in search path", name)
 }
 
-func findModuleInSearchDir(dir, name, revision string) (string, bool, error) {
+func findModuleInSearchDir(dir, name, revision string) (file string, found bool, err error) {
 	clean := filepath.Clean(dir)
 	if filepath.Base(clean) == "..." {
 		return findModuleRecursive(moduleSourceDirectory(clean), name, revision)
@@ -540,7 +540,7 @@ func findModuleInSearchDir(dir, name, revision string) (string, bool, error) {
 	return findModuleDirect(clean, name, revision)
 }
 
-func findModuleDirect(dir, name, revision string) (string, bool, error) {
+func findModuleDirect(dir, name, revision string) (file string, found bool, err error) {
 	if revision != "" {
 		revisioned := filepath.Join(dir, name+"@"+revision+".yang")
 		if ok, err := fileExists(revisioned); err != nil {
@@ -595,7 +595,7 @@ func findModuleDirect(dir, name, revision string) (string, bool, error) {
 	return "", false, nil
 }
 
-func findModuleRecursive(dir, name, revision string) (string, bool, error) {
+func findModuleRecursive(dir, name, revision string) (file string, found bool, err error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -630,10 +630,10 @@ func findModuleRecursive(dir, name, revision string) (string, bool, error) {
 		if fallback != "" {
 			return fallback, true, nil
 		}
-		for _, path := range dirs {
-			found, ok, err := findModuleRecursive(path, name, revision)
+		for _, dirPath := range dirs {
+			subFile, ok, err := findModuleRecursive(dirPath, name, revision)
 			if err != nil || ok {
-				return found, ok, err
+				return subFile, ok, err
 			}
 		}
 		return "", false, nil
@@ -669,10 +669,10 @@ func findModuleRecursive(dir, name, revision string) (string, bool, error) {
 	if len(revisions) > 0 {
 		return revisions[len(revisions)-1], true, nil
 	}
-	for _, path := range dirs {
-		found, ok, err := findModuleRecursive(path, name, revision)
+	for _, dirPath := range dirs {
+		subFile, ok, err := findModuleRecursive(dirPath, name, revision)
 		if err != nil || ok {
-			return found, ok, err
+			return subFile, ok, err
 		}
 	}
 	return "", false, nil
@@ -1268,7 +1268,7 @@ func (c *Context) loadIncludes(mod *moduleData) error {
 		if err != nil {
 			return err
 		}
-		if _, err := c.loadIncludedSubmodulePath(path, mod); err != nil {
+		if err := c.loadIncludedSubmodulePath(path, mod); err != nil {
 			return err
 		}
 	}
@@ -1291,7 +1291,7 @@ func (c *Context) loadSubmoduleIncludes(parent *moduleData, stmt *yangparse.Stat
 		if err != nil {
 			return err
 		}
-		if _, err := c.loadIncludedSubmodulePath(path, parent); err != nil {
+		if err := c.loadIncludedSubmodulePath(path, parent); err != nil {
 			return err
 		}
 	}
@@ -1377,27 +1377,28 @@ func validateIncludeStatement(inc *yangparse.Statement, allowXMLPrefix bool) (st
 	return revision, nil
 }
 
-func (c *Context) loadIncludedSubmodulePath(path string, parent *moduleData) (*moduleData, error) {
+func (c *Context) loadIncludedSubmodulePath(path string, parent *moduleData) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	raw, err := yangparse.ReadFile(abs)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	stmts, err := yangparse.Parse(raw, abs)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if len(stmts) != 1 {
-		return nil, fmt.Errorf("%s: expected one submodule statement, got %d", abs, len(stmts))
+		return fmt.Errorf("%s: expected one submodule statement, got %d", abs, len(stmts))
 	}
 	stmt := stmts[0]
 	if stmt.Keyword != "submodule" {
-		return nil, fmt.Errorf("%s: included file top-level statement is %q, want submodule", abs, stmt.Keyword)
+		return fmt.Errorf("%s: included file top-level statement is %q, want submodule", abs, stmt.Keyword)
 	}
-	return c.loadSubmodule(abs, stmt, parent)
+	_, err = c.loadSubmodule(abs, stmt, parent)
+	return err
 }
 
 func (c *Context) loadImports(mod *moduleData) error {
@@ -1481,13 +1482,12 @@ func (c *Context) loadImports(mod *moduleData) error {
 	return nil
 }
 
-func (c *Context) markImplemented(mod *moduleData) bool {
+func (c *Context) markImplemented(mod *moduleData) {
 	if mod == nil || mod.implemented {
-		return false
+		return
 	}
 	mod.implemented = true
 	c.registerNameDefault(mod)
-	return true
 }
 
 // Schema returns the loaded module's schema IR.

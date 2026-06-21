@@ -38,7 +38,9 @@ type ASTValue = Value
 type ASTIdentity = Identity
 
 // BaseTypedefs contains goyang-shaped manufactured typedefs for built-in YANG types.
-var BaseTypedefs map[string]*Typedef = newBaseTypedefs()
+// The explicit map type mirrors goyang's declaration so the exported-surface
+// parity test (api_parity_test.go) sees the same type spelling.
+var BaseTypedefs map[string]*Typedef = newBaseTypedefs() //nolint:revive // var-declaration: explicit type kept for goyang API parity
 
 // Parse parses generic YANG source into ordered statements.
 func Parse(input, path string) ([]*Statement, error) {
@@ -458,15 +460,16 @@ func FindNode(n Node, path string) (Node, error) {
 			}
 			found := false
 			for _, imp := range mod.Import {
-				if imp != nil && imp.Prefix != nil && imp.Prefix.Name == prefix {
-					imported := mod.Modules.FindModule(imp)
-					if imported == nil {
-						return nil, fmt.Errorf("unknown prefix: %q", prefix)
-					}
-					n = imported
-					found = true
-					break
+				if imp == nil || imp.Prefix == nil || imp.Prefix.Name != prefix {
+					continue
 				}
+				imported := mod.Modules.FindModule(imp)
+				if imported == nil {
+					return nil, fmt.Errorf("unknown prefix: %q", prefix)
+				}
+				n = imported
+				found = true
+				break
 			}
 			if !found {
 				return nil, fmt.Errorf("unknown prefix: %q", prefix)
@@ -580,7 +583,7 @@ Loop:
 	return nil
 }
 
-func splitPrefix(s string) (string, string) {
+func splitPrefix(s string) (prefix, local string) {
 	prefix, local, ok := strings.Cut(s, ":")
 	if !ok {
 		return "", s

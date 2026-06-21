@@ -5,6 +5,7 @@ package compat
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -338,8 +339,10 @@ func applyRawTypeStatementMetadata(typ *YangType, stmt *Statement, resolver Node
 			typ.Range = decimalDefaultRange(typ.FractionDigits)
 		}
 		if rng := firstChild(stmt, "range"); rng != nil {
-			if parsed, err := parseStatementRange(typ.Range, rng.Argument, true, uint8(typ.FractionDigits)); err == nil {
-				typ.Range = parsed
+			if typ.FractionDigits >= 0 && typ.FractionDigits <= math.MaxUint8 {
+				if parsed, err := parseStatementRange(typ.Range, rng.Argument, true, uint8(typ.FractionDigits)); err == nil {
+					typ.Range = parsed
+				}
 			}
 		}
 	case Ystring:
@@ -387,16 +390,16 @@ func parseStatementRange(parent YangRange, expr string, decimal bool, fractionDi
 			if len(parent) == 0 {
 				return Number{}, fmt.Errorf("cannot resolve max without parent range")
 			}
-			max := parent[len(parent)-1].Max
-			max.FractionDigits = fractionDigits
-			return max, nil
+			hi := parent[len(parent)-1].Max
+			hi.FractionDigits = fractionDigits
+			return hi, nil
 		case "min":
 			if len(parent) == 0 {
 				return Number{}, fmt.Errorf("cannot resolve min without parent range")
 			}
-			min := parent[0].Min
-			min.FractionDigits = fractionDigits
-			return min, nil
+			lo := parent[0].Min
+			lo.FractionDigits = fractionDigits
+			return lo, nil
 		default:
 			if decimal {
 				return ParseDecimal(raw, fractionDigits)
@@ -412,21 +415,21 @@ func parseStatementRange(parent YangRange, expr string, decimal bool, fractionDi
 		if len(bounds) > 2 {
 			return nil, fmt.Errorf("too many range separators in %q", part)
 		}
-		min, err := parseNumber(strings.TrimSpace(bounds[0]))
+		lo, err := parseNumber(strings.TrimSpace(bounds[0]))
 		if err != nil {
 			return nil, err
 		}
-		max := min
+		hi := lo
 		if len(bounds) == 2 {
-			max, err = parseNumber(strings.TrimSpace(bounds[1]))
+			hi, err = parseNumber(strings.TrimSpace(bounds[1]))
 			if err != nil {
 				return nil, err
 			}
 		}
-		if max.Less(min) {
+		if hi.Less(lo) {
 			return nil, fmt.Errorf("range boundaries out of order")
 		}
-		out = append(out, YRange{Min: min, Max: max})
+		out = append(out, YRange{Min: lo, Max: hi})
 	}
 	out.Sort()
 	out = coalesceStatementRange(out)

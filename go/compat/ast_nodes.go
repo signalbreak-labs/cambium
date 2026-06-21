@@ -42,28 +42,43 @@ type ASTModule struct {
 	Modules      *Modules
 }
 
+// Kind reports "submodule" when the node belongs to a module, otherwise "module".
 func (m *ASTModule) Kind() string {
 	if m != nil && m.BelongsTo != nil {
 		return "submodule"
 	}
 	return "module"
 }
-func (m *ASTModule) ParentNode() Node      { return nodeParent(m.Parent) }
-func (m *ASTModule) NName() string         { return nodeName(m) }
+
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (m *ASTModule) ParentNode() Node { return nodeParent(m.Parent) }
+
+// NName returns the module name.
+func (m *ASTModule) NName() string { return nodeName(m) }
+
+// Statement returns the source statement the module was parsed from.
 func (m *ASTModule) Statement() *Statement { return nodeStatement(m.Source) }
-func (m *ASTModule) Exts() []*Statement    { return nodeExtensions(m.Extensions) }
+
+// Exts returns the module's extension statements.
+func (m *ASTModule) Exts() []*Statement { return nodeExtensions(m.Extensions) }
+
+// Groupings returns the module's top-level groupings in declaration order.
 func (m *ASTModule) Groupings() []*Grouping {
 	if m == nil {
 		return nil
 	}
 	return m.Grouping
 }
+
+// Typedefs returns the module's top-level typedefs in declaration order.
 func (m *ASTModule) Typedefs() []*Typedef {
 	if m == nil {
 		return nil
 	}
 	return m.Typedef
 }
+
+// GetPrefix returns the module's prefix, or the belongs-to prefix for a submodule.
 func (m *ASTModule) GetPrefix() string {
 	if m == nil {
 		return ""
@@ -80,6 +95,7 @@ func (m *ASTModule) GetPrefix() string {
 	return m.Prefix.Name
 }
 
+// Import is the parser-facing import statement node.
 type Import struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -93,12 +109,22 @@ type Import struct {
 	Module       *Module
 }
 
-func (Import) Kind() string             { return "import" }
-func (s *Import) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Import) NName() string         { return nodeName(s) }
-func (s *Import) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Import) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "import".
+func (Import) Kind() string { return "import" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Import) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the imported module name.
+func (s *Import) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the import was parsed from.
+func (s *Import) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the import's extension statements.
+func (s *Import) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Include is the parser-facing include statement node.
 type Include struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -109,12 +135,22 @@ type Include struct {
 	Module       *Module
 }
 
-func (Include) Kind() string             { return "include" }
-func (s *Include) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Include) NName() string         { return nodeName(s) }
-func (s *Include) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Include) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "include".
+func (Include) Kind() string { return "include" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Include) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Include) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Include) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Include) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Revision is the parser-facing revision statement node.
 type Revision struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -125,12 +161,22 @@ type Revision struct {
 	Reference   *Value `yang:"reference"`
 }
 
-func (Revision) Kind() string             { return "revision" }
-func (s *Revision) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Revision) NName() string         { return nodeName(s) }
-func (s *Revision) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Revision) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "revision".
+func (Revision) Kind() string { return "revision" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Revision) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Revision) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Revision) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Revision) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// BelongsTo is the parser-facing belongs-to statement node.
 type BelongsTo struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -140,12 +186,22 @@ type BelongsTo struct {
 	Prefix *Value `yang:"prefix,required"`
 }
 
-func (BelongsTo) Kind() string             { return "belongs-to" }
-func (s *BelongsTo) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *BelongsTo) NName() string         { return nodeName(s) }
-func (s *BelongsTo) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *BelongsTo) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "belongs-to".
+func (BelongsTo) Kind() string { return "belongs-to" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *BelongsTo) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *BelongsTo) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *BelongsTo) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *BelongsTo) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Typedef is the parser-facing typedef statement node.
 type Typedef struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -161,12 +217,22 @@ type Typedef struct {
 	YangType    *YangType `json:"-"`
 }
 
-func (Typedef) Kind() string             { return "typedef" }
-func (s *Typedef) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Typedef) NName() string         { return nodeName(s) }
-func (s *Typedef) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Typedef) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "typedef".
+func (Typedef) Kind() string { return "typedef" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Typedef) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Typedef) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Typedef) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Typedef) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Type is the parser-facing type statement node.
 type Type struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -186,12 +252,22 @@ type Type struct {
 	YangType        *YangType
 }
 
-func (Type) Kind() string             { return "type" }
-func (s *Type) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Type) NName() string         { return nodeName(s) }
-func (s *Type) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Type) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "type".
+func (Type) Kind() string { return "type" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Type) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Type) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Type) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Type) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Container is the parser-facing container statement node.
 type Container struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -220,14 +296,28 @@ type Container struct {
 	When         *Value          `yang:"when"`
 }
 
-func (Container) Kind() string              { return "container" }
-func (s *Container) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *Container) NName() string          { return nodeName(s) }
-func (s *Container) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *Container) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *Container) Groupings() []*Grouping { return s.Grouping }
-func (s *Container) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "container".
+func (Container) Kind() string { return "container" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Container) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Container) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Container) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Container) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *Container) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *Container) Typedefs() []*Typedef { return s.Typedef }
+
+// Must is the parser-facing must statement node.
 type Must struct {
 	Name       string       `yang:"Name,nomerge" json:",omitempty"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -240,12 +330,22 @@ type Must struct {
 	Reference    *Value `yang:"reference" json:",omitempty"`
 }
 
-func (Must) Kind() string             { return "must" }
-func (s *Must) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Must) NName() string         { return nodeName(s) }
-func (s *Must) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Must) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "must".
+func (Must) Kind() string { return "must" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Must) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Must) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Must) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Must) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Leaf is the parser-facing leaf statement node.
 type Leaf struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -265,12 +365,22 @@ type Leaf struct {
 	When        *Value   `yang:"when"`
 }
 
-func (Leaf) Kind() string             { return "leaf" }
-func (s *Leaf) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Leaf) NName() string         { return nodeName(s) }
-func (s *Leaf) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Leaf) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "leaf".
+func (Leaf) Kind() string { return "leaf" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Leaf) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Leaf) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Leaf) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Leaf) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// LeafList is the parser-facing leaf-list statement node.
 type LeafList struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -292,12 +402,22 @@ type LeafList struct {
 	When        *Value   `yang:"when"`
 }
 
-func (LeafList) Kind() string             { return "leaf-list" }
-func (s *LeafList) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *LeafList) NName() string         { return nodeName(s) }
-func (s *LeafList) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *LeafList) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "leaf-list".
+func (LeafList) Kind() string { return "leaf-list" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *LeafList) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *LeafList) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *LeafList) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *LeafList) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// List is the parser-facing list statement node.
 type List struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -330,14 +450,28 @@ type List struct {
 	When         *Value          `yang:"when"`
 }
 
-func (List) Kind() string              { return "list" }
-func (s *List) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *List) NName() string          { return nodeName(s) }
-func (s *List) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *List) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *List) Groupings() []*Grouping { return s.Grouping }
-func (s *List) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "list".
+func (List) Kind() string { return "list" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *List) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *List) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *List) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *List) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *List) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *List) Typedefs() []*Typedef { return s.Typedef }
+
+// Choice is the parser-facing choice statement node.
 type Choice struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -361,12 +495,22 @@ type Choice struct {
 	When        *Value       `yang:"when"`
 }
 
-func (Choice) Kind() string             { return "choice" }
-func (s *Choice) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Choice) NName() string         { return nodeName(s) }
-func (s *Choice) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Choice) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "choice".
+func (Choice) Kind() string { return "choice" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Choice) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Choice) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Choice) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Choice) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Case is the parser-facing case statement node.
 type Case struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -388,12 +532,22 @@ type Case struct {
 	When        *Value       `yang:"when"`
 }
 
-func (Case) Kind() string             { return "case" }
-func (s *Case) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Case) NName() string         { return nodeName(s) }
-func (s *Case) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Case) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "case".
+func (Case) Kind() string { return "case" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Case) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Case) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Case) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Case) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// AnyXML is the parser-facing anyxml statement node.
 type AnyXML struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -410,12 +564,22 @@ type AnyXML struct {
 	When        *Value   `yang:"when"`
 }
 
-func (AnyXML) Kind() string             { return "anyxml" }
-func (s *AnyXML) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *AnyXML) NName() string         { return nodeName(s) }
-func (s *AnyXML) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *AnyXML) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "anyxml".
+func (AnyXML) Kind() string { return "anyxml" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *AnyXML) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *AnyXML) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *AnyXML) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *AnyXML) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// AnyData is the parser-facing anydata statement node.
 type AnyData struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -432,12 +596,22 @@ type AnyData struct {
 	When        *Value   `yang:"when"`
 }
 
-func (AnyData) Kind() string             { return "anydata" }
-func (s *AnyData) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *AnyData) NName() string         { return nodeName(s) }
-func (s *AnyData) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *AnyData) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "anydata".
+func (AnyData) Kind() string { return "anydata" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *AnyData) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *AnyData) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *AnyData) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *AnyData) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Grouping is the parser-facing grouping statement node.
 type Grouping struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -461,14 +635,28 @@ type Grouping struct {
 	Uses         []*Uses         `yang:"uses"`
 }
 
-func (Grouping) Kind() string              { return "grouping" }
-func (s *Grouping) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *Grouping) NName() string          { return nodeName(s) }
-func (s *Grouping) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *Grouping) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *Grouping) Groupings() []*Grouping { return s.Grouping }
-func (s *Grouping) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "grouping".
+func (Grouping) Kind() string { return "grouping" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Grouping) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Grouping) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Grouping) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Grouping) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *Grouping) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *Grouping) Typedefs() []*Typedef { return s.Typedef }
+
+// Uses is the parser-facing uses statement node.
 type Uses struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -484,12 +672,22 @@ type Uses struct {
 	When        *Value    `yang:"when" json:",omitempty"`
 }
 
-func (Uses) Kind() string             { return "uses" }
-func (s *Uses) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Uses) NName() string         { return nodeName(s) }
-func (s *Uses) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Uses) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "uses".
+func (Uses) Kind() string { return "uses" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Uses) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Uses) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Uses) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Uses) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Refine is the parser-facing refine statement node.
 type Refine struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -508,12 +706,22 @@ type Refine struct {
 	MinElements *Value   `yang:"min-elements"`
 }
 
-func (Refine) Kind() string             { return "refine" }
-func (s *Refine) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Refine) NName() string         { return nodeName(s) }
-func (s *Refine) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Refine) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "refine".
+func (Refine) Kind() string { return "refine" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Refine) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Refine) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Refine) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Refine) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// RPC is the parser-facing rpc statement node.
 type RPC struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -530,14 +738,28 @@ type RPC struct {
 	Typedef     []*Typedef  `yang:"typedef"`
 }
 
-func (RPC) Kind() string              { return "rpc" }
-func (s *RPC) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *RPC) NName() string          { return nodeName(s) }
-func (s *RPC) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *RPC) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *RPC) Groupings() []*Grouping { return s.Grouping }
-func (s *RPC) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "rpc".
+func (RPC) Kind() string { return "rpc" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *RPC) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *RPC) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *RPC) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *RPC) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *RPC) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *RPC) Typedefs() []*Typedef { return s.Typedef }
+
+// Input is the parser-facing rpc/action input statement node.
 type Input struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -556,14 +778,28 @@ type Input struct {
 	Uses      []*Uses      `yang:"uses"`
 }
 
-func (Input) Kind() string              { return "input" }
-func (s *Input) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *Input) NName() string          { return nodeName(s) }
-func (s *Input) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *Input) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *Input) Groupings() []*Grouping { return s.Grouping }
-func (s *Input) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "input".
+func (Input) Kind() string { return "input" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Input) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Input) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Input) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Input) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *Input) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *Input) Typedefs() []*Typedef { return s.Typedef }
+
+// Output is the parser-facing rpc/action output statement node.
 type Output struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -582,14 +818,28 @@ type Output struct {
 	Uses      []*Uses      `yang:"uses"`
 }
 
-func (Output) Kind() string              { return "output" }
-func (s *Output) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *Output) NName() string          { return nodeName(s) }
-func (s *Output) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *Output) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *Output) Groupings() []*Grouping { return s.Grouping }
-func (s *Output) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "output".
+func (Output) Kind() string { return "output" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Output) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Output) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Output) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Output) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *Output) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *Output) Typedefs() []*Typedef { return s.Typedef }
+
+// Notification is the parser-facing notification statement node.
 type Notification struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -612,14 +862,28 @@ type Notification struct {
 	Uses        []*Uses      `yang:"uses"`
 }
 
-func (Notification) Kind() string              { return "notification" }
-func (s *Notification) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *Notification) NName() string          { return nodeName(s) }
-func (s *Notification) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *Notification) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
-func (s *Notification) Groupings() []*Grouping { return s.Grouping }
-func (s *Notification) Typedefs() []*Typedef   { return s.Typedef }
+// Kind reports the node kind, always "notification".
+func (Notification) Kind() string { return "notification" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Notification) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Notification) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Notification) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Notification) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
+func (s *Notification) Groupings() []*Grouping { return s.Grouping }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *Notification) Typedefs() []*Typedef { return s.Typedef }
+
+// Augment is the parser-facing augment statement node.
 type Augment struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -644,12 +908,22 @@ type Augment struct {
 	When         *Value          `yang:"when"`
 }
 
-func (Augment) Kind() string             { return "augment" }
-func (s *Augment) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Augment) NName() string         { return nodeName(s) }
-func (s *Augment) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Augment) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "augment".
+func (Augment) Kind() string { return "augment" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Augment) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Augment) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Augment) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Augment) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Extension is the parser-facing extension statement node.
 type Extension struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -662,12 +936,22 @@ type Extension struct {
 	Status      *Value    `yang:"status" json:",omitempty"`
 }
 
-func (Extension) Kind() string             { return "extension" }
-func (s *Extension) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Extension) NName() string         { return nodeName(s) }
-func (s *Extension) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Extension) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "extension".
+func (Extension) Kind() string { return "extension" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Extension) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Extension) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Extension) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Extension) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Argument is the parser-facing extension-argument statement node.
 type Argument struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -677,12 +961,22 @@ type Argument struct {
 	YinElement *Value `yang:"yin-element" json:",omitempty"`
 }
 
-func (Argument) Kind() string             { return "argument" }
-func (s *Argument) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Argument) NName() string         { return nodeName(s) }
-func (s *Argument) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Argument) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "argument".
+func (Argument) Kind() string { return "argument" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Argument) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Argument) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Argument) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Argument) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Element is the parser-facing yin-element statement node.
 type Element struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -692,12 +986,22 @@ type Element struct {
 	YinElement *Value `yang:"yin-element"`
 }
 
-func (Element) Kind() string             { return "element" }
-func (s *Element) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Element) NName() string         { return nodeName(s) }
-func (s *Element) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Element) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "element".
+func (Element) Kind() string { return "element" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Element) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Element) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Element) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Element) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Feature is the parser-facing feature statement node.
 type Feature struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge" json:"-"`
@@ -710,12 +1014,22 @@ type Feature struct {
 	Reference   *Value   `yang:"reference" json:",omitempty"`
 }
 
-func (Feature) Kind() string             { return "feature" }
-func (s *Feature) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Feature) NName() string         { return nodeName(s) }
-func (s *Feature) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Feature) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "feature".
+func (Feature) Kind() string { return "feature" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Feature) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Feature) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Feature) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Feature) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Deviation is the parser-facing deviation statement node.
 type Deviation struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -727,12 +1041,22 @@ type Deviation struct {
 	Reference   *Value     `yang:"reference"`
 }
 
-func (Deviation) Kind() string             { return "deviation" }
-func (s *Deviation) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Deviation) NName() string         { return nodeName(s) }
-func (s *Deviation) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Deviation) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "deviation".
+func (Deviation) Kind() string { return "deviation" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Deviation) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Deviation) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Deviation) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Deviation) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Deviate is the parser-facing deviate statement node.
 type Deviate struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -750,12 +1074,22 @@ type Deviate struct {
 	Units       *Value   `yang:"units"`
 }
 
-func (Deviate) Kind() string             { return "deviate" }
-func (s *Deviate) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Deviate) NName() string         { return nodeName(s) }
-func (s *Deviate) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Deviate) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "deviate".
+func (Deviate) Kind() string { return "deviate" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Deviate) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Deviate) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Deviate) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Deviate) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Enum is the parser-facing enum statement node.
 type Enum struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -769,12 +1103,22 @@ type Enum struct {
 	Value       *Value   `yang:"value"`
 }
 
-func (Enum) Kind() string             { return "enum" }
-func (s *Enum) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Enum) NName() string         { return nodeName(s) }
-func (s *Enum) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Enum) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "enum".
+func (Enum) Kind() string { return "enum" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Enum) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Enum) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Enum) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Enum) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Bit is the parser-facing bit statement node.
 type Bit struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -788,12 +1132,22 @@ type Bit struct {
 	Position    *Value   `yang:"position"`
 }
 
-func (Bit) Kind() string             { return "bit" }
-func (s *Bit) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Bit) NName() string         { return nodeName(s) }
-func (s *Bit) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Bit) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "bit".
+func (Bit) Kind() string { return "bit" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Bit) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Bit) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Bit) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Bit) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Range is the parser-facing range statement node.
 type Range struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -806,12 +1160,22 @@ type Range struct {
 	Reference    *Value `yang:"reference"`
 }
 
-func (Range) Kind() string             { return "range" }
-func (s *Range) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Range) NName() string         { return nodeName(s) }
-func (s *Range) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Range) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "range".
+func (Range) Kind() string { return "range" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Range) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Range) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Range) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Range) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Length is the parser-facing length statement node.
 type Length struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -824,12 +1188,22 @@ type Length struct {
 	Reference    *Value `yang:"reference"`
 }
 
-func (Length) Kind() string             { return "length" }
-func (s *Length) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Length) NName() string         { return nodeName(s) }
-func (s *Length) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Length) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "length".
+func (Length) Kind() string { return "length" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Length) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Length) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Length) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Length) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Pattern is the parser-facing pattern statement node.
 type Pattern struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -843,12 +1217,22 @@ type Pattern struct {
 	Modifier     *Value `yang:"modifier"`
 }
 
-func (Pattern) Kind() string             { return "pattern" }
-func (s *Pattern) ParentNode() Node      { return nodeParent(s.Parent) }
-func (s *Pattern) NName() string         { return nodeName(s) }
-func (s *Pattern) Statement() *Statement { return nodeStatement(s.Source) }
-func (s *Pattern) Exts() []*Statement    { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "pattern".
+func (Pattern) Kind() string { return "pattern" }
 
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Pattern) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Pattern) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Pattern) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Pattern) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Action is the parser-facing action statement node.
 type Action struct {
 	Name       string       `yang:"Name,nomerge"`
 	Source     *Statement   `yang:"Statement,nomerge"`
@@ -865,13 +1249,26 @@ type Action struct {
 	Typedef     []*Typedef  `yang:"typedef"`
 }
 
-func (Action) Kind() string              { return "action" }
-func (s *Action) ParentNode() Node       { return nodeParent(s.Parent) }
-func (s *Action) NName() string          { return nodeName(s) }
-func (s *Action) Statement() *Statement  { return nodeStatement(s.Source) }
-func (s *Action) Exts() []*Statement     { return nodeExtensions(s.Extensions) }
+// Kind reports the node kind, always "action".
+func (Action) Kind() string { return "action" }
+
+// ParentNode returns the enclosing AST node, or nil at the root.
+func (s *Action) ParentNode() Node { return nodeParent(s.Parent) }
+
+// NName returns the node name.
+func (s *Action) NName() string { return nodeName(s) }
+
+// Statement returns the source statement the node was parsed from.
+func (s *Action) Statement() *Statement { return nodeStatement(s.Source) }
+
+// Exts returns the node's extension statements.
+func (s *Action) Exts() []*Statement { return nodeExtensions(s.Extensions) }
+
+// Groupings returns the node's nested groupings in declaration order.
 func (s *Action) Groupings() []*Grouping { return s.Grouping }
-func (s *Action) Typedefs() []*Typedef   { return s.Typedef }
+
+// Typedefs returns the node's nested typedefs in declaration order.
+func (s *Action) Typedefs() []*Typedef { return s.Typedef }
 
 func nodeParent(parent Node) Node { return parent }
 

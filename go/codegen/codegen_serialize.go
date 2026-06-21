@@ -495,10 +495,10 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 	case cambium.SchemaNodeKindAnyData:
 		if f.optional {
 			fmt.Fprintf(out, "\tif n.%s != nil {\n", ident)
-			g.emitAnyDataJSON(wire, "b", "depth+1", "(*n."+ident+")", f, out)
+			g.emitAnyDataJSON(wire, "b", "depth+1", "(*n."+ident+")", out)
 			out.WriteString("\t}\n")
 		} else {
-			g.emitAnyDataJSON(wire, "b", "depth+1", "n."+ident, f, out)
+			g.emitAnyDataJSON(wire, "b", "depth+1", "n."+ident, out)
 		}
 	case cambium.SchemaNodeKindContainer, cambium.SchemaNodeKindAction, cambium.SchemaNodeKindNotification:
 		if f.optional {
@@ -953,7 +953,7 @@ func identityrefDefaultModuleMatches(prefix string, prefixed bool, identityModul
 	return prefix == identityModule
 }
 
-func (g *goEmitter) emitAnyDataJSON(wire, writer, depthExpr, valueRef string, f fieldInfo, out *strings.Builder) {
+func (g *goEmitter) emitAnyDataJSON(wire, writer, depthExpr, valueRef string, out *strings.Builder) {
 	fmt.Fprintf(out, "\tif !first { %s.WriteByte(',') }\n", writer)
 	out.WriteString("\tfirst = false\n")
 	fmt.Fprintf(out, "\tcambiumJSONIndent(%s, %s)\n", writer, depthExpr)
@@ -969,7 +969,7 @@ func (g *goEmitter) emitLeafListJSONArray(wire, writer, depthExpr, elemDepthExpr
 	fmt.Fprintf(out, "\t\tfor i, v := range %s {\n", itemsExpr)
 	fmt.Fprintf(out, "\t\t\tif i > 0 { %s.WriteByte(',') }\n", writer)
 	fmt.Fprintf(out, "\t\t\tcambiumJSONIndent(%s, %s)\n", writer, elemDepthExpr)
-	g.emitJSONLeafListElement(writer, elemDepthExpr, "v", f, out)
+	g.emitJSONLeafListElement(writer, "v", f, out)
 	out.WriteString("\t\t}\n")
 	fmt.Fprintf(out, "\t\tcambiumJSONIndent(%s, %s)\n", writer, depthExpr)
 	fmt.Fprintf(out, "\t\t%s.WriteByte(']')\n", writer)
@@ -1118,7 +1118,7 @@ func integerDefaultSortValue(value string, resolved cambium.ResolvedInt) (*big.I
 	return numeric, true
 }
 
-func (g *goEmitter) emitJSONLeafListElement(writer, depthExpr, valueRef string, f fieldInfo, out *strings.Builder) {
+func (g *goEmitter) emitJSONLeafListElement(writer, valueRef string, f fieldInfo, out *strings.Builder) {
 	switch f.jsonKind {
 	case "String", "InstanceIdentifier":
 		g.helpers["jsonEscape"] = true
@@ -1400,10 +1400,10 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 	case cambium.SchemaNodeKindAnyData:
 		if f.optional {
 			fmt.Fprintf(out, "\tif m.%s != nil {\n", ident)
-			g.emitAnyDataJSON(wire, "w", "1", "(*m."+ident+")", f, out)
+			g.emitAnyDataJSON(wire, "w", "1", "(*m."+ident+")", out)
 			out.WriteString("\t}\n")
 		} else {
-			g.emitAnyDataJSON(wire, "w", "1", "m."+ident, f, out)
+			g.emitAnyDataJSON(wire, "w", "1", "m."+ident, out)
 		}
 	case cambium.SchemaNodeKindContainer:
 		if f.optional {
