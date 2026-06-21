@@ -30,6 +30,7 @@ func walkMustWhen(root, n *xnode, out *[]string) {
 				*out = append(*out, fmt.Sprintf("%s: %s", xnodePath(n), mustMessage(m)))
 			}
 		}
+		checkInstanceIdentifier(ev, n, out)
 	}
 	for _, k := range n.kids {
 		walkMustWhen(root, k, out)
