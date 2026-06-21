@@ -1,0 +1,43 @@
+module schema-vendor-nokia-feature-augment {
+  yang-version 1.1;
+  namespace "urn:cambium:schema-vendor-nokia-feature-augment";
+  prefix svnfaug;
+
+  import schema-vendor-nokia-feature-base {
+    prefix base;
+  }
+
+  feature enhanced;
+  feature lab-only;
+
+  augment "/base:top/base:system/base:interface" {
+    if-feature enhanced;
+    when "../../base:mode = 'enabled'";
+
+    leaf telemetry-profile {
+      mandatory true;
+      type string;
+    }
+    leaf mirror-source {
+      type leafref {
+        path "../../base:interface/base:name";
+      }
+    }
+    leaf augmented-disabled {
+      if-feature lab-only;
+      type string;
+    }
+    leaf-list subinterface {
+      type string;
+      ordered-by user;
+      min-elements 1;
+    }
+    container qos {
+      must "../svnfaug:telemetry-profile != ''";
+      leaf policy {
+        type string;
+        default "standard";
+      }
+    }
+  }
+}

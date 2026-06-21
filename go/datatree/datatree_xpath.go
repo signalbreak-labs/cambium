@@ -564,7 +564,7 @@ func (p *xparser) parseStep() (*xStep, error) {
 		return &xStep{axis: "parent", test: "node()"}, nil
 	case tkName:
 		name := p.next().text
-		return p.finishStep("child", localName(name))
+		return p.finishStep("child", name)
 	case tkStarTest:
 		p.next()
 		return p.finishStep("child", "*")
@@ -659,11 +659,4 @@ func (p *xparser) parseCall() (xExpr, error) {
 	}
 	p.next()
 	return call, nil
-}
-
-func localName(qname string) string {
-	if i := strings.LastIndex(qname, ":"); i >= 0 {
-		return qname[i+1:]
-	}
-	return qname
 }

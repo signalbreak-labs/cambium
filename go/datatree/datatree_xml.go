@@ -156,7 +156,7 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 		}
 		n.kind = kindLeaf
 		ti, _ := sn.LeafType()
-		n.value = jsonTokenFromText(ti, group[0].text, sn.Module().Name())
+		n.value = jsonTokenFromText(ti, group[0].text, sn.Module(), sn.Module())
 	case sn.IsLeafList():
 		n.kind = kindLeafList
 		ti, _ := sn.LeafType()
@@ -164,7 +164,7 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 			if len(e.kids) > 0 {
 				return nil, fmt.Errorf("datatree: XML leaf-list %q contains child elements", sn.Name())
 			}
-			n.values = append(n.values, jsonTokenFromText(ti, e.text, sn.Module().Name()))
+			n.values = append(n.values, jsonTokenFromText(ti, e.text, sn.Module(), sn.Module()))
 		}
 	case sn.IsContainer():
 		if err := requireSingleXML(sn, group); err != nil {
@@ -204,7 +204,10 @@ func requireSingleXML(sn cambium.SchemaNodeRef, group []*xmlElem) error {
 	return fmt.Errorf("datatree: duplicate XML element %q in namespace %q", sn.Name(), sn.Namespace())
 }
 
-func jsonTokenFromText(ti cambium.TypeInfo, text, leafModule string) json.RawMessage {
+func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule, sourceModule cambium.Module) json.RawMessage {
+	if sourceModule.Name() == "" {
+		sourceModule = leafModule
+	}
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedBoolean:
 		s := strings.TrimSpace(text)
@@ -221,9 +224,9 @@ func jsonTokenFromText(ti cambium.TypeInfo, text, leafModule string) json.RawMes
 		return jsonTokenFromIntegerText(text, r.Kind)
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			token := jsonTokenFromText(member, text, leafModule)
+			token := jsonTokenFromText(member, text, leafModule, sourceModule)
 			var trial []string
-			validateLeafValue(member, token, "", leafModule, &trial)
+			validateLeafValue(member, token, "", leafModule.Name(), &trial)
 			if len(trial) == 0 {
 				return token
 			}
@@ -231,12 +234,66 @@ func jsonTokenFromText(ti cambium.TypeInfo, text, leafModule string) json.RawMes
 		return jsonStringToken(text)
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
-			return jsonTokenFromText(*rt, text, leafModule)
+			return jsonTokenFromText(*rt, text, leafModule, sourceModule)
+		}
+		return jsonStringToken(text)
+	case cambium.ResolvedIdentityRef:
+		if jsonName, ok := identityrefJSONName(text, r, leafModule, sourceModule); ok {
+			return jsonStringToken(jsonName)
 		}
 		return jsonStringToken(text)
 	default:
 		return jsonStringToken(text)
 	}
+}
+
+func identityrefJSONName(value string, resolved cambium.ResolvedIdentityRef, leafModule, sourceModule cambium.Module) (string, bool) {
+	if sourceModule.Name() == "" {
+		sourceModule = leafModule
+	}
+	prefix, local, prefixed := strings.Cut(value, ":")
+	if !prefixed {
+		local = value
+	}
+	seen := make(map[string]bool)
+	var visit func(cambium.Identity) (string, bool)
+	visit = func(id cambium.Identity) (string, bool) {
+		idModule := id.Module()
+		key := idModule.Name() + ":" + id.Name()
+		if seen[key] {
+			return "", false
+		}
+		seen[key] = true
+		if id.Name() == local && identityrefDefaultModuleMatches(prefix, prefixed, idModule, sourceModule) {
+			jsonName := id.Name()
+			if idModule.Name() != leafModule.Name() {
+				jsonName = idModule.Name() + ":" + id.Name()
+			}
+			return jsonName, true
+		}
+		for _, derived := range id.Derived() {
+			if jsonName, ok := visit(derived); ok {
+				return jsonName, true
+			}
+		}
+		return "", false
+	}
+	for _, base := range resolved.Bases() {
+		if jsonName, ok := visit(base); ok {
+			return jsonName, true
+		}
+	}
+	return "", false
+}
+
+func identityrefDefaultModuleMatches(prefix string, prefixed bool, idModule, sourceModule cambium.Module) bool {
+	if !prefixed {
+		return sourceModule.Name() == idModule.Name()
+	}
+	if resolved, ok := sourceModule.ResolvePrefix(prefix); ok {
+		return resolved.Name() == idModule.Name()
+	}
+	return prefix == idModule.Name()
 }
 
 func jsonTokenFromIntegerText(text string, kind cambium.IntKind) json.RawMessage {

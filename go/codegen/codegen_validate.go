@@ -937,7 +937,7 @@ func (g *goEmitter) uniqueLeafAccessor(listField fieldInfo, leaf cambium.SchemaN
 func (g *goEmitter) uniqueFieldEffectivePresenceAndKey(owner string, f fieldInfo, fields []fieldInfo) (string, string) {
 	actualPresent := uniqueFieldPresentExpr(owner, f)
 	actualKey := g.jsonLiteralExpr(uniqueFieldValueExpr(owner, f), f)
-	defaultValue, hasDefault := f.node.DefaultValue()
+	defaultValue, hasDefault := f.node.DefaultEntry()
 	if !hasDefault || !f.optional {
 		return actualPresent, actualKey
 	}

@@ -165,9 +165,11 @@ func parseXPathNumber(s string) float64 {
 // --- evaluator ---------------------------------------------------------------
 
 type evaluator struct {
-	root    *xnode
-	module  cambium.Module
-	current *xnode
+	root         *xnode
+	module       cambium.Module
+	unprefixedNS string
+	excluded     map[cambium.SchemaNodeRef]bool
+	current      *xnode
 }
 
 type ectx struct {
@@ -186,7 +188,10 @@ func (ev *evaluator) resolveName(qname string) (ns, local string, err error) {
 		}
 		return mod.Namespace(), local, nil
 	}
-	return ev.module.Namespace(), qname, nil // unprefixed = context module's namespace
+	if ev.unprefixedNS != "" {
+		return ev.unprefixedNS, qname, nil
+	}
+	return ev.module.Namespace(), qname, nil // fallback for callers without a bound context node
 }
 
 func (ev *evaluator) matchTest(n *xnode, test string) (bool, error) {
@@ -470,7 +475,7 @@ func (ev *evaluator) evalStep(step *xStep, cur []*xnode) ([]*xnode, error) {
 	seen := make(map[*xnode]bool)
 	var cand []*xnode
 	add := func(n *xnode) error {
-		if n == nil || seen[n] {
+		if n == nil || seen[n] || ev.isExcluded(n) {
 			return nil
 		}
 		ok, err := ev.matchTest(n, step.test)
@@ -522,6 +527,21 @@ func (ev *evaluator) evalStep(step *xStep, cur []*xnode) ([]*xnode, error) {
 	return ev.applyPredicates(cand, step.preds)
 }
 
+func (ev *evaluator) isExcluded(n *xnode) bool {
+	if ev == nil || len(ev.excluded) == 0 || n == nil || !n.hasSchema {
+		return false
+	}
+	if ev.excluded[n.schema] {
+		return true
+	}
+	for _, ancestor := range n.schema.Ancestors() {
+		if ev.excluded[ancestor] {
+			return true
+		}
+	}
+	return false
+}
+
 func (ev *evaluator) applyPredicates(nodes []*xnode, preds []xExpr) ([]*xnode, error) {
 	for _, pred := range preds {
 		var kept []*xnode
@@ -533,7 +553,7 @@ func (ev *evaluator) applyPredicates(nodes []*xnode, preds []xExpr) ([]*xnode, e
 			}
 			keep := v.toBool()
 			if v.kind == kNum {
-				keep = int(v.n) == i+1 // positional predicate
+				keep = v.n == float64(i+1) // positional predicate
 			}
 			if keep {
 				kept = append(kept, n)

@@ -1,0 +1,18 @@
+module schema-augment-deep-telemetry {
+  namespace "urn:cambium:schema-augment-deep-telemetry";
+  prefix sadt;
+  yang-version 1.1;
+
+  import schema-augment-deep-base { prefix base; }
+
+  grouping export-profile {
+    leaf export-policy { type string; }
+    leaf sample-interval { type uint16; }
+  }
+
+  augment "/base:network-instances/base:network-instance/base:protocols/base:protocol/base:state" {
+    leaf oper-state { type string; }
+    leaf last-change { type string; }
+    uses export-profile;
+  }
+}

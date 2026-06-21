@@ -1,0 +1,14 @@
+submodule schema-vendor-nokia-system {
+  yang-version 1.1;
+
+  belongs-to schema-vendor-nokia-sros {
+    prefix svns;
+  }
+
+  container system {
+    uses admin-common;
+    leaf name {
+      type string;
+    }
+  }
+}

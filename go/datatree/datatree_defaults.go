@@ -11,10 +11,11 @@ import "github.com/signalbreak-labs/cambium/go/cambium"
 // Order is preserved: each level is rebuilt in schema declaration order, and
 // list entries keep their keys-first ordering (I3).
 func (t *Tree) ApplyDefaults() {
-	t.roots = applyDefaultsLevel(flattenTopLevel(t.module), t.roots)
+	root := t.xroot()
+	t.roots = applyDefaultsLevel(root, root, flattenTopLevel(t.module), t.roots)
 }
 
-func applyDefaultsLevel(schema []cambium.SchemaNodeRef, data []*node) []*node {
+func applyDefaultsLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, data []*node) []*node {
 	present := make(map[nodeKey]*node, len(data))
 	for _, d := range data {
 		present[dataNodeKey(d)] = d
@@ -26,18 +27,23 @@ func applyDefaultsLevel(schema []cambium.SchemaNodeRef, data []*node) []*node {
 		case sn.IsLeaf():
 			if dn != nil {
 				out = append(out, dn)
-			} else if def, ok := sn.DefaultValue(); ok {
+			} else if def, ok := sn.DefaultEntry(); ok && schemaNodeActiveForMissing(root, parent, sn) {
 				out = append(out, defaultLeafNode(sn, def))
 			}
 		case sn.IsContainer():
 			if dn != nil {
-				dn.children = applyDefaultsLevel(childRefs(sn.DataChildren(true)), dn.children)
+				dn.children = applyDefaultsLevel(root, firstMatchingChildXNode(parent, sn), childRefs(sn.DataChildren(true)), dn.children)
 				out = append(out, dn)
 			}
 		case sn.IsList():
 			if dn != nil {
+				listNodes := matchingChildXNodes(parent, sn)
 				for i := range dn.entries {
-					filled := applyDefaultsLevel(childRefs(sn.DataChildren(true)), dn.entries[i])
+					var listParent *xnode
+					if i < len(listNodes) {
+						listParent = listNodes[i]
+					}
+					filled := applyDefaultsLevel(root, listParent, childRefs(sn.DataChildren(true)), dn.entries[i])
 					dn.entries[i] = keysFirst(sn, filled)
 				}
 				out = append(out, dn)
@@ -51,13 +57,13 @@ func applyDefaultsLevel(schema []cambium.SchemaNodeRef, data []*node) []*node {
 	return out
 }
 
-func defaultLeafNode(sn cambium.SchemaNodeRef, def string) *node {
+func defaultLeafNode(sn cambium.SchemaNodeRef, def cambium.DefaultValue) *node {
 	ti, _ := sn.LeafType()
 	return &node{
 		name:      sn.Name(),
 		module:    sn.Module().Name(),
 		namespace: sn.Namespace(),
 		kind:      kindLeaf,
-		value:     jsonTokenFromText(ti, def, sn.Module().Name()),
+		value:     jsonTokenFromText(ti, def.Value(), sn.Module(), def.SourceModule()),
 	}
 }

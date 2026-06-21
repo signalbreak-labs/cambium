@@ -1,0 +1,48 @@
+submodule schema-vendor-nokia-policy {
+  yang-version 1.1;
+
+  belongs-to schema-vendor-nokia-sros {
+    prefix svns;
+  }
+
+  typedef as-number {
+    type uint32 {
+      range "1..4294967295";
+    }
+  }
+
+  grouping admin-common {
+    leaf admin-state {
+      type enumeration {
+        enum enable;
+        enum disable;
+      }
+      default "enable";
+    }
+    leaf description {
+      type string;
+    }
+  }
+
+  container policy-options {
+    list policy-statement {
+      key "name";
+      leaf name {
+        type string;
+      }
+      list entry {
+        key "id";
+        leaf id {
+          type uint32;
+        }
+        leaf action {
+          mandatory true;
+          type enumeration {
+            enum accept;
+            enum reject;
+          }
+        }
+      }
+    }
+  }
+}

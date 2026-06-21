@@ -1,0 +1,19 @@
+{
+  "module": "schema-vendor-nokia-sros",
+  "load": ["schema-vendor-nokia-sros"],
+  "children": {
+    "/schema-vendor-nokia-sros/system": ["admin-state", "description", "name"],
+    "/schema-vendor-nokia-sros/service/vprn": ["name", "admin-state", "description", "customer", "bgp"],
+    "/schema-vendor-nokia-sros/service/vprn/bgp/group": ["name", "peer-as"],
+    "/schema-vendor-nokia-sros/policy-options/policy-statement/entry": ["id", "action"]
+  },
+  "dataChildrenFlatten": {
+    "/schema-vendor-nokia-sros": ["system", "policy-options", "service", "configure"]
+  },
+  "keys": {
+    "/schema-vendor-nokia-sros/service/vprn": ["name"],
+    "/schema-vendor-nokia-sros/service/vprn/bgp/group": ["name"],
+    "/schema-vendor-nokia-sros/policy-options/policy-statement": ["name"],
+    "/schema-vendor-nokia-sros/policy-options/policy-statement/entry": ["id"]
+  }
+}

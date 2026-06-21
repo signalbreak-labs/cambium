@@ -1,0 +1,221 @@
+{
+  "module": "schema-vendor-nokia-feature-base",
+  "load": [
+    "schema-vendor-nokia-feature-base",
+    "schema-vendor-nokia-feature-augment",
+    "schema-vendor-nokia-feature-dev"
+  ],
+  "features": {
+    "schema-vendor-nokia-feature-augment": ["enhanced"],
+    "schema-vendor-nokia-feature-dev": ["hardware-profile"]
+  },
+  "absentPaths": [
+    "/schema-vendor-nokia-feature-base/top/system/interface/legacy-tag",
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:augmented-disabled"
+  ],
+  "children": {
+    "/schema-vendor-nokia-feature-base/top": ["mode", "primary-interface", "system"],
+    "/schema-vendor-nokia-feature-base/top/system": ["interface", "lag-member", "hardware"],
+    "/schema-vendor-nokia-feature-base/top/system/interface": ["name", "admin-state", "if-index", "description", "telemetry-profile", "mirror-source", "subinterface", "qos"],
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:qos": ["policy"],
+    "/schema-vendor-nokia-feature-base/top/system/hardware": ["serial"]
+  },
+  "dataChildrenFlatten": {
+    "/schema-vendor-nokia-feature-base/top/system/interface": ["name", "admin-state", "if-index", "description", "telemetry-profile", "mirror-source", "subinterface", "qos"]
+  },
+  "keys": {
+    "/schema-vendor-nokia-feature-base/top/system/interface": ["name"]
+  },
+  "orderedBy": {
+    "/schema-vendor-nokia-feature-base/top/system/interface": "user",
+    "/schema-vendor-nokia-feature-base/top/system/lag-member": "user",
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:subinterface": "user"
+  },
+  "config": {
+    "/schema-vendor-nokia-feature-base/top/system/hardware": "ro",
+    "/schema-vendor-nokia-feature-base/top/system/hardware/serial": "ro"
+  },
+  "mandatory": {
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:telemetry-profile": true
+  },
+  "defaults": {
+    "/schema-vendor-nokia-feature-base/top/mode": "enabled",
+    "/schema-vendor-nokia-feature-base/top/system/interface/admin-state": "disable",
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:qos/policy": "standard"
+  },
+  "minElements": {
+    "/schema-vendor-nokia-feature-base/top/system/interface": 2,
+    "/schema-vendor-nokia-feature-base/top/system/lag-member": 1,
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:subinterface": 1
+  },
+  "maxElements": {
+    "/schema-vendor-nokia-feature-base/top/system/interface": "6"
+  },
+  "leafrefs": {
+    "/schema-vendor-nokia-feature-base/top/primary-interface": {
+      "path": "/svnfbase:top/svnfbase:system/svnfbase:interface/svnfbase:name",
+      "target": "/schema-vendor-nokia-feature-base/top/system/interface/name"
+    },
+    "/schema-vendor-nokia-feature-base/top/system/lag-member": {
+      "path": "../interface/name",
+      "target": "/schema-vendor-nokia-feature-base/top/system/interface/name"
+    },
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:mirror-source": {
+      "path": "../../base:interface/base:name",
+      "target": "/schema-vendor-nokia-feature-base/top/system/interface/name"
+    }
+  },
+  "whens": {
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:telemetry-profile": [
+      "../../base:mode = 'enabled'"
+    ],
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:qos": [
+      "../../base:mode = 'enabled'"
+    ]
+  },
+  "musts": {
+    "/schema-vendor-nokia-feature-base/top/system/interface/description": [
+      "string-length(.) <= 64"
+    ],
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:qos": [
+      "../svnfaug:telemetry-profile != ''"
+    ]
+  },
+  "ifFeatures": {
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:telemetry-profile": ["enhanced"],
+    "/schema-vendor-nokia-feature-base/top/system/interface/schema-vendor-nokia-feature-augment:qos": ["enhanced"]
+  },
+  "moduleDeviations": {
+    "schema-vendor-nokia-feature-dev": [
+      {
+        "targetPath": "/base:top/base:system/base:interface",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "min-elements",
+        "newValue": "2"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "max-elements",
+        "newValue": "6"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:legacy-tag",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "not-supported"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:if-index",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "type",
+        "newValue": "string"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:description",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "add",
+        "property": "units",
+        "newValue": "characters"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:description",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "add",
+        "property": "must",
+        "newValue": "string-length(.) <= 64"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:description",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "delete",
+        "property": "default"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:admin-state",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "default",
+        "newValue": "disable",
+        "ifFeatures": ["hardware-profile"]
+      },
+      {
+        "targetPath": "/base:top/base:system/base:hardware",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "config",
+        "newValue": "false"
+      }
+    ]
+  },
+  "deviationProvenance": {
+    "/schema-vendor-nokia-feature-base/top/system/interface": [
+      {
+        "targetPath": "/base:top/base:system/base:interface",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "min-elements",
+        "newValue": "2"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "max-elements",
+        "newValue": "6"
+      }
+    ],
+    "/schema-vendor-nokia-feature-base/top/system/interface/if-index": [
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:if-index",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "type",
+        "newValue": "string"
+      }
+    ],
+    "/schema-vendor-nokia-feature-base/top/system/interface/description": [
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:description",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "add",
+        "property": "units",
+        "newValue": "characters"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:description",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "add",
+        "property": "must",
+        "newValue": "string-length(.) <= 64"
+      },
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:description",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "delete",
+        "property": "default"
+      }
+    ],
+    "/schema-vendor-nokia-feature-base/top/system/interface/admin-state": [
+      {
+        "targetPath": "/base:top/base:system/base:interface/base:admin-state",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "default",
+        "newValue": "disable",
+        "ifFeatures": ["hardware-profile"]
+      }
+    ],
+    "/schema-vendor-nokia-feature-base/top/system/hardware": [
+      {
+        "targetPath": "/base:top/base:system/base:hardware",
+        "sourceModule": "schema-vendor-nokia-feature-dev",
+        "type": "replace",
+        "property": "config",
+        "newValue": "false"
+      }
+    ]
+  }
+}

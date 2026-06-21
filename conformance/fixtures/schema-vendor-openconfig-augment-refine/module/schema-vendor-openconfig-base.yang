@@ -1,0 +1,43 @@
+module schema-vendor-openconfig-base {
+  yang-version 1.1;
+  namespace "urn:cambium:schema-vendor-openconfig-base";
+  prefix svob;
+
+  identity INSTALL_PROTOCOL;
+  identity BGP {
+    base INSTALL_PROTOCOL;
+  }
+
+  grouping protocol-common {
+    leaf identifier {
+      type identityref {
+        base INSTALL_PROTOCOL;
+      }
+    }
+    leaf name {
+      type string;
+    }
+  }
+
+  container network-instances {
+    list network-instance {
+      key "name";
+      leaf name {
+        type string;
+      }
+      container protocols {
+        list protocol {
+          key "identifier name";
+          uses protocol-common;
+          container config {
+            uses protocol-common;
+          }
+          container state {
+            config false;
+            uses protocol-common;
+          }
+        }
+      }
+    }
+  }
+}
