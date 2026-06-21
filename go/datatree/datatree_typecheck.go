@@ -178,32 +178,58 @@ func checkIntImplicit(v *big.Int, kind cambium.IntKind, path string, out *[]stri
 	}
 }
 
+// The "min" and "max" range keywords mean "no bound on this side" — the schema
+// leaves them as literal text for length and decimal64 constraints (only the
+// integer path resolves them to numbers), so every comparator below treats them
+// as unbounded rather than parsing them.
 func intInRanges(v *big.Int, ranges []cambium.RangeBound) bool {
 	for _, r := range ranges {
-		lo, okLo := new(big.Int).SetString(strings.TrimSpace(r.Min()), 10)
-		hi, okHi := new(big.Int).SetString(strings.TrimSpace(r.Max()), 10)
-		if !okLo || !okHi {
-			continue
-		}
-		if v.Cmp(lo) >= 0 && v.Cmp(hi) <= 0 {
+		if intInRange(v, r) {
 			return true
 		}
 	}
 	return false
 }
 
+func intInRange(v *big.Int, r cambium.RangeBound) bool {
+	if lo := strings.TrimSpace(r.Min()); lo != "min" {
+		loV, ok := new(big.Int).SetString(lo, 10)
+		if !ok || v.Cmp(loV) < 0 {
+			return false
+		}
+	}
+	if hi := strings.TrimSpace(r.Max()); hi != "max" {
+		hiV, ok := new(big.Int).SetString(hi, 10)
+		if !ok || v.Cmp(hiV) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func ratInRanges(v *big.Rat, ranges []cambium.RangeBound) bool {
 	for _, r := range ranges {
-		lo, okLo := new(big.Rat).SetString(strings.TrimSpace(r.Min()))
-		hi, okHi := new(big.Rat).SetString(strings.TrimSpace(r.Max()))
-		if !okLo || !okHi {
-			continue
-		}
-		if v.Cmp(lo) >= 0 && v.Cmp(hi) <= 0 {
+		if ratInRange(v, r) {
 			return true
 		}
 	}
 	return false
+}
+
+func ratInRange(v *big.Rat, r cambium.RangeBound) bool {
+	if lo := strings.TrimSpace(r.Min()); lo != "min" {
+		loV, ok := new(big.Rat).SetString(lo)
+		if !ok || v.Cmp(loV) < 0 {
+			return false
+		}
+	}
+	if hi := strings.TrimSpace(r.Max()); hi != "max" {
+		hiV, ok := new(big.Rat).SetString(hi)
+		if !ok || v.Cmp(hiV) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func checkLengthRanges(n int64, ranges []cambium.RangeBound, path string, out *[]string) {
@@ -211,16 +237,27 @@ func checkLengthRanges(n int64, ranges []cambium.RangeBound, path string, out *[
 		return
 	}
 	for _, r := range ranges {
-		lo, errLo := strconv.ParseInt(strings.TrimSpace(r.Min()), 10, 64)
-		hi, errHi := strconv.ParseInt(strings.TrimSpace(r.Max()), 10, 64)
-		if errLo != nil || errHi != nil {
-			continue
-		}
-		if n >= lo && n <= hi {
+		if lengthInRange(n, r) {
 			return
 		}
 	}
 	*out = append(*out, fmt.Sprintf("%s: length %d is outside the permitted length", path, n))
+}
+
+func lengthInRange(n int64, r cambium.RangeBound) bool {
+	if lo := strings.TrimSpace(r.Min()); lo != "min" {
+		loV, err := strconv.ParseInt(lo, 10, 64)
+		if err != nil || n < loV {
+			return false
+		}
+	}
+	if hi := strings.TrimSpace(r.Max()); hi != "max" {
+		hiV, err := strconv.ParseInt(hi, 10, 64)
+		if err != nil || n > hiV {
+			return false
+		}
+	}
+	return true
 }
 
 func checkPatterns(s string, patterns []cambium.Pattern, path string, out *[]string) {
@@ -259,8 +296,18 @@ func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out
 	}
 }
 
+// decimal64Lexical matches the RFC 7950 decimal64 lexical form (optional sign,
+// integer digits, optional fractional part). It rejects forms big.Rat would
+// otherwise accept but YANG does not: hex (0x10), exponent (1.5e1), rational
+// (1/2), and underscore-separated (1_000) literals.
+var decimal64Lexical = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
+
 func checkDecimal(s string, r cambium.ResolvedDecimal64, path string, out *[]string) {
 	s = strings.TrimSpace(s)
+	if !decimal64Lexical.MatchString(s) {
+		*out = append(*out, fmt.Sprintf("%s: %q is not a valid decimal64", path, s))
+		return
+	}
 	val, ok := new(big.Rat).SetString(s)
 	if !ok {
 		*out = append(*out, fmt.Sprintf("%s: %q is not a valid decimal64", path, s))

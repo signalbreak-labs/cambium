@@ -3,6 +3,7 @@ package cambium
 import (
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -170,7 +171,8 @@ func describeType(ti TypeInfo) string {
 			sb.WriteString(" -> " + path)
 		}
 	case ResolvedDecimal64:
-		sb.WriteString(fmt.Sprintf(" fraction-digits %d", r.FractionDigits().Value()))
+		sb.WriteString(" fraction-digits ")
+		sb.WriteString(strconv.Itoa(int(r.FractionDigits().Value())))
 	case ResolvedUnion:
 		members := r.Members()
 		rendered := make([]string, len(members))

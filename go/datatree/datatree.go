@@ -72,7 +72,7 @@ func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("datatree: parse root object: %w", err)
 	}
-	roots, err := parseChildren(m.TopLevel(), raw)
+	roots, err := parseChildren(flattenTopLevel(m), raw)
 	if err != nil {
 		return nil, err
 	}
@@ -82,10 +82,10 @@ func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
 // parseChildren builds nodes for the schema children present in raw, in schema
 // declaration order. Unknown members (not matching any schema child) are an
 // error, so no data is silently dropped.
-func parseChildren(children cambium.SchemaChildren, raw map[string]json.RawMessage) ([]*node, error) {
+func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMessage) ([]*node, error) {
 	consumed := make(map[string]bool, len(raw))
 	var out []*node
-	for sn := range children.Iter() {
+	for _, sn := range children {
 		member, val, ok := lookupMember(sn, raw)
 		if !ok {
 			continue
@@ -118,6 +118,37 @@ func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage) (str
 	return "", nil, false
 }
 
+// flattenTopLevel returns the module's top-level data nodes with choice/case
+// nodes flattened away (their data children spliced in at the choice's
+// position), matching how SchemaNodeRef.DataChildren(true) treats nested levels.
+// TopLevel() alone does not flatten, so without this a leaf inside a top-level
+// choice would be unreachable.
+func flattenTopLevel(m cambium.Module) []cambium.SchemaNodeRef {
+	var out []cambium.SchemaNodeRef
+	for n := range m.TopLevel().Iter() {
+		out = appendFlattened(out, n)
+	}
+	return out
+}
+
+func appendFlattened(out []cambium.SchemaNodeRef, n cambium.SchemaNodeRef) []cambium.SchemaNodeRef {
+	if n.IsChoice() || n.IsCase() {
+		for c := range n.DataChildren(true).Iter() {
+			out = appendFlattened(out, c)
+		}
+		return out
+	}
+	return append(out, n)
+}
+
+func childRefs(children cambium.SchemaChildren) []cambium.SchemaNodeRef {
+	var out []cambium.SchemaNodeRef
+	for n := range children.Iter() {
+		out = append(out, n)
+	}
+	return out
+}
+
 func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 	n := &node{name: sn.Name(), module: sn.Module().Name()}
 	switch {
@@ -147,7 +178,7 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 		if err := json.Unmarshal(raw, &obj); err != nil {
 			return nil, fmt.Errorf("datatree: container %q: %w", sn.Name(), err)
 		}
-		kids, err := parseChildren(sn.DataChildren(true), obj)
+		kids, err := parseChildren(childRefs(sn.DataChildren(true)), obj)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +194,7 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			if err := json.Unmarshal(e, &obj); err != nil {
 				return nil, fmt.Errorf("datatree: list %q entry: %w", sn.Name(), err)
 			}
-			kids, err := parseChildren(sn.DataChildren(true), obj)
+			kids, err := parseChildren(childRefs(sn.DataChildren(true)), obj)
 			if err != nil {
 				return nil, err
 			}

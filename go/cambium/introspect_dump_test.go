@@ -116,7 +116,7 @@ func TestWriteTreePreservesDeclarationOrder(t *testing.T) {
 	if zi < 0 || mi < 0 || ai < 0 {
 		t.Fatalf("expected leaves z, m, a in output:\n%s", out)
 	}
-	if !(zi < mi && mi < ai) {
+	if zi >= mi || mi >= ai {
 		t.Fatalf("leaves not in declaration order z<m<a (got positions z=%d m=%d a=%d):\n%s", zi, mi, ai, out)
 	}
 }
