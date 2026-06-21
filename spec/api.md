@@ -62,19 +62,12 @@ These decisions govern the whole surface.
 - **D-6 — Ordering scope.** `ordered-by user` is byte-exact (`UserOrdered`/`UserOrderedLeafList`);
   `ordered-by system` is canonical-deterministic only. No fidelity-replay API.
 
-## Cross-language mapping (illustrative)
+## Cross-language mapping
 
-The Go surface is the reference today. The contract is language-neutral; should a non-Go binding
-attach, it renders the same constructs idiomatically. Illustrative mapping for a hypothetical Rust
-binding:
-
-| Idiomatic form (e.g. Rust) | Go |
-|---|---|
-| `Result<T, E>` | `(T, error)` |
-| RAII drop | `Close()` |
-| `impl Iterator<Item = T>` | `[]T` or `iter.Seq[T]` |
-| `Option<T>` | `(T, ok bool)` |
-| consuming `self` | method taking the owner, returning `(owner, error)` |
+The Go surface is the reference today. The contract is language-neutral: should an additional
+binding attach, it renders the same constructs idiomatically — a `Result`-style return maps to Go's
+`(T, error)`, an optional to `(T, ok bool)`, an iterator to `[]T` or `iter.Seq[T]`, RAII cleanup to
+`Close()`, and a consuming method to one that takes the owner and returns `(owner, error)`.
 
 Note the one intentional Go default difference: `SerializeFlags{}` has `Siblings: false`; use
 `DefaultSerializeFlags()` for the default profile (which sets `Siblings: true`). Within a tier,

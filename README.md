@@ -10,12 +10,6 @@ byte-exact, and `ordered-by system` output is deterministic and canonical. It is
 the successor to [openconfig/goyang](https://github.com/openconfig/goyang) (the
 YANG parser/AST library), **not** ygot.
 
-> **Language status.** Cambium began as a Rust-primary plus Go project. The Rust
-> stack was removed (2026-06-20) to focus on Go, the sole shipping target today.
-> The shared contract (`/spec`, `/conformance`, `/VERSIONS`) is kept
-> language-neutral so a Rust (or other) binding can return as a first-class peer —
-> see [AGENTS.md](AGENTS.md) → "Adding a language binding".
-
 ## The one rule
 
 Order is a structural property of the tree — never a sort key, sidecar, or map.

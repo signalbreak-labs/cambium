@@ -14,12 +14,10 @@ not a Cambium deliverable (see Non-goals).
 `CLAUDE.md` is a symlink to this file; other tools read `AGENTS.md` natively.
 **Edit this file — never `CLAUDE.md` directly.**
 
-> **Language status.** Cambium began as a Rust-primary + Go project. The Rust
-> stack was **removed** (2026-06-20) to focus on Go, the sole shipping target.
-> The shared contract (`/spec`, `/conformance`, `/VERSIONS`, `/third_party`) is
-> deliberately kept **language-neutral** so a Rust (or other) binding can return
-> as a first-class peer under `/rust/` — see "Adding a language binding". The
-> removed Rust code lives in git history.
+> **Language status.** Go is the sole shipping target. The shared contract
+> (`/spec`, `/conformance`, `/VERSIONS`, `/third_party`) is deliberately kept
+> **language-neutral** so an additional language binding can attach as a
+> first-class peer under `/<lang>/` — see "Adding a language binding".
 
 ## Read first
 - **`/spec/`** — the language-neutral contract (API shape, ordering invariants
@@ -111,9 +109,9 @@ libyang). The default Go schema/codegen/datatree surface MUST build with cgo dis
   Read values via `lyd_get_value()`.
 - `ly_ctx` is build-once-then-frozen; data trees are not concurrency-safe.
 
-## Adding a language binding (e.g. bringing Rust back)
+## Adding a language binding
 The shared layer is the contract; a new binding is a **peer**, not a bolt-on:
-1. Implement under `/<lang>/` (e.g. `/rust/`), mirroring `/go/`'s split (a
+1. Implement under `/<lang>/`, mirroring `/go/`'s split (a
    cgo/FFI-free schema+codegen core + an optional engine-backed data tier).
 2. Implement against `/spec` (API shape, I1–I6, rule codes) — do not fork it.
 3. Run the **shared `/conformance` corpus** with a `/<lang>/` runner; reuse the
