@@ -27,12 +27,14 @@ import (
 	"github.com/signalbreak-labs/cambium/go/cambium"
 )
 
-// Format selects a data encoding. Only FormatJSONIETF is supported in this slice.
+// Format selects a data encoding.
 type Format int
 
 const (
 	// FormatJSONIETF is RFC 7951 JSON encoding.
 	FormatJSONIETF Format = iota
+	// FormatXML is RFC 7950 / NETCONF-style XML encoding.
+	FormatXML
 )
 
 // Tree is an ordered, schema-bound generic data tree.
@@ -53,9 +55,10 @@ const (
 // node is one data node. Children/entries are stored in the order they will be
 // serialized (schema declaration order, keys first for list entries).
 type node struct {
-	name   string // schema node local name
-	module string // name of the module owning this node (for JSON_IETF qualification)
-	kind   nodeKind
+	name      string // schema node local name
+	module    string // module name owning this node (for JSON_IETF qualification)
+	namespace string // module namespace URI (for XML xmlns)
+	kind      nodeKind
 
 	value    json.RawMessage   // kindLeaf: the scalar, normalized to compact JSON
 	values   []json.RawMessage // kindLeafList: ordered values
@@ -65,18 +68,22 @@ type node struct {
 
 // Parse decodes data against schema m into an ordered Tree.
 func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
-	if f != FormatJSONIETF {
+	switch f {
+	case FormatJSONIETF:
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, fmt.Errorf("datatree: parse root object: %w", err)
+		}
+		roots, err := parseChildren(flattenTopLevel(m), raw)
+		if err != nil {
+			return nil, err
+		}
+		return &Tree{module: m, roots: roots}, nil
+	case FormatXML:
+		return parseXML(m, data)
+	default:
 		return nil, fmt.Errorf("datatree: unsupported format %d", f)
 	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("datatree: parse root object: %w", err)
-	}
-	roots, err := parseChildren(flattenTopLevel(m), raw)
-	if err != nil {
-		return nil, err
-	}
-	return &Tree{module: m, roots: roots}, nil
 }
 
 // parseChildren builds nodes for the schema children present in raw, in schema
@@ -150,7 +157,7 @@ func childRefs(children cambium.SchemaChildren) []cambium.SchemaNodeRef {
 }
 
 func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
-	n := &node{name: sn.Name(), module: sn.Module().Name()}
+	n := &node{name: sn.Name(), module: sn.Module().Name(), namespace: sn.Namespace()}
 	switch {
 	case sn.IsLeaf():
 		n.kind = kindLeaf
@@ -237,14 +244,18 @@ func keysFirst(list cambium.SchemaNodeRef, kids []*node) []*node {
 
 // Serialize encodes the tree in schema declaration order.
 func (t *Tree) Serialize(f Format) ([]byte, error) {
-	if f != FormatJSONIETF {
+	switch f {
+	case FormatJSONIETF:
+		var b bytes.Buffer
+		if err := writeObject(&b, t.roots, ""); err != nil {
+			return nil, err
+		}
+		return b.Bytes(), nil
+	case FormatXML:
+		return t.serializeXML()
+	default:
 		return nil, fmt.Errorf("datatree: unsupported format %d", f)
 	}
-	var b bytes.Buffer
-	if err := writeObject(&b, t.roots, ""); err != nil {
-		return nil, err
-	}
-	return b.Bytes(), nil
 }
 
 // writeObject emits an ordered JSON object. parentModule is the module of the
