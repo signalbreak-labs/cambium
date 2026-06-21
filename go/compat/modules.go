@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
+	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 var revisionDateSuffixRegex = regexp.MustCompile(`^@\d{4}-\d{2}-\d{2}\.yang$`)
@@ -798,6 +799,31 @@ func moduleFromASTModule(ast *ASTModule) *Module {
 	return record
 }
 
+func moduleFromUpstreamModule(ast *upstream.Module) *Module {
+	if ast == nil {
+		return nil
+	}
+	if ast.Source != nil {
+		if ast.Modules != nil {
+			modules := modulesFromUpstreamModuleSet(ast)
+			if modules == nil {
+				return nil
+			}
+			if ast.BelongsTo != nil {
+				if record := modules.SubModules[ast.Name]; record != nil {
+					return record
+				}
+			}
+			return modules.Modules[ast.Name]
+		}
+		modules := NewModules()
+		record := modules.addModuleDecl(moduleDeclFromStatement(ast.Source, "", ast.BelongsTo != nil))
+		record.Parent = ast.Parent
+		return record
+	}
+	return nil
+}
+
 func modulesFromASTModuleSet(ast *ASTModule) *Modules {
 	if ast == nil {
 		return nil
@@ -810,25 +836,39 @@ func modulesFromASTModuleSet(ast *ASTModule) *Modules {
 	}
 	modules := NewModules()
 	for _, module := range ast.Modules.Modules {
-		modules.addASTModuleRecord(module)
+		modules.addModuleRecord(module)
 	}
 	for _, submodule := range ast.Modules.SubModules {
-		modules.addASTModuleRecord(submodule)
+		modules.addModuleRecord(submodule)
 	}
 	return modules
 }
 
-func (ms *Modules) addASTModuleRecord(ast *ASTModule) *Module {
-	if ms == nil || ast == nil {
+func modulesFromUpstreamModuleSet(ast *upstream.Module) *Modules {
+	if ast == nil {
 		return nil
 	}
-	if ast.Source != nil {
-		record := ms.addModuleDecl(moduleDeclFromStatement(ast.Source, "", ast.BelongsTo != nil))
-		record.Parent = ast.Parent
-		return record
+	if ast.Modules == nil {
+		if record := moduleFromUpstreamModule(ast); record != nil {
+			return record.Modules
+		}
+		return nil
 	}
-	record := moduleFromASTModule(ast)
-	if record == nil {
+	modules := NewModules()
+	modules.ParseOptions.IgnoreSubmoduleCircularDependencies = ast.Modules.ParseOptions.IgnoreSubmoduleCircularDependencies
+	modules.ParseOptions.StoreUses = ast.Modules.ParseOptions.StoreUses
+	modules.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported = ast.Modules.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported
+	for _, module := range ast.Modules.Modules {
+		modules.addUpstreamModuleRecord(module)
+	}
+	for _, submodule := range ast.Modules.SubModules {
+		modules.addUpstreamModuleRecord(submodule)
+	}
+	return modules
+}
+
+func (ms *Modules) addModuleRecord(record *Module) *Module {
+	if ms == nil || record == nil {
 		return nil
 	}
 	record.Modules = ms
@@ -840,6 +880,15 @@ func (ms *Modules) addASTModuleRecord(ast *ASTModule) *Module {
 	if bare := target[record.Name]; bare == nil || bare.FullName() < record.FullName() {
 		target[record.Name] = record
 	}
+	return record
+}
+
+func (ms *Modules) addUpstreamModuleRecord(ast *upstream.Module) *Module {
+	if ms == nil || ast == nil || ast.Source == nil {
+		return nil
+	}
+	record := ms.addModuleDecl(moduleDeclFromStatement(ast.Source, "", ast.BelongsTo != nil))
+	record.Parent = ast.Parent
 	return record
 }
 

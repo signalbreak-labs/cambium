@@ -1441,6 +1441,26 @@ func TestCompatBuiltinTypedefsAndYangTypeShape(t *testing.T) {
 	if td.Name != "string" || td.Type == nil || td.Type.Name != "string" {
 		t.Fatalf("BaseTypedefs[string] = %#v, want typedef/type named string", td)
 	}
+	for name, want := range upstream.BaseTypedefs {
+		got := compat.BaseTypedefs[name]
+		if got == nil {
+			t.Fatalf("BaseTypedefs[%s] = nil, want goyang typedef", name)
+		}
+		if got.Name != want.Name || got.Type == nil || want.Type == nil || got.Type.Name != want.Type.Name {
+			t.Fatalf("BaseTypedefs[%s] = %#v, want goyang %#v", name, got, want)
+		}
+		if got.YangType == nil || want.YangType == nil {
+			t.Fatalf("BaseTypedefs[%s].YangType = (%#v,%#v), want both non-nil", name, got.YangType, want.YangType)
+		}
+		if got.YangType.Name != want.YangType.Name ||
+			got.YangType.Kind != compat.TypeKind(want.YangType.Kind) ||
+			got.YangType.Range.String() != want.YangType.Range.String() {
+			t.Fatalf("BaseTypedefs[%s].YangType = %#v, want goyang %#v", name, got.YangType, want.YangType)
+		}
+		if got.YangType.Root != got.YangType {
+			t.Fatalf("BaseTypedefs[%s].YangType.Root = %#v, want self", name, got.YangType.Root)
+		}
+	}
 
 	typ := &compat.YangType{Name: "local-string", Kind: compat.Ystring}
 	typ.Base = &compat.Type{Name: "string"}

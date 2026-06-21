@@ -400,7 +400,7 @@ func exportedSurface(t *testing.T, dir string) packageSurface {
 				for _, spec := range decl.Specs {
 					switch spec := spec.(type) {
 					case *ast.TypeSpec:
-						if spec.Name.IsExported() {
+						if exportedCompatSurfaceName(spec.Name.Name) {
 							names[spec.Name.Name] = true
 							if spec.Assign.IsValid() {
 								aliases[spec.Name.Name] = normalizedASTType(spec.Type)
@@ -413,14 +413,14 @@ func exportedSurface(t *testing.T, dir string) packageSurface {
 						}
 					case *ast.ValueSpec:
 						for _, name := range spec.Names {
-							if name.IsExported() {
+							if exportedCompatSurfaceName(name.Name) {
 								names[name.Name] = true
 							}
 						}
 					}
 				}
 			case *ast.FuncDecl:
-				if decl.Recv == nil && decl.Name.IsExported() {
+				if decl.Recv == nil && exportedCompatSurfaceName(decl.Name.Name) {
 					names[decl.Name.Name] = true
 					funcs[decl.Name.Name] = normalizedFuncDeclSignature(decl.Type)
 					continue
@@ -444,6 +444,10 @@ func exportedSurface(t *testing.T, dir string) packageSurface {
 		typeDecls:    typeDecls,
 		values:       values,
 	}
+}
+
+func exportedCompatSurfaceName(name string) bool {
+	return ast.IsExported(name) && !strings.HasPrefix(name, "CambiumInternal")
 }
 
 func exportedStructFields(typ reflect.Type) []string {

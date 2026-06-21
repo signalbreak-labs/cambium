@@ -738,13 +738,20 @@ func hasYangTagOption(options []string, want string) bool {
 func childNodesFromField(field reflect.Value) []Node {
 	switch field.Kind() {
 	case reflect.Pointer:
+		if field.IsNil() {
+			return nil
+		}
 		if child, ok := field.Interface().(Node); ok && child != nil {
 			return []Node{child}
 		}
 	case reflect.Slice:
 		out := make([]Node, 0, field.Len())
 		for i := 0; i < field.Len(); i++ {
-			if child, ok := field.Index(i).Interface().(Node); ok && child != nil {
+			item := field.Index(i)
+			if item.Kind() == reflect.Pointer && item.IsNil() {
+				continue
+			}
+			if child, ok := item.Interface().(Node); ok && child != nil {
 				out = append(out, child)
 			}
 		}
@@ -1087,7 +1094,13 @@ func identityInModule(module Node, name string) *Identity {
 	case *Module:
 		for _, identity := range mod.Identity {
 			if identity != nil && identity.Name == name {
-				return cloneIdentities([]*Identity{identity}, module)[0]
+				cloned := cloneIdentities([]*Identity{identity}, module)[0]
+				if len(cloned.Values) == 0 {
+					if sourced := identityFromModuleSource(module, name, map[string]bool{}); sourced != nil {
+						return sourced
+					}
+				}
+				return cloned
 			}
 		}
 	}
@@ -2049,7 +2062,7 @@ func (e *Entry) rawRootNamespace() string {
 	return root.rawRootChildArgument("namespace")
 }
 
-func upstreamParentModule(node *ASTModule) *ASTModule {
+func upstreamParentModule(node *ASTModule) *Module {
 	if node == nil || node.BelongsTo == nil || node.Modules == nil {
 		return nil
 	}

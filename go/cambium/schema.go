@@ -500,6 +500,16 @@ func (e Extension) IfFeatures() []string {
 	return append([]string(nil), e.ifFeatures...)
 }
 
+func matchingExtensions(exts []Extension, module, name string) []Extension {
+	var out []Extension
+	for _, ext := range exts {
+		if ext.moduleName == module && ext.name == name {
+			out = append(out, ext)
+		}
+	}
+	return out
+}
+
 // ExtensionDefinition is a declared YANG extension on a module.
 type ExtensionDefinition struct {
 	module *moduleData
@@ -2993,6 +3003,12 @@ func (m Module) Revision() (string, bool) {
 	}
 	return m.mod.revision, true
 }
+func (m Module) Location() string {
+	if m.mod == nil || m.mod.stmt == nil {
+		return "unknown"
+	}
+	return m.mod.stmt.Location()
+}
 func (m Module) Revisions() []Revision {
 	if m.mod == nil || m.mod.stmt == nil {
 		return nil
@@ -3075,6 +3091,9 @@ func (m Module) Extensions() []Extension {
 		return nil
 	}
 	return m.mod.topLevelExtensionInstances()
+}
+func (m Module) MatchingExtensions(module, name string) []Extension {
+	return matchingExtensions(m.Extensions(), module, name)
 }
 func (m Module) ExtensionDefinitions() []ExtensionDefinition {
 	if m.mod == nil {
@@ -3286,6 +3305,12 @@ func (n SchemaNodeRef) Module() Module {
 	}
 	return Module{mod: n.node.module}
 }
+func (n SchemaNodeRef) Location() string {
+	if n.node == nil || n.node.stmt == nil {
+		return "unknown"
+	}
+	return n.node.stmt.Location()
+}
 func (n SchemaNodeRef) Description() (string, bool) {
 	if n.node == nil {
 		return "", false
@@ -3440,6 +3465,49 @@ func (n SchemaNodeRef) Path() string {
 	}
 	return n.node.path
 }
+func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
+	if n.node == nil {
+		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("nil schema node"))
+	}
+	if path == "" {
+		return n, nil
+	}
+	if path == "/" || strings.HasSuffix(path, "/") {
+		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("invalid path %q", path))
+	}
+	if strings.HasPrefix(path, "/") {
+		return n.Module().FindPath(path)
+	}
+
+	cur := n
+	for _, part := range strings.Split(path, "/") {
+		if part == "" {
+			return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("invalid path %q", path))
+		}
+		if part == ".." {
+			parent, ok := cur.Parent()
+			if !ok {
+				return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf(".. with no parent"))
+			}
+			for parent.Kind() == SchemaNodeKindChoice || parent.Kind() == SchemaNodeKindCase || parent.Kind() == SchemaNodeKindLeaf {
+				next, ok := parent.Parent()
+				if !ok {
+					return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf(".. with no parent"))
+				}
+				parent = next
+			}
+			cur = parent
+			continue
+		}
+		local := localName(part)
+		child, ok := cur.Children().Lookup(local)
+		if !ok {
+			return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("%s: no such element", part))
+		}
+		cur = child
+	}
+	return cur, nil
+}
 func (n SchemaNodeRef) Parent() (SchemaNodeRef, bool) {
 	if n.node == nil || n.node.parent == nil {
 		return SchemaNodeRef{}, false
@@ -3502,6 +3570,9 @@ func (n SchemaNodeRef) Extensions() []Extension {
 		return nil
 	}
 	return append([]Extension(nil), n.node.extensions...)
+}
+func (n SchemaNodeRef) MatchingExtensions(module, name string) []Extension {
+	return matchingExtensions(n.Extensions(), module, name)
 }
 func (n SchemaNodeRef) Extension(name string) (Extension, bool) {
 	if n.node == nil {

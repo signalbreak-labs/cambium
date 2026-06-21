@@ -10,106 +10,69 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/signalbreak-labs/cambium/go/cambium"
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
-	"github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/indent"
 	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 // Statement is a generic parsed YANG statement. The compat layer is the
 // goyang-compatible surface, so it intentionally exposes the upstream-shaped
-// statement type (and parses via upstream) rather than Cambium's own cgo-free
-// parser, which the default schema/codegen tier uses.
+// statement type. Parsing is backed by Cambium's native cgo-free parser and then
+// converted into this goyang-shaped statement tree.
 type Statement = upstream.Statement
 
 // Node is the goyang-style parsed AST node interface.
 type Node = upstream.Node
 
-// ErrorNode is a goyang-style AST node that carries an error.
-type ErrorNode = upstream.ErrorNode
-
 // Typedefer is a goyang-style AST node that defines typedefs.
-type Typedefer = upstream.Typedefer
+type Typedefer interface {
+	Node
+	Typedefs() []*Typedef
+}
 
-// ASTValue is the upstream-shaped parser value node. The shorter Value name is
+// ASTValue is the parser-facing scalar value node. The shorter Value name is
 // used by the compat Entry projection.
-type ASTValue = upstream.Value
+type ASTValue = Value
 
-// ASTModule is the upstream-shaped parser module node. The shorter Module name
-// is used by the compat Modules facade.
-type ASTModule = upstream.Module
+// ASTIdentity is the parser-facing identity node. The shorter Identity name is
+// used by the compat Entry projection.
+type ASTIdentity = Identity
 
-// ASTIdentity is the upstream-shaped parser identity node. The shorter Identity
-// name is used by the compat Entry projection.
-type ASTIdentity = upstream.Identity
-
-type Import = upstream.Import
-type Include = upstream.Include
-type Revision = upstream.Revision
-type BelongsTo = upstream.BelongsTo
-type Typedef = upstream.Typedef
-type Type = upstream.Type
-type Container = upstream.Container
-type Must = upstream.Must
-type Leaf = upstream.Leaf
-type LeafList = upstream.LeafList
-type List = upstream.List
-type Choice = upstream.Choice
-type Case = upstream.Case
-type AnyXML = upstream.AnyXML
-type AnyData = upstream.AnyData
-type Grouping = upstream.Grouping
-type Uses = upstream.Uses
-type Refine = upstream.Refine
-type RPC = upstream.RPC
-type Input = upstream.Input
-type Output = upstream.Output
-type Notification = upstream.Notification
-type Augment = upstream.Augment
-type Extension = upstream.Extension
-type Argument = upstream.Argument
-type Element = upstream.Element
-type Feature = upstream.Feature
-type Deviation = upstream.Deviation
-type Deviate = upstream.Deviate
-type Enum = upstream.Enum
-type Bit = upstream.Bit
-type Range = upstream.Range
-type Length = upstream.Length
-type Pattern = upstream.Pattern
-type Action = upstream.Action
-
-// BaseTypedefs contains goyang's manufactured typedefs for built-in YANG types.
-var BaseTypedefs = upstream.BaseTypedefs
+// BaseTypedefs contains goyang-shaped manufactured typedefs for built-in YANG types.
+var BaseTypedefs map[string]*Typedef = newBaseTypedefs()
 
 // Parse parses generic YANG source into ordered statements.
 func Parse(input, path string) ([]*Statement, error) {
 	return parseStatements(input, path)
 }
 
-// parseStatements parses YANG source into upstream-shaped statements, applying
-// the same pre-parse bounds/safety checks as the default parser. The compat
-// surface deliberately keeps the upstream parser; the default tier does not.
+// parseStatements parses YANG source into upstream-shaped statements using the
+// native parser shared with the default schema tier.
 func parseStatements(input, name string) (stmts []*Statement, err error) {
-	if err := yangparse.CheckInputBounds(input, name); err != nil {
-		return nil, err
-	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			stmts = nil
 			err = fmt.Errorf("%s: YANG parser panic: %v", name, recovered)
 		}
 	}()
-	return upstream.Parse(input, name)
+	native, err := yangparse.Parse(input, name)
+	if err != nil {
+		return nil, err
+	}
+	return compatStatementsFromNative(native), nil
 }
 
 // PathsWithModules returns directories under root that contain .yang files.
 func PathsWithModules(root string) ([]string, error) {
-	return upstream.PathsWithModules(root)
+	return cambium.PathsWithModules(root)
 }
 
 // Source returns the source location of n.
 func Source(n Node) string {
-	return upstream.Source(n)
+	if n != nil && n.Statement() != nil {
+		return n.Statement().Location()
+	}
+	return "unknown"
 }
 
 // RootNode returns the module or submodule that n was defined in.
@@ -124,31 +87,61 @@ func RootNode(n Node) *Module {
 	if mod, ok := root.(*ASTModule); ok {
 		return moduleFromASTModule(mod)
 	}
+	if mod, ok := root.(*upstream.Module); ok {
+		return moduleFromUpstreamModule(mod)
+	}
 	return nil
 }
 
 // FindModuleByPrefix resolves prefix relative to n.
 func FindModuleByPrefix(n Node, prefix string) *Module {
 	root := rootNode(n)
-	mod := RootNode(n)
-	if mod != nil {
-		if prefix == "" || prefix == mod.GetPrefix() || prefix == mod.Name {
-			return mod
-		}
-		if mod.Modules != nil {
-			for _, imp := range mod.Import {
-				if imp != nil && imp.Prefix != nil && imp.Prefix.Name == prefix {
-					if imported := mod.Modules.FindModule(imp); imported != nil {
-						return imported
-					}
-				}
-			}
-		}
-	}
-	if _, ok := root.(*ASTModule); !ok {
+	switch mod := root.(type) {
+	case *Module:
+		return findCompatModuleByPrefix(mod, prefix)
+	case *ASTModule:
+		return findASTModuleByPrefix(mod, prefix)
+	case *upstream.Module:
+		return findCompatModuleByPrefix(moduleFromUpstreamModule(mod), prefix)
+	default:
 		return nil
 	}
-	return moduleFromASTModule(upstream.FindModuleByPrefix(n, prefix))
+}
+
+func findCompatModuleByPrefix(mod *Module, prefix string) *Module {
+	if mod == nil {
+		return nil
+	}
+	if prefix == "" || prefix == mod.GetPrefix() {
+		return mod
+	}
+	if mod.Modules == nil {
+		return nil
+	}
+	for _, imp := range mod.Import {
+		if imp != nil && imp.Prefix != nil && imp.Prefix.Name == prefix {
+			return mod.Modules.FindModule(imp)
+		}
+	}
+	return nil
+}
+
+func findASTModuleByPrefix(mod *ASTModule, prefix string) *Module {
+	if mod == nil {
+		return nil
+	}
+	if prefix == "" || prefix == mod.GetPrefix() {
+		return moduleFromASTModule(mod)
+	}
+	if mod.Modules == nil {
+		return nil
+	}
+	for _, imp := range mod.Import {
+		if imp != nil && imp.Prefix != nil && imp.Prefix.Name == prefix {
+			return mod.Modules.FindModule(imp)
+		}
+	}
+	return nil
 }
 
 // MatchingExtensions returns extension statements matching module and identifier.
@@ -419,7 +412,12 @@ func groupingSeenKey(n Node) string {
 
 // NodePath returns the path from the root node to n.
 func NodePath(n Node) string {
-	return upstream.NodePath(n)
+	var path string
+	for n != nil {
+		path = "/" + n.NName() + path
+		n = n.ParentNode()
+	}
+	return path
 }
 
 // FindNode resolves path relative to n using goyang AST traversal semantics.
@@ -723,7 +721,7 @@ Loop:
 			if name, ok := scalarValueName(child); ok {
 				_, _ = fmt.Fprintf(w, "%s = %s\n", fieldType.Name, name)
 			} else {
-				PrintNode(indent.NewWriter(w, "    "), child)
+				PrintNode(newIndentWriter(w, "    "), child)
 			}
 		case reflect.Slice:
 			for j := 0; j < field.Len(); j++ {
@@ -734,7 +732,7 @@ Loop:
 				if name, ok := scalarValueName(child); ok {
 					_, _ = fmt.Fprintf(w, "%s[%d] = %s\n", fieldType.Name, j, name)
 				} else {
-					PrintNode(indent.NewWriter(w, "    "), child)
+					PrintNode(newIndentWriter(w, "    "), child)
 				}
 			}
 		}
@@ -757,11 +755,6 @@ func scalarValueName(node Node) (string, bool) {
 			return "", false
 		}
 		return value.Name, true
-	case *upstream.Value:
-		if value == nil {
-			return "", false
-		}
-		return value.Name, true
 	default:
 		return "", false
 	}
@@ -769,5 +762,5 @@ func scalarValueName(node Node) (string, bool) {
 
 // CamelCase returns the goyang-compatible exported identifier spelling.
 func CamelCase(s string) string {
-	return upstream.CamelCase(s)
+	return cambium.CamelCase(s)
 }
