@@ -1,0 +1,40 @@
+{
+  "module": "schema-augment-submodule-base",
+  "load": [
+    "schema-augment-submodule-base",
+    "schema-augment-submodule-ospf",
+    "schema-augment-submodule-isis"
+  ],
+  "children": {
+    "/schema-augment-submodule-base/protocols/protocol/config": [
+      "enabled",
+      "area",
+      "metric-style",
+      "level",
+      "timers"
+    ],
+    "/schema-augment-submodule-base/protocols/protocol/config/timers": [
+      "hello-interval"
+    ]
+  },
+  "keys": {
+    "/schema-augment-submodule-base/protocols/protocol": ["name"]
+  },
+  "whens": {
+    "/schema-augment-submodule-base/protocols/protocol/config/schema-augment-submodule-ospf:area": [
+      "../base:name = 'ospf'"
+    ],
+    "/schema-augment-submodule-base/protocols/protocol/config/schema-augment-submodule-ospf:metric-style": [
+      "../base:name = 'ospf'"
+    ],
+    "/schema-augment-submodule-base/protocols/protocol/config/schema-augment-submodule-isis:level": [
+      "../base:name = 'isis'"
+    ],
+    "/schema-augment-submodule-base/protocols/protocol/config/schema-augment-submodule-isis:timers": [
+      "../base:name = 'isis'"
+    ],
+    "/schema-augment-submodule-base/protocols/protocol/config/schema-augment-submodule-isis:timers/hello-interval": [
+      "../base:name = 'isis'"
+    ]
+  }
+}

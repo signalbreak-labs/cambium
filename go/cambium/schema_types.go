@@ -124,7 +124,8 @@ func (m *moduleData) validateTypedefDefaultValues() error {
 			typeInfo:   &info,
 			typeModule: m,
 		}
-		if err := validateDefaultValueForType(node, defaults[0].Argument); err != nil {
+		def := DefaultValue{value: defaults[0].Argument, sourceModule: m}
+		if err := validateDefaultValueForType(node, def); err != nil {
 			return err
 		}
 	}
@@ -420,7 +421,7 @@ func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.
 		if len(direct(st, "require-instance")) > 0 && m.yangVersionForStatement(st) != "1.1" {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, fmt.Errorf("leafref type require-instance statement requires yang-version 1.1 at %s", st.Location())
 		}
-		ti.resolved = ResolvedLeafRef{path: paths[0].Argument, requireInstance: require}
+		ti.resolved = ResolvedLeafRef{path: paths[0].Argument, requireInstance: require, sourceModule: m}
 	case BaseTypeUnion:
 		var members []TypeInfo
 		memberTypes := direct(st, "type")
@@ -500,26 +501,34 @@ func (m *moduleData) lookupScopedTypedef(name string, from *yangparse.Statement)
 }
 
 func (m *moduleData) typedefDefaultFrom(qname string, from *yangparse.Statement) (string, bool) {
-	return m.typedefDefaultFromSeen(qname, from, make(map[*yangparse.Statement]bool))
-}
-
-func (m *moduleData) typedefDefaultFromSeen(qname string, from *yangparse.Statement, seen map[*yangparse.Statement]bool) (string, bool) {
-	tdMod, td := m.lookupTypedefModuleFrom(qname, from)
-	if td == nil {
+	def, ok := m.typedefDefaultEntryFrom(qname, from)
+	if !ok {
 		return "", false
 	}
+	return def.value, true
+}
+
+func (m *moduleData) typedefDefaultEntryFrom(qname string, from *yangparse.Statement) (DefaultValue, bool) {
+	return m.typedefDefaultEntryFromSeen(qname, from, make(map[*yangparse.Statement]bool))
+}
+
+func (m *moduleData) typedefDefaultEntryFromSeen(qname string, from *yangparse.Statement, seen map[*yangparse.Statement]bool) (DefaultValue, bool) {
+	tdMod, td := m.lookupTypedefModuleFrom(qname, from)
+	if td == nil {
+		return DefaultValue{}, false
+	}
 	if seen[td] {
-		return "", false
+		return DefaultValue{}, false
 	}
 	seen[td] = true
 	defer delete(seen, td)
-	if d := childArg(td, "default"); d != "" {
-		return d, true
+	if d := first(td, "default"); d != nil {
+		return DefaultValue{value: d.Argument, sourceModule: tdMod}, true
 	}
 	if typ := first(td, "type"); typ != nil {
-		return tdMod.typedefDefaultFromSeen(typ.Argument, typ, seen)
+		return tdMod.typedefDefaultEntryFromSeen(typ.Argument, typ, seen)
 	}
-	return "", false
+	return DefaultValue{}, false
 }
 
 func resolveLeafRef(n *schemaNodeData, source *moduleData, lr *ResolvedLeafRef) {

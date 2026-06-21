@@ -1059,7 +1059,7 @@ func (g *goEmitter) emitTrimHasContentChecks(fields []fieldInfo, out *strings.Bu
 	for _, f := range fields {
 		switch f.node.Kind() {
 		case cambium.SchemaNodeKindLeaf:
-			if defaultValue, ok := f.node.DefaultValue(); ok {
+			if defaultValue, ok := f.node.DefaultEntry(); ok {
 				if f.optional {
 					valueRef := "(*n." + f.ident + ")"
 					if f.isUnion {
@@ -1075,7 +1075,7 @@ func (g *goEmitter) emitTrimHasContentChecks(fields []fieldInfo, out *strings.Bu
 				out.WriteString("\t\ttrimHasContent = true\n")
 			}
 		case cambium.SchemaNodeKindLeafList:
-			defaults := f.node.DefaultValues()
+			defaults := f.node.DefaultEntries()
 			if len(defaults) > 0 {
 				defaultVar := g.emitLeafListDefaultCheck("n", f, defaults, out, "\t\t")
 				if strings.HasPrefix(f.goType, "UserOrderedVec[") {
@@ -1113,7 +1113,7 @@ func (g *goEmitter) emitTrimHasContentChecks(fields []fieldInfo, out *strings.Bu
 	out.WriteString("\t\tif trimHasContent { return true }\n")
 }
 
-func (g *goEmitter) emitLeafListDefaultCheck(owner string, f fieldInfo, defaults []string, out *strings.Builder, indent string) string {
+func (g *goEmitter) emitLeafListDefaultCheck(owner string, f fieldInfo, defaults []cambium.DefaultValue, out *strings.Builder, indent string) string {
 	defaults = g.orderedDefaultValues(defaults, f)
 	defaultVar := "isDefault" + f.ident
 	fmt.Fprintf(out, "%s%s := false\n", indent, defaultVar)

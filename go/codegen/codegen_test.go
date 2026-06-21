@@ -3764,6 +3764,139 @@ func TestGeneratedScalarDefaultsCoverBinaryEnumIdentityref(t *testing.T) {
 	runGeneratedGoTest(t, src, testBody)
 }
 
+func TestGeneratedGoIdentityRefDefaultProvenance(t *testing.T) {
+	idents := `module idref-default-codegen-id {
+    yang-version 1.1;
+    namespace "urn:idref-default-codegen-id";
+    prefix id;
+
+    identity base;
+    identity derived {
+        base base;
+    }
+}`
+	refine := `module idref-refine-default-codegen {
+    yang-version 1.1;
+    namespace "urn:idref-refine-default-codegen";
+    prefix refine;
+
+    import idref-default-codegen-id {
+        prefix foreign;
+    }
+
+    grouping common {
+        leaf mode {
+            type identityref {
+                base foreign:base;
+            }
+        }
+    }
+
+    uses common {
+        refine mode {
+            default "foreign:derived";
+        }
+    }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(idents); err != nil {
+		t.Fatalf("LoadModuleStr idents: %v", err)
+	}
+	if err := builder.LoadModuleStr(refine); err != nil {
+		t.Fatalf("LoadModuleStr refine: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build refine: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "idref-refine-default-codegen")
+	if err != nil {
+		t.Fatalf("generate refine: %v", err)
+	}
+
+	testBody := `
+func TestGeneratedRefineIdentityRefDefaultProvenance(t *testing.T) {
+	if got, want := (&IdrefRefineDefaultCodegen{}).ToJSONIETFWithDefaults(WithDefaultsAll), "{\n  \"idref-refine-default-codegen:mode\": \"idref-default-codegen-id:derived\"\n}\n"; got != want {
+		t.Fatalf("refine default JSON mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+`
+	runGeneratedGoTest(t, src, testBody)
+
+	base := `module idref-dev-default-codegen-base {
+    yang-version 1.1;
+    namespace "urn:idref-dev-default-codegen-base";
+    prefix base;
+
+    import idref-default-codegen-id {
+        prefix id;
+    }
+
+    leaf mode {
+        type identityref {
+            base id:base;
+        }
+        default "id:base";
+    }
+}`
+	dev := `module idref-dev-default-codegen-dev {
+    yang-version 1.1;
+    namespace "urn:idref-dev-default-codegen-dev";
+    prefix dev;
+
+    import idref-dev-default-codegen-base {
+        prefix target;
+    }
+    import idref-default-codegen-id {
+        prefix foreign;
+    }
+
+    deviation "/target:mode" {
+        deviate replace {
+            default "foreign:derived";
+        }
+    }
+}`
+	builder, err = cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, module := range []struct {
+		name   string
+		source string
+	}{
+		{"idents", idents},
+		{"base", base},
+		{"dev", dev},
+	} {
+		if err := builder.LoadModuleStr(module.source); err != nil {
+			t.Fatalf("LoadModuleStr %s: %v", module.name, err)
+		}
+	}
+	ctx, err = builder.Build()
+	if err != nil {
+		t.Fatalf("Build deviation: %v", err)
+	}
+	defer ctx.Close()
+	src, err = codegen.GenerateGo(ctx, "idref-dev-default-codegen-base")
+	if err != nil {
+		t.Fatalf("generate deviation: %v", err)
+	}
+
+	testBody = `
+func TestGeneratedDeviationIdentityRefDefaultProvenance(t *testing.T) {
+	if got, want := (&IdrefDevDefaultCodegenBase{}).ToJSONIETFWithDefaults(WithDefaultsAll), "{\n  \"idref-dev-default-codegen-base:mode\": \"idref-default-codegen-id:derived\"\n}\n"; got != want {
+		t.Fatalf("deviation default JSON mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+`
+	runGeneratedGoTest(t, src, testBody)
+}
+
 func TestGeneratedGoSchemaRejectsInvalidBitsDefaultUnicodeWhitespace(t *testing.T) {
 	source := `module invalid-bits-default-unicode-whitespace {
     namespace "urn:invalid-bits-default-unicode-whitespace";

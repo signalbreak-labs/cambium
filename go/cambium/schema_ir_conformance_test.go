@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,13 +17,26 @@ import (
 type schemaIRExpected struct {
 	Module              string                         `json:"module"`
 	Load                []string                       `json:"load"`
+	Features            map[string][]string            `json:"features"`
+	AbsentPaths         []string                       `json:"absentPaths"`
 	Children            map[string][]string            `json:"children"`
 	DataChildrenFlatten map[string][]string            `json:"dataChildrenFlatten"`
 	Keys                map[string][]string            `json:"keys"`
+	OrderedBy           map[string]string              `json:"orderedBy"`
+	Config              map[string]string              `json:"config"`
+	Mandatory           map[string]bool                `json:"mandatory"`
+	Defaults            map[string]string              `json:"defaults"`
+	MinElements         map[string]uint32              `json:"minElements"`
+	MaxElements         map[string]string              `json:"maxElements"`
 	Imports             map[string][]schemaIRImport    `json:"imports"`
 	Prefixes            map[string]map[string]string   `json:"prefixes"`
 	IdentityDerived     map[string][]string            `json:"identityDerived"`
 	Leafrefs            map[string]schemaIRLeafrefWant `json:"leafrefs"`
+	Whens               map[string][]string            `json:"whens"`
+	Musts               map[string][]string            `json:"musts"`
+	IfFeatures          map[string][]string            `json:"ifFeatures"`
+	ModuleDeviations    map[string][]schemaIRDeviation `json:"moduleDeviations"`
+	DeviationProvenance map[string][]schemaIRDeviation `json:"deviationProvenance"`
 }
 
 type schemaIRImport struct {
@@ -36,15 +50,29 @@ type schemaIRLeafrefWant struct {
 	Target string `json:"target"`
 }
 
+type schemaIRDeviation struct {
+	TargetPath   string   `json:"targetPath"`
+	SourceModule string   `json:"sourceModule"`
+	Type         string   `json:"type"`
+	Property     string   `json:"property"`
+	NewValue     string   `json:"newValue"`
+	IfFeatures   []string `json:"ifFeatures"`
+}
+
 func TestSchemaIRManifestTier(t *testing.T) {
 	want := map[string]struct{}{
-		"schema-cross-kind-order":  {},
-		"schema-uses-site-order":   {},
-		"schema-augment-order":     {},
-		"schema-choice-case-order": {},
-		"schema-import-prefix":     {},
-		"schema-identity-derived":  {},
-		"schema-leafref-path":      {},
+		"schema-cross-kind-order":                 {},
+		"schema-uses-site-order":                  {},
+		"schema-augment-order":                    {},
+		"schema-augment-submodule-overlay":        {},
+		"schema-augment-deep-overlay":             {},
+		"schema-choice-case-order":                {},
+		"schema-import-prefix":                    {},
+		"schema-identity-derived":                 {},
+		"schema-leafref-path":                     {},
+		"schema-vendor-nokia-feature-deviation":   {},
+		"schema-vendor-nokia-submodule-mesh":      {},
+		"schema-vendor-openconfig-augment-refine": {},
 	}
 
 	cases, err := confmanifest.Load(filepath.Join(conformanceRoot(t), "manifest.toml"))
@@ -167,6 +195,11 @@ func runSchemaIRFixture(t *testing.T, c confmanifest.Case) {
 	if err := ctx.SetSearchPath(moduleDir); err != nil {
 		t.Fatal(err)
 	}
+	for module, features := range expected.Features {
+		if err := ctx.SetFeatures(module, features); err != nil {
+			t.Fatalf("SetFeatures(%s): %v", module, err)
+		}
+	}
 	load := expected.Load
 	if len(load) == 0 {
 		load = []string{expected.Module}
@@ -181,6 +214,11 @@ func runSchemaIRFixture(t *testing.T, c confmanifest.Case) {
 		t.Fatalf("Schema(%s): %v", expected.Module, err)
 	}
 
+	for _, path := range expected.AbsentPaths {
+		if _, err := mod.FindPath(path); err == nil {
+			t.Fatalf("%s should not be addressable", path)
+		}
+	}
 	for path, want := range expected.Children {
 		node := schemaIRNode(t, mod, path)
 		assertStringSlices(t, path+" children", schemaChildNames(node.Children()), want)
@@ -192,6 +230,56 @@ func runSchemaIRFixture(t *testing.T, c confmanifest.Case) {
 	for path, want := range expected.Keys {
 		node := schemaIRNode(t, mod, path)
 		assertStringSlices(t, path+" keys", node.KeyNames(), want)
+	}
+	for path, want := range expected.OrderedBy {
+		node := schemaIRNode(t, mod, path)
+		if got := schemaIROrderedBy(node); got != want {
+			t.Fatalf("%s ordered-by = %q, want %q", path, got, want)
+		}
+	}
+	for path, want := range expected.Config {
+		node := schemaIRNode(t, mod, path)
+		if got := schemaIRConfig(node); got != want {
+			t.Fatalf("%s config = %q, want %q", path, got, want)
+		}
+	}
+	for path, want := range expected.Mandatory {
+		node := schemaIRNode(t, mod, path)
+		if got := node.IsMandatory(); got != want {
+			t.Fatalf("%s mandatory = %v, want %v", path, got, want)
+		}
+	}
+	for path, want := range expected.Defaults {
+		node := schemaIRNode(t, mod, path)
+		got, ok := node.DefaultValue()
+		if !ok || got != want {
+			t.Fatalf("%s default = (%q,%v), want %q,true", path, got, ok, want)
+		}
+	}
+	for path, want := range expected.MinElements {
+		node := schemaIRNode(t, mod, path)
+		got, ok := node.MinElements()
+		if !ok || got != want {
+			t.Fatalf("%s min-elements = (%d,%v), want %d,true", path, got, ok, want)
+		}
+	}
+	for path, want := range expected.MaxElements {
+		node := schemaIRNode(t, mod, path)
+		if got := schemaIRMaxElements(node); got != want {
+			t.Fatalf("%s max-elements = %q, want %q", path, got, want)
+		}
+	}
+	for path, want := range expected.Whens {
+		node := schemaIRNode(t, mod, path)
+		assertStringSlices(t, path+" whens", schemaIRWhenExpressions(node.Whens()), want)
+	}
+	for path, want := range expected.Musts {
+		node := schemaIRNode(t, mod, path)
+		assertStringSlices(t, path+" musts", schemaIRMustExpressions(node.Musts()), want)
+	}
+	for path, want := range expected.IfFeatures {
+		node := schemaIRNode(t, mod, path)
+		assertStringSlices(t, path+" if-features", node.IfFeatures(), want)
 	}
 	for moduleName, want := range expected.Imports {
 		gotMod, err := ctx.Schema(moduleName)
@@ -258,6 +346,86 @@ func runSchemaIRFixture(t *testing.T, c confmanifest.Case) {
 		target, ok := lr.Target()
 		if !ok || target.Path() != want.Target {
 			t.Fatalf("%s leafref target = (%q,%v), want %q,true", path, target.Path(), ok, want.Target)
+		}
+	}
+	for moduleName, want := range expected.ModuleDeviations {
+		gotMod, err := ctx.Schema(moduleName)
+		if err != nil {
+			t.Fatalf("Schema(%s): %v", moduleName, err)
+		}
+		assertSchemaIRDeviations(t, moduleName+" deviations", schemaIRDeviations(gotMod.Deviations()), want)
+	}
+	for path, want := range expected.DeviationProvenance {
+		node := schemaIRNode(t, mod, path)
+		assertSchemaIRDeviations(t, path+" deviation provenance", schemaIRDeviations(node.DeviationProvenance()), want)
+	}
+}
+
+func schemaIRWhenExpressions(whens []cambium.WhenConstraint) []string {
+	out := make([]string, len(whens))
+	for i, when := range whens {
+		out[i] = when.Expression()
+	}
+	return out
+}
+
+func schemaIRMustExpressions(musts []cambium.MustConstraint) []string {
+	out := make([]string, len(musts))
+	for i, must := range musts {
+		out[i] = must.Expression()
+	}
+	return out
+}
+
+func schemaIROrderedBy(node cambium.SchemaNodeRef) string {
+	if node.OrderedBy() == cambium.OrderedByUser {
+		return "user"
+	}
+	return "system"
+}
+
+func schemaIRConfig(node cambium.SchemaNodeRef) string {
+	if node.Config() == cambium.ConfigRo {
+		return "ro"
+	}
+	return "rw"
+}
+
+func schemaIRMaxElements(node cambium.SchemaNodeRef) string {
+	if got, ok := node.MaxElements(); ok {
+		return strconv.FormatUint(uint64(got), 10)
+	}
+	return "unbounded"
+}
+
+func schemaIRDeviations(in []cambium.Deviation) []schemaIRDeviation {
+	out := make([]schemaIRDeviation, len(in))
+	for i, dev := range in {
+		out[i] = schemaIRDeviation{
+			TargetPath:   dev.TargetPath(),
+			SourceModule: dev.SourceModule(),
+			Type:         dev.Type(),
+			Property:     dev.Property(),
+			NewValue:     dev.NewValue(),
+			IfFeatures:   dev.IfFeatures(),
+		}
+	}
+	return out
+}
+
+func assertSchemaIRDeviations(t *testing.T, label string, got, want []schemaIRDeviation) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("%s len = %d, want %d\ngot:  %+v\nwant: %+v", label, len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i].TargetPath != want[i].TargetPath ||
+			got[i].SourceModule != want[i].SourceModule ||
+			got[i].Type != want[i].Type ||
+			got[i].Property != want[i].Property ||
+			got[i].NewValue != want[i].NewValue ||
+			strings.Join(got[i].IfFeatures, "\x00") != strings.Join(want[i].IfFeatures, "\x00") {
+			t.Fatalf("%s[%d] = %+v, want %+v", label, i, got[i], want[i])
 		}
 	}
 }

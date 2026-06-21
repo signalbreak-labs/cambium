@@ -47,6 +47,20 @@ module = "fixtures/schema-augment-order/module"
 expected-ir = "fixtures/schema-augment-order/expected-ir.json"
 
 [[case]]
+name = "schema-augment-submodule-overlay"
+invariants = ["I2"]
+tier = "schema-ir"
+module = "fixtures/schema-augment-submodule-overlay/module"
+expected-ir = "fixtures/schema-augment-submodule-overlay/expected-ir.json"
+
+[[case]]
+name = "schema-augment-deep-overlay"
+invariants = ["I2"]
+tier = "schema-ir"
+module = "fixtures/schema-augment-deep-overlay/module"
+expected-ir = "fixtures/schema-augment-deep-overlay/expected-ir.json"
+
+[[case]]
 name = "schema-choice-case-order"
 tier = "schema-ir"
 module = "fixtures/schema-choice-case-order/module"
@@ -69,6 +83,27 @@ name = "schema-leafref-path"
 tier = "schema-ir"
 module = "fixtures/schema-leafref-path/module"
 expected-ir = "fixtures/schema-leafref-path/expected-ir.json"
+
+[[case]]
+name = "schema-vendor-nokia-feature-deviation"
+invariants = ["I2", "I3"]
+tier = "schema-ir"
+module = "fixtures/schema-vendor-nokia-feature-deviation/module"
+expected-ir = "fixtures/schema-vendor-nokia-feature-deviation/expected-ir.json"
+
+[[case]]
+name = "schema-vendor-nokia-submodule-mesh"
+invariants = ["I2", "I3"]
+tier = "schema-ir"
+module = "fixtures/schema-vendor-nokia-submodule-mesh/module"
+expected-ir = "fixtures/schema-vendor-nokia-submodule-mesh/expected-ir.json"
+
+[[case]]
+name = "schema-vendor-openconfig-augment-refine"
+invariants = ["I2", "I3"]
+tier = "schema-ir"
+module = "fixtures/schema-vendor-openconfig-augment-refine/module"
+expected-ir = "fixtures/schema-vendor-openconfig-augment-refine/expected-ir.json"
 
 [[case]]
 name = "scrambled-children"
