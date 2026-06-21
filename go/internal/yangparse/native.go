@@ -267,8 +267,8 @@ func (p *parser) scanString() (string, bool, error) {
 }
 
 // scanUnquoted reads a maximal unquoted run. It terminates at whitespace, the
-// structural punctuation ;{} , or a comment opener. A standalone comment-close
-// "*/" inside an unquoted run fails closed.
+// structural punctuation ;{} , quote characters, or a comment opener. A quote
+// or standalone comment-close "*/" inside an unquoted run fails closed.
 func (p *parser) scanUnquoted() (string, error) {
 	startLine, startCol := p.line, p.col
 	start := p.pos
@@ -279,6 +279,9 @@ func (p *parser) scanUnquoted() (string, error) {
 		}
 		if c == '/' && (p.peek2() == '/' || p.peek2() == '*') {
 			break
+		}
+		if c == '"' || c == '\'' {
+			return "", p.errf(p.line, p.col, "unquoted argument contains quote character %q", c)
 		}
 		if c == '*' && p.peek2() == '/' {
 			return "", p.errf(p.line, p.col, "unquoted argument contains comment-close sequence '*/'")

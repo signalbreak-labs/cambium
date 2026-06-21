@@ -139,7 +139,7 @@ func skipComment(input string, start int) int {
 }
 
 func skipLine(input string, start int) int {
-	for start < len(input) && input[start] != '\n' {
+	for start < len(input) && input[start] != '\n' && input[start] != '\r' {
 		start++
 	}
 	return start

@@ -41,6 +41,7 @@ func TestNativeParserMatchesUpstreamOnCorpus(t *testing.T) {
 	}
 
 	compared := 0
+	skipped := 0
 	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
@@ -49,11 +50,9 @@ func TestNativeParserMatchesUpstreamOnCorpus(t *testing.T) {
 		src := string(data)
 		native, nerr := Parse(src, f)
 		up, uerr := upstream.Parse(src, f)
-		// Tree equivalence is only contractual when both parsers accept the input.
-		// Reject fixtures and Cambium's deliberate lexical safety deviations
-		// (adjacent-comment termination, fail-closed */, escape validation) may
-		// legitimately make exactly one side decline.
 		if nerr != nil || uerr != nil {
+			skipped++
+			t.Errorf("%s: parser accept/reject mismatch or shared rejection: native err=%v upstream err=%v", f, nerr, uerr)
 			continue
 		}
 		if err := compareStatementLists(native, up); err != nil {
@@ -62,8 +61,8 @@ func TestNativeParserMatchesUpstreamOnCorpus(t *testing.T) {
 		compared++
 	}
 	t.Logf("differential corpus comparison: %d/%d files compared (both parsers accepted)", compared, len(files))
-	if compared == 0 {
-		t.Fatal("differential test compared zero files; corpus wiring is broken")
+	if skipped != 0 || compared != len(files) {
+		t.Fatalf("differential test skipped %d/%d corpus files; add an explicit allowlist before intentional parser rejection divergence", skipped, len(files))
 	}
 }
 

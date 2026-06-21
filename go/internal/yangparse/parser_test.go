@@ -32,6 +32,28 @@ func TestParseRejectsExcessiveStatementDepth(t *testing.T) {
 	}
 }
 
+func TestParseRejectsExcessiveDepthAfterCRTerminatedLineComment(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("module too-deep-cr-comment { namespace \"urn:too-deep-cr-comment\"; prefix td; // comment\r")
+	for i := 0; i < maxStatementDepth+1; i++ {
+		b.WriteString(" container c")
+		b.WriteString("x")
+		b.WriteString(" {")
+	}
+	for i := 0; i < maxStatementDepth+1; i++ {
+		b.WriteByte('}')
+	}
+	b.WriteByte('}')
+
+	_, err := Parse(b.String(), "too-deep-cr-comment.yang")
+	if err == nil {
+		t.Fatal("Parse accepted input above the maximum statement depth after a CR-terminated line comment")
+	}
+	if got := err.Error(); !strings.Contains(got, "nesting depth exceeds maximum") {
+		t.Fatalf("Parse error = %q, want nesting-depth error", got)
+	}
+}
+
 func TestParseDepthIgnoresQuotedBraces(t *testing.T) {
 	source := `module quoted-braces {
   namespace "urn:quoted-braces";
@@ -198,6 +220,34 @@ func TestParseRejectsStandaloneCommentCloseInUnquotedArgument(t *testing.T) {
 	}
 	if got := err.Error(); !strings.Contains(got, "*/") {
 		t.Fatalf("Parse error = %q, want to mention comment-close sequence", got)
+	}
+}
+
+func TestParseRejectsQuotesInUnquotedArgument(t *testing.T) {
+	tests := map[string]string{
+		"single-quote": `module bad-unquoted-single-quote {
+  namespace "urn:bad-unquoted-single-quote";
+  prefix busq;
+  description invalid'value;
+}
+`,
+		"double-quote": `module bad-unquoted-double-quote {
+  namespace "urn:bad-unquoted-double-quote";
+  prefix budq;
+  description invalid"value;
+}
+`,
+	}
+	for name, source := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(source, name+".yang")
+			if err == nil {
+				t.Fatal("Parse accepted quote character in unquoted argument")
+			}
+			if got := err.Error(); !strings.Contains(got, "quote") {
+				t.Fatalf("Parse error = %q, want quote-specific error", got)
+			}
+		})
 	}
 }
 
