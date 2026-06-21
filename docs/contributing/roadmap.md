@@ -12,7 +12,9 @@ lands rather than adding another dated file.
   YANG parse into an ordered schema IR, introspection, schema-level static
   validation, the goyang-shaped `compat` projection, and typed-struct codegen with
   native XML/JSON_IETF serializers, `Validate()`, with-defaults, and RFC-7952
-  metadata.
+  metadata. The tier carries no runtime dependency on `openconfig/goyang`: `compat`
+  owns its goyang-shaped AST node types natively, and the only remaining goyang seam
+  is a thin vendored raw-statement lexer, kept out of the default cgo-free closure.
 - **libyang backend tier** (`libyangbackend`, `internal/libyang`) — the complete
   RFC-7950 data engine over a vendored, statically linked libyang: parse, full
   semantic validation, serialize, diff, merge, and LYB.

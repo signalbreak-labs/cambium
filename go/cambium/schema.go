@@ -49,6 +49,49 @@ const (
 	SchemaNodeKindUnknown
 )
 
+// SchemaPathErrorKind classifies a failed schema path lookup.
+type SchemaPathErrorKind string
+
+const (
+	// SchemaPathErrorInvalid means the requested path is syntactically invalid
+	// for the lookup method.
+	SchemaPathErrorInvalid SchemaPathErrorKind = "invalid"
+	// SchemaPathErrorNotFound means a path segment did not resolve to a schema
+	// node from the current lookup position.
+	SchemaPathErrorNotFound SchemaPathErrorKind = "not_found"
+	// SchemaPathErrorNoParent means a relative parent step walked above the
+	// schema root.
+	SchemaPathErrorNoParent SchemaPathErrorKind = "no_parent"
+)
+
+// SchemaPathError is the structured cause returned by FindPath failures. Public
+// FindPath methods still wrap it in Error, so callers can use errors.As for
+// either *Error or *SchemaPathError.
+type SchemaPathError struct {
+	Kind    SchemaPathErrorKind
+	Path    string
+	Segment string
+	From    string
+}
+
+func (e *SchemaPathError) Error() string {
+	switch e.Kind {
+	case SchemaPathErrorInvalid:
+		return fmt.Sprintf("invalid schema path %q", e.Path)
+	case SchemaPathErrorNoParent:
+		return fmt.Sprintf("schema path %q walks above %s at %q", e.Path, e.From, e.Segment)
+	default:
+		return fmt.Sprintf("schema path %q not found from %s at %q", e.Path, e.From, e.Segment)
+	}
+}
+
+func schemaNodeDataPath(n *schemaNodeData) string {
+	if n == nil {
+		return ""
+	}
+	return n.path
+}
+
 // Config is read-write vs read-only.
 type Config int
 
@@ -500,6 +543,16 @@ func (e Extension) IfFeatures() []string {
 	return append([]string(nil), e.ifFeatures...)
 }
 
+func matchingExtensions(exts []Extension, module, name string) []Extension {
+	var out []Extension
+	for _, ext := range exts {
+		if ext.moduleName == module && ext.name == name {
+			out = append(out, ext)
+		}
+	}
+	return out
+}
+
 // ExtensionDefinition is a declared YANG extension on a module.
 type ExtensionDefinition struct {
 	module *moduleData
@@ -757,6 +810,14 @@ type Import struct {
 
 func (i Import) Description() (string, bool) { return optional(i.description) }
 func (i Import) Reference() (string, bool)   { return optional(i.reference) }
+
+// QualifiedName identifies a schema node by its local name and defining module.
+type QualifiedName struct {
+	Module    string
+	Prefix    string
+	Namespace string
+	Name      string
+}
 
 // Include is a value type for module include metadata.
 type Include struct {
@@ -2902,30 +2963,29 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 	return pfx == mod.prefix
 }
 
-func (c *Context) findNodeBySchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	return c.findNodeBySchemaPathMode(source, path, false)
-}
-
 func (c *Context) findNodeBySourceSchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	return c.findNodeBySchemaPathMode(source, path, true)
+	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true)
+	return mod, node
 }
 
-func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, strictSource bool) (*moduleData, *schemaNodeData) {
+func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool) (*moduleData, *schemaNodeData, string, *schemaNodeData) {
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		return nil, nil
+		return nil, nil, path, nil
 	}
 	first := pathStepQName(parts[0])
 	mod := source.resolveQNameModule(first)
 	if strictSource {
 		mod = source.resolveSourceQNameModule(first)
+	} else if mod == nil {
+		mod = c.moduleByPublicQName(first)
 	}
 	if mod == nil {
 		if !strictSource && (first == source.name || first == source.prefix) {
 			mod = source
 			parts = parts[1:]
 		} else {
-			return nil, nil
+			return nil, nil, parts[0], source.root
 		}
 	} else if !strictSource && !hasPrefix(first) && (first == mod.prefix || first == mod.name) {
 		parts = parts[1:]
@@ -2959,11 +3019,22 @@ func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, stri
 			}
 		}
 		if next == nil {
-			return mod, nil
+			return mod, nil, part, cur
 		}
 		cur = next
 	}
-	return mod, cur
+	return mod, cur, "", nil
+}
+
+func (c *Context) moduleByPublicQName(qname string) *moduleData {
+	if c == nil {
+		return nil
+	}
+	prefix, _, ok := strings.Cut(qname, ":")
+	if !ok || prefix == "" {
+		return nil
+	}
+	return c.modules[prefix]
 }
 
 // Module is a borrowed handle to a loaded module.
@@ -2992,6 +3063,12 @@ func (m Module) Revision() (string, bool) {
 		return "", false
 	}
 	return m.mod.revision, true
+}
+func (m Module) Location() string {
+	if m.mod == nil || m.mod.stmt == nil {
+		return "unknown"
+	}
+	return m.mod.stmt.Location()
 }
 func (m Module) Revisions() []Revision {
 	if m.mod == nil || m.mod.stmt == nil {
@@ -3075,6 +3152,9 @@ func (m Module) Extensions() []Extension {
 		return nil
 	}
 	return m.mod.topLevelExtensionInstances()
+}
+func (m Module) MatchingExtensions(module, name string) []Extension {
+	return matchingExtensions(m.Extensions(), module, name)
 }
 func (m Module) ExtensionDefinitions() []ExtensionDefinition {
 	if m.mod == nil {
@@ -3169,11 +3249,21 @@ func (m Module) FindPath(path string) (SchemaNodeRef, error) {
 		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("nil module"))
 	}
 	if !validAbsoluteSchemaNodeID(path, true) {
-		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("invalid schema path: %s", path))
+		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+			Kind:    SchemaPathErrorInvalid,
+			Path:    path,
+			Segment: path,
+			From:    schemaNodeDataPath(m.mod.root),
+		})
 	}
-	_, n := m.mod.ctx.findNodeBySchemaPath(m.mod, path)
+	_, n, segment, from := m.mod.ctx.findNodeBySchemaPathDetail(m.mod, path, false)
 	if n == nil {
-		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("schema path not found: %s", path))
+		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+			Kind:    SchemaPathErrorNotFound,
+			Path:    path,
+			Segment: segment,
+			From:    schemaNodeDataPath(from),
+		})
 	}
 	return SchemaNodeRef{node: n}, nil
 }
@@ -3274,6 +3364,19 @@ func (n SchemaNodeRef) Name() string {
 	}
 	return n.node.name
 }
+
+// QualifiedName returns the node's local name and defining module identity.
+func (n SchemaNodeRef) QualifiedName() QualifiedName {
+	if n.node == nil || n.node.module == nil {
+		return QualifiedName{}
+	}
+	return QualifiedName{
+		Module:    n.node.module.name,
+		Prefix:    n.node.module.prefix,
+		Namespace: n.node.module.namespace,
+		Name:      n.node.name,
+	}
+}
 func (n SchemaNodeRef) Kind() SchemaNodeKind {
 	if n.node == nil {
 		return SchemaNodeKindUnknown
@@ -3285,6 +3388,12 @@ func (n SchemaNodeRef) Module() Module {
 		return Module{}
 	}
 	return Module{mod: n.node.module}
+}
+func (n SchemaNodeRef) Location() string {
+	if n.node == nil || n.node.stmt == nil {
+		return "unknown"
+	}
+	return n.node.stmt.Location()
 }
 func (n SchemaNodeRef) Description() (string, bool) {
 	if n.node == nil {
@@ -3440,6 +3549,99 @@ func (n SchemaNodeRef) Path() string {
 	}
 	return n.node.path
 }
+
+// QualifiedPath returns an absolute schema path using defining module names.
+func (n SchemaNodeRef) QualifiedPath() string {
+	if n.node == nil {
+		return ""
+	}
+	var parts []string
+	for cur := n.node; cur != nil && cur.kind != SchemaNodeKindModule; cur = cur.parent {
+		if cur.name == "" {
+			continue
+		}
+		name := cur.name
+		if cur.module != nil && cur.module.name != "" {
+			name = cur.module.name + ":" + name
+		}
+		parts = append(parts, name)
+	}
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "/" + strings.Join(parts, "/")
+}
+func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
+	if n.node == nil {
+		return SchemaNodeRef{}, wrap("schema tree", fmt.Errorf("nil schema node"))
+	}
+	if path == "" {
+		return n, nil
+	}
+	if path == "/" || strings.HasSuffix(path, "/") {
+		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+			Kind:    SchemaPathErrorInvalid,
+			Path:    path,
+			Segment: path,
+			From:    n.Path(),
+		})
+	}
+	if strings.HasPrefix(path, "/") {
+		return n.Module().FindPath(path)
+	}
+
+	cur := n
+	for _, part := range strings.Split(path, "/") {
+		if part == "" {
+			return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+				Kind:    SchemaPathErrorInvalid,
+				Path:    path,
+				Segment: part,
+				From:    cur.Path(),
+			})
+		}
+		if part == ".." {
+			parent, ok := cur.Parent()
+			if !ok {
+				return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+					Kind:    SchemaPathErrorNoParent,
+					Path:    path,
+					Segment: part,
+					From:    cur.Path(),
+				})
+			}
+			for parent.Kind() == SchemaNodeKindChoice || parent.Kind() == SchemaNodeKindCase || parent.Kind() == SchemaNodeKindLeaf {
+				next, ok := parent.Parent()
+				if !ok {
+					return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+						Kind:    SchemaPathErrorNoParent,
+						Path:    path,
+						Segment: part,
+						From:    parent.Path(),
+					})
+				}
+				parent = next
+			}
+			cur = parent
+			continue
+		}
+		local := localName(part)
+		child, ok := cur.Children().Lookup(local)
+		if !ok {
+			return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
+				Kind:    SchemaPathErrorNotFound,
+				Path:    path,
+				Segment: part,
+				From:    cur.Path(),
+			})
+		}
+		cur = child
+	}
+	return cur, nil
+}
 func (n SchemaNodeRef) Parent() (SchemaNodeRef, bool) {
 	if n.node == nil || n.node.parent == nil {
 		return SchemaNodeRef{}, false
@@ -3502,6 +3704,9 @@ func (n SchemaNodeRef) Extensions() []Extension {
 		return nil
 	}
 	return append([]Extension(nil), n.node.extensions...)
+}
+func (n SchemaNodeRef) MatchingExtensions(module, name string) []Extension {
+	return matchingExtensions(n.Extensions(), module, name)
 }
 func (n SchemaNodeRef) Extension(name string) (Extension, bool) {
 	if n.node == nil {
@@ -3579,6 +3784,68 @@ func (c SchemaChildren) Lookup(name string) (SchemaNodeRef, bool) {
 	}
 	return SchemaNodeRef{}, false
 }
+
+// LookupAll returns every child with the given local name in schema order.
+func (c SchemaChildren) LookupAll(name string) SchemaChildren {
+	var out []SchemaNodeRef
+	for _, n := range c.nodes {
+		if n.Name() == name {
+			out = append(out, n)
+		}
+	}
+	return SchemaChildren{nodes: out}
+}
+
+// LookupQualified returns the child with the given defining module and local name.
+func (c SchemaChildren) LookupQualified(module, name string) (SchemaNodeRef, bool) {
+	return c.LookupQualifiedName(QualifiedName{Module: module, Name: name})
+}
+
+// LookupQualifiedName returns the child matching all non-empty fields of qname.
+func (c SchemaChildren) LookupQualifiedName(qname QualifiedName) (SchemaNodeRef, bool) {
+	if qname.Name == "" ||
+		(qname.Module == "" && qname.Prefix == "" && qname.Namespace == "") ||
+		strings.TrimSpace(qname.Name) != qname.Name ||
+		strings.TrimSpace(qname.Module) != qname.Module ||
+		strings.TrimSpace(qname.Prefix) != qname.Prefix ||
+		strings.TrimSpace(qname.Namespace) != qname.Namespace {
+		return SchemaNodeRef{}, false
+	}
+	for _, n := range c.nodes {
+		if n.Name() != qname.Name {
+			continue
+		}
+		got := n.QualifiedName()
+		if qname.Module != "" && got.Module != qname.Module {
+			continue
+		}
+		if qname.Prefix != "" && got.Prefix != qname.Prefix {
+			continue
+		}
+		if qname.Namespace != "" && got.Namespace != qname.Namespace {
+			continue
+		}
+		return n, true
+	}
+	return SchemaNodeRef{}, false
+}
+
+// LookupQName returns the child matching all non-empty fields of qname.
+//
+// Deprecated: use LookupQualifiedName.
+func (c SchemaChildren) LookupQName(qname QualifiedName) (SchemaNodeRef, bool) {
+	return c.LookupQualifiedName(qname)
+}
+
+// QualifiedNames returns each child qualified by its defining module, in schema order.
+func (c SchemaChildren) QualifiedNames() []QualifiedName {
+	out := make([]QualifiedName, len(c.nodes))
+	for i, n := range c.nodes {
+		out[i] = n.QualifiedName()
+	}
+	return out
+}
+
 func (c SchemaChildren) Iter() iter.Seq[SchemaNodeRef] {
 	return func(yield func(SchemaNodeRef) bool) {
 		for _, n := range c.nodes {

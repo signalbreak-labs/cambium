@@ -50,3 +50,11 @@ func (s *Statement) Location() string {
 		return fmt.Sprintf("%s:%d:%d", s.file, s.line, s.col)
 	}
 }
+
+// Position returns the raw source position components used by Location.
+func (s *Statement) Position() (file string, line, col int) {
+	if s == nil {
+		return "", 0, 0
+	}
+	return s.file, s.line, s.col
+}

@@ -1,18 +1,132 @@
-# Migrating from goyang with package `compat`
+# Migrating from goyang
 
-This guide covers package `compat`, the cgo-free, goyang-shaped schema projection
-in the **Schema-IR tier (pure Go, `CGO_ENABLED=0`)**. `compat` mirrors the surface
-of goyang's `pkg/yang` — the `Entry` tree, the `Modules` loader, `ToEntry`, the
-`Node` AST, `YangType` — so code written against openconfig/goyang can move with
-minimal changes. The projection is **read-only**: a view into a Cambium-built
-ordered schema, not a mutable tree builder. There is exactly one behavioral
-difference to plan for, and it is the reason the package exists: ordered traversal
-goes through `Entry.Children()` (schema declaration order) rather than iterating the
-`Entry.Dir` map.
+For new code, migrate to the native `cambium` package first. It exposes the
+ordered schema IR directly through `Context`, `Module`, `SchemaNodeRef`, and
+`SchemaChildren`, and it exposes a native raw statement parser through
+`ParseStatements` / `ReadStatements`. It also provides native equivalents for
+common helper-style calls such as `PathsWithModules`, `CamelCase`, source
+locations, prefix/path resolution, extension matching, and YANG numeric/range
+parsing. That path keeps goyang's historical AST and `Entry` model out of your
+application.
+
+Package `compat` remains a cgo-free, goyang-shaped schema projection in the
+**Schema-IR tier (pure Go, `CGO_ENABLED=0`)**. Use it when you need to move
+existing goyang call sites with minimal edits. `compat` mirrors the surface of
+goyang's `pkg/yang` — the `Entry` tree, the `Modules` loader, `ToEntry`, the
+`Node` AST, `YangType` — but the projection is **read-only**: a view into a
+Cambium-built ordered schema, not a mutable tree builder. There is exactly one
+behavioral difference to plan for, and it is the reason the package exists:
+ordered traversal goes through `Entry.Children()` (schema declaration order)
+rather than iterating the `Entry.Dir` map.
 
 The godoc is the API authority. This guide explains the shape and the one
 migration step; for the exact, current symbol set see
 [pkg.go.dev/github.com/signalbreak-labs/cambium/go/compat](https://pkg.go.dev/github.com/signalbreak-labs/cambium/go/compat).
+
+## Prefer the native Cambium API
+
+The native replacement for common goyang read use cases is:
+
+- `ContextBuilder` / `Context` for loading modules from paths or strings.
+- `Context.Schema(module)` for the compiled module handle.
+- `Module.TopLevel()`, `Children()`, `RPCs()`, `Actions()`, and
+  `Notifications()` for ordered schema entry points.
+- `SchemaNodeRef` for node metadata, types, defaults, keys, constraints,
+  extensions, and operation I/O.
+- `ParseStatements(input, name)` and `ReadStatements(path)` for raw YANG
+  statement inspection without the goyang-shaped `compat.Parse`.
+- `PathsWithModules(root)` for module search-path discovery.
+- `CamelCase(name)` for goyang-compatible exported identifier spelling.
+- `Module.Location()` / `SchemaNodeRef.Location()` for source diagnostics.
+- `Module.ResolvePrefix(prefix)` for native prefix-to-module resolution.
+- `SchemaNodeRef.Path()` and `SchemaNodeRef.FindPath(path)` for goyang-style
+  node path inspection and relative traversal.
+- `SchemaNodeRef.QualifiedName()` and `QualifiedPath()` for module-qualified
+  identity and unambiguous paths across augments.
+- `SchemaChildren.LookupAll(name)`, `LookupQualified(module, name)`, and
+  `LookupQualifiedName(qname)` for name collisions introduced by augments.
+- `SchemaPathError` for structured `FindPath` failures via `errors.As`.
+- `Module.MatchingExtensions(module, name)` and
+  `SchemaNodeRef.MatchingExtensions(module, name)` for resolved extension
+  filtering.
+- `Number`, `YRange`, `YangRange`, `ParseInt`, `ParseDecimal`,
+  `ParseRangesInt`, `ParseRangesDecimal`, `FromInt`, `FromUint`, `FromFloat`,
+  and `Frac` for YANG numeric/range helper code.
+
+For example, a raw statement walk can use Cambium's native parser directly:
+
+```go
+stmts, err := cambium.ParseStatements(src, "demo.yang")
+if err != nil {
+    return err
+}
+for _, st := range stmts {
+    arg, _ := st.Argument()
+    fmt.Println(st.Keyword(), arg)
+}
+```
+
+The returned `Statement` handles are read-only and preserve child order through
+`SubStatements()`. They are for source inspection; use `Context.Schema` when you
+need semantic schema resolution.
+
+## Native replacements for common goyang patterns
+
+For code you can afford to move off the goyang-shaped projection, prefer the
+native `cambium` handles directly:
+
+| goyang-style task | Native Cambium call |
+| --- | --- |
+| Load from search paths | `NewContextBuilder`, `SearchPath`, `LoadModule`, `Build` |
+| Get a module by name | `ctx.Schema("module-name")` |
+| Get a module by namespace | `ctx.FindModuleByNamespace("urn:example")` |
+| Walk children in schema order | `node.Children().Iter()` or `DataChildren(true).Iter()` |
+| Point lookup by local name | `node.Children().Lookup("name")` |
+| Discover same-local-name augments | `node.Children().LookupAll("name")` |
+| Resolve an augmented child exactly | `LookupQualified` or `LookupQualifiedName` |
+| Get a stable node identity | `node.QualifiedName()` |
+| Get an unambiguous path | `node.QualifiedPath()` |
+| Relative path traversal | `node.FindPath("../sibling")` |
+| Absolute path traversal | `mod.FindPath("/module:top/module:leaf")` |
+| Handle lookup failure detail | `errors.As(err, &pathErr)` with `*cambium.SchemaPathError` |
+| Read resolved type constraints | `node.LeafType()` and `TypeInfo.Resolved()` |
+| Read declaration source | `mod.Location()` / `node.Location()` |
+
+The largest semantic difference is still traversal order: native Cambium has no
+map traversal contract to remember. You walk `SchemaChildren`, and the order is
+the effective schema declaration order used by serializers and codegen.
+
+Qualified lookup matters when two augmenting modules contribute the same local
+name under the same parent:
+
+```go
+children := top.Children()
+
+for _, qname := range children.QualifiedNames() {
+	fmt.Println(qname.Module, qname.Name)
+}
+
+state, ok := children.LookupQualifiedName(cambium.QualifiedName{
+	Namespace: "urn:vendor:state",
+	Name:      "state",
+})
+if ok {
+	fmt.Println(state.QualifiedPath())
+}
+```
+
+Path lookup errors still carry `CAMBIUM_E0001`, but native callers can inspect
+the underlying cause without matching error strings:
+
+```go
+_, err := mod.FindPath("/vendor-base:top/vendor-base:missing")
+if err != nil {
+	var pathErr *cambium.SchemaPathError
+	if errors.As(err, &pathErr) {
+		fmt.Println(pathErr.Kind, pathErr.Segment, pathErr.From)
+	}
+}
+```
 
 ## What `compat` is for
 
@@ -78,12 +192,14 @@ The method set on `*compat.Modules` is `AddPath(paths ...string)`,
 `Modules`, `SubModules`, `ParseOptions`, and `Path` are present as well, mirroring
 goyang's.
 
-Two package-level conveniences round out the entry points:
+Two package-level conveniences round out the compat entry points:
 
 - `compat.GetModule(name string, sources ...string) (*Entry, []error)` constructs
   the loader, reads each `source`, and returns the projected `Entry` for `name`.
 - `compat.Parse(input, path string) ([]*Statement, error)` parses raw YANG text
-  into the `[]*Statement` AST, matching goyang's `yang.Parse`.
+  with Cambium's native parser, then returns the upstream-shaped `[]*Statement`
+  AST, matching goyang's `yang.Parse` shape. Prefer `cambium.ParseStatements`
+  unless you specifically need the goyang-shaped statement type.
 
 ## Traversal: the one behavioral difference
 
@@ -198,9 +314,9 @@ you are most likely to depend on:
   plus `Lookup`, `Find`, and `GetErrors`).
 - **Type model:** `YangType` and its supporting types.
 - **AST nodes:** `Node` and the common statement node types (`Container`, `Leaf`,
-  `List`, `Grouping`, `Uses`, `RPC`, `Action`, `Notification`, and others) are type
-  aliases to the internal upstream parser, so AST-shaped code carries over.
-  (`Module` is a concrete struct rather than an alias.)
+  `List`, `Grouping`, `Uses`, `RPC`, `Action`, `Notification`, and others) are
+  Cambium-owned, goyang-shaped types. AST-shaped read code carries over, but raw
+  goyang AST values should be loaded through `compat` instead of passed in directly.
 - **Helpers:** `CamelCase`, matching goyang's identifier conversion.
 
 This is a summary, not the contract. The complete, current set of fields, methods,

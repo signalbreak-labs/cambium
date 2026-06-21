@@ -90,6 +90,12 @@ func entryFromCompatModule(module *Module) *Entry {
 		setModuleEntry(module, entry)
 		return entry
 	}
+	if module.Source != nil {
+		if entry := entryFromCompatModuleSource(module); entry != nil {
+			setModuleEntry(module, entry)
+			return entry
+		}
+	}
 	entry := entryFromASTNode(module)
 	if entry != nil {
 		entry.Node = module

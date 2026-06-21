@@ -810,25 +810,16 @@ func modulesFromASTModuleSet(ast *ASTModule) *Modules {
 	}
 	modules := NewModules()
 	for _, module := range ast.Modules.Modules {
-		modules.addASTModuleRecord(module)
+		modules.addModuleRecord(module)
 	}
 	for _, submodule := range ast.Modules.SubModules {
-		modules.addASTModuleRecord(submodule)
+		modules.addModuleRecord(submodule)
 	}
 	return modules
 }
 
-func (ms *Modules) addASTModuleRecord(ast *ASTModule) *Module {
-	if ms == nil || ast == nil {
-		return nil
-	}
-	if ast.Source != nil {
-		record := ms.addModuleDecl(moduleDeclFromStatement(ast.Source, "", ast.BelongsTo != nil))
-		record.Parent = ast.Parent
-		return record
-	}
-	record := moduleFromASTModule(ast)
-	if record == nil {
+func (ms *Modules) addModuleRecord(record *Module) *Module {
+	if ms == nil || record == nil {
 		return nil
 	}
 	record.Modules = ms

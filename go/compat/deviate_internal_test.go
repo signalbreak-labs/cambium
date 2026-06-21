@@ -189,6 +189,15 @@ func TestApplyDeviateNotSupportedMatchesGoyangAndMaintainsOrder(t *testing.T) {
 
 func rawCompatAndUpstreamEntries(t *testing.T, moduleName, source string) (*Entry, *upstream.Entry) {
 	t.Helper()
+	compatModules := NewModules()
+	if err := compatModules.Parse(source, moduleName+".yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules[moduleName]
+	if compatModule == nil {
+		t.Fatalf("compat parsed module %q not found", moduleName)
+	}
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, moduleName+".yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
@@ -197,7 +206,7 @@ func rawCompatAndUpstreamEntries(t *testing.T, moduleName, source string) (*Entr
 	if rawModule == nil {
 		t.Fatalf("upstream parsed module %q not found", moduleName)
 	}
-	return ToEntry(rawModule), upstream.ToEntry(rawModule)
+	return ToEntry(compatModule), upstream.ToEntry(rawModule)
 }
 
 func deviationErrorStrings(errs []error) []string {

@@ -50,3 +50,42 @@ func Example() {
 	// m
 	// a
 }
+
+// ExampleParseStatements parses raw YANG into Cambium's native ordered statement
+// tree without using the goyang-shaped compat package.
+func ExampleParseStatements() {
+	const src = `module statement-demo {
+  namespace "urn:statement-demo";
+  prefix sd;
+  container top {
+    leaf z { type string; }
+    leaf m { type string; }
+    leaf a { type string; }
+  }
+}`
+	stmts, err := cambium.ParseStatements(src, "statement-demo.yang")
+	if err != nil {
+		panic(err)
+	}
+	mod := stmts[0]
+	fmt.Println(mod.Keyword())
+	fmt.Println(mustArgument(mod))
+	for _, child := range mod.SubStatements() {
+		arg, _ := child.Argument()
+		fmt.Println(child.Keyword(), arg)
+	}
+	// Output:
+	// module
+	// statement-demo
+	// namespace urn:statement-demo
+	// prefix sd
+	// container top
+}
+
+func mustArgument(st cambium.Statement) string {
+	arg, ok := st.Argument()
+	if !ok {
+		panic("missing argument")
+	}
+	return arg
+}

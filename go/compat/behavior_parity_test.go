@@ -765,7 +765,7 @@ func compatYangTypeBaseChain(typ *compat.YangType) []string {
 		return out
 	}
 	out = append(out, typ.Base.Name)
-	seen := map[*upstream.YangType]bool{}
+	seen := map[*compat.YangType]bool{}
 	for cur := typ.Base.YangType; cur != nil && !seen[cur]; cur = cur.Base.YangType {
 		seen[cur] = true
 		if cur.Base == nil {

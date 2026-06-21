@@ -125,9 +125,10 @@ The six normative ordering guarantees Cambium implements, defined in
 `/spec/ordering-invariants.md`. The Schema-IR tier guarantees I2 (schema children
 in effective declaration order), I3 (list keys first, in `key` order), and I4
 (RPC/action/notification children in schema order). The libyang backend
-additionally guarantees I1 (`ordered-by user` preserved across round-trip), I5
-(YANG lists/leaf-lists as JSON arrays carrying I1/I2 order), and I6 (gNMI
-`ordered-by user` output as one atomic JSON_IETF subtree, currently future work).
+additionally guarantees I1 (`ordered-by user` preserved across round-trip) and I5
+(YANG lists/leaf-lists as JSON arrays carrying I1/I2 order). I6 (gNMI `ordered-by
+user` output as one atomic JSON_IETF subtree) is specified but not yet wired to a
+gNMI output path, so no tier emits gNMI today.
 The experimental `datatree` tier reproduces I1/I2/I3/I5 over the constructs it
 supports.
 
@@ -153,7 +154,7 @@ handle); in Go it is surfaced via `Error.RuleCode()`.
 
 The effective order in which a container's or list entry's children are declared
 in the YANG schema, after `uses`/grouping expansion and augmentation (RFC 7950
-§7.8.5). This is the RFC-canonical child order that NETCONF servers expect on the
+§7.5.7). This is the RFC-canonical child order that NETCONF servers expect on the
 wire; goyang returns children alphabetically from its `Entry.Dir` map, whereas
 Cambium preserves declaration order because its target use cases
 (NETCONF-facing serialization, typed-struct codegen) depend on it (invariant I2).

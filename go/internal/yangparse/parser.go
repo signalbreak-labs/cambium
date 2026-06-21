@@ -3,8 +3,8 @@
 
 // Package yangparse is Cambium's internal pure-Go YANG parser adapter.
 //
-// It deliberately hides the vendored upstream parser package from public
-// Cambium code so the default Go API owns its parser boundary.
+// It deliberately hides parser implementation details from public Cambium code
+// so the default Go API owns its parser boundary.
 package yangparse
 
 import (
@@ -53,9 +53,7 @@ func ReadFile(path string) (string, error) {
 }
 
 // CheckInputBounds validates parser input limits (size, UTF-8, legal source
-// characters, statement nesting depth) without parsing. It is exported so the
-// goyang-compat layer can apply identical pre-parse safety to its upstream-backed
-// parse path while keeping this package free of any upstream dependency.
+// characters, statement nesting depth) without parsing.
 func CheckInputBounds(input, name string) error {
 	return checkInputBounds(input, name)
 }

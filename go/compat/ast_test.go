@@ -5,6 +5,7 @@ package compat_test
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -70,6 +71,111 @@ func TestParserHelpersExposeGoyangStatementShape(t *testing.T) {
 		!strings.Contains(got, `container "top"`) {
 		t.Fatalf("Statement.Write output = %q, want module and container", got)
 	}
+}
+
+func TestCompatParseMatchesGoyangEdgeCases(t *testing.T) {
+	const bom = "\ufeff"
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "escaped double quoted argument",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; description \"a\\nb\\tc\\\"d\\\\e\"; } }\n",
+		},
+		{
+			name:   "mixed quoted concatenation",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; description \"x\" + 'y' + \"z\"; } }\n",
+		},
+		{
+			name:   "tabs in multiline quote indentation",
+			source: "module m {\n\tnamespace \"u\";\n\tprefix p;\n\tdescription \"a\n\t            b\";\n}\n",
+		},
+		{
+			name:   "bare CR in quoted argument",
+			source: "module m {\n namespace \"u\"; prefix p;\n description \"a  \r b\";\n}\n",
+		},
+		{
+			name:   "CRLF line endings",
+			source: "module m {\r\n namespace \"u\";\r\n prefix p;\r\n description \"l1\r\n l2\";\r\n}\r\n",
+		},
+		{
+			name:   "empty and comment only input",
+			source: "// only a comment\n/* and a block */\n",
+		},
+		{
+			name:   "leading BOM",
+			source: bom + "module m { namespace \"u\"; prefix p; }\n",
+		},
+		{
+			name:   "unquoted concatenation rejected",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; description foo + bar; } }\n",
+		},
+		{
+			name:   "quoted plus unquoted rejected",
+			source: "module m { namespace \"u\"; prefix p; leaf l { type string; default \"a\" + b; } }\n",
+		},
+		{
+			name:   "hash comment rejected",
+			source: "module m { namespace \"u\"; prefix p; # not a YANG comment\n}\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, gotErr := compat.Parse(tt.source, tt.name+".yang")
+			want, wantErr := upstream.Parse(tt.source, tt.name+".yang")
+			if (gotErr == nil) != (wantErr == nil) {
+				t.Fatalf("Parse accept/reject mismatch: compat err=%v goyang err=%v", gotErr, wantErr)
+			}
+			if gotErr != nil {
+				return
+			}
+			if err := compareCompatStatementsToGoyang(got, want); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func compareCompatStatementsToGoyang(got []*compat.Statement, want []*upstream.Statement) error {
+	if len(got) != len(want) {
+		return fmt.Errorf("statement count compat=%d goyang=%d", len(got), len(want))
+	}
+	for i := range got {
+		if err := compareCompatStatementToGoyang(got[i], want[i], fmt.Sprintf("statements[%d]", i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func compareCompatStatementToGoyang(got *compat.Statement, want *upstream.Statement, path string) error {
+	switch {
+	case got == nil && want == nil:
+		return nil
+	case got == nil || want == nil:
+		return fmt.Errorf("%s nil mismatch compat=%v goyang=%v", path, got == nil, want == nil)
+	case got.Keyword != want.Keyword:
+		return fmt.Errorf("%s keyword compat=%q goyang=%q", path, got.Keyword, want.Keyword)
+	case got.HasArgument != want.HasArgument:
+		return fmt.Errorf("%s has-argument compat=%v goyang=%v", path, got.HasArgument, want.HasArgument)
+	case got.Argument != want.Argument:
+		return fmt.Errorf("%s argument compat=%q goyang=%q", path, got.Argument, want.Argument)
+	case got.Location() != want.Location():
+		return fmt.Errorf("%s location compat=%q goyang=%q", path, got.Location(), want.Location())
+	}
+	gotChildren := got.SubStatements()
+	wantChildren := want.SubStatements()
+	if len(gotChildren) != len(wantChildren) {
+		return fmt.Errorf("%s child count compat=%d goyang=%d", path, len(gotChildren), len(wantChildren))
+	}
+	for i := range gotChildren {
+		if err := compareCompatStatementToGoyang(gotChildren[i], wantChildren[i], fmt.Sprintf("%s[%d]", path, i)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestPathsWithModules(t *testing.T) {
@@ -246,24 +352,32 @@ func TestFindModuleByPrefixResolvesImportedASTModuleLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
 	upstreamModules := upstream.NewModules()
 	for name, source := range map[string]string{
 		"compat-prefix-import.yang": importSource,
 		"compat-prefix-main.yang":   mainSource,
 	} {
+		if err := compatModules.Parse(source, name); err != nil {
+			t.Fatalf("compat Parse(%s): %v", name, err)
+		}
 		if err := upstreamModules.Parse(source, name); err != nil {
 			t.Fatalf("upstream Parse(%s): %v", name, err)
 		}
 	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
 	if errs := upstreamModules.Process(); len(errs) != 0 {
 		t.Fatalf("upstream Process: %v", errs)
 	}
+	compatTop := compat.ChildNode(compatModules.Modules["compat-prefix-main"], "top")
 	upstreamTop := upstream.ChildNode(upstreamModules.Modules["compat-prefix-main"], "top")
-	if upstreamTop == nil {
-		t.Fatal("upstream ChildNode(top) returned nil")
+	if compatTop == nil || upstreamTop == nil {
+		t.Fatalf("ChildNode(top) = (%#v,%#v), want both non-nil", compatTop, upstreamTop)
 	}
 
-	got := compat.FindModuleByPrefix(upstreamTop, "cpi")
+	got := compat.FindModuleByPrefix(compatTop, "cpi")
 	want := upstream.FindModuleByPrefix(upstreamTop, "cpi")
 	if got == nil || want == nil {
 		t.Fatalf("FindModuleByPrefix(imported AST prefix) = (%#v,%#v), want both non-nil", got, want)
@@ -338,6 +452,38 @@ func TestFindModuleByPrefixFromSubmoduleMatchesGoyang(t *testing.T) {
 	}
 	if got != nil && (got.Name != want.Name || got.Kind() != want.Kind()) {
 		t.Fatalf("FindModuleByPrefix(submodule owner name) = %s:%s, want goyang %s:%s", got.Kind(), got.Name, want.Kind(), want.Name)
+	}
+}
+
+func TestFindModuleByPrefixDoesNotTreatModuleNameAsPrefix(t *testing.T) {
+	source := `module compat-prefix-name {
+    namespace "urn:compat-prefix-name";
+    prefix cpn;
+
+    container top {
+        leaf value { type string; }
+    }
+}
+`
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-prefix-name.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	upstreamModules := upstream.NewModules()
+	if err := upstreamModules.Parse(source, "compat-prefix-name.yang"); err != nil {
+		t.Fatalf("upstream Parse: %v", err)
+	}
+
+	compatTop := compat.ChildNode(compatModules.Modules["compat-prefix-name"], "top")
+	upstreamTop := upstream.ChildNode(upstreamModules.Modules["compat-prefix-name"], "top")
+	if compatTop == nil || upstreamTop == nil {
+		t.Fatalf("ChildNode(top) = (%#v,%#v), want both non-nil", compatTop, upstreamTop)
+	}
+
+	got := compat.FindModuleByPrefix(compatTop, "compat-prefix-name")
+	want := upstream.FindModuleByPrefix(upstreamTop, "compat-prefix-name")
+	if (got == nil) != (want == nil) {
+		t.Fatalf("FindModuleByPrefix(module name) nil = %v, want goyang %v", got == nil, want == nil)
 	}
 }
 
@@ -1007,6 +1153,19 @@ func TestToEntryASTModuleStoreUsesMatchesGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	compatModules.ParseOptions.StoreUses = true
+	if err := compatModules.Parse(source, "compat-ast-store-uses.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
+	compatModule := compatModules.Modules["compat-ast-store-uses"]
+	if compatModule == nil {
+		t.Fatal("compat parsed module not found")
+	}
+
 	upstreamModules := upstream.NewModules()
 	upstreamModules.ParseOptions.StoreUses = true
 	if err := upstreamModules.Parse(source, "compat-ast-store-uses.yang"); err != nil {
@@ -1016,7 +1175,7 @@ func TestToEntryASTModuleStoreUsesMatchesGoyang(t *testing.T) {
 		t.Fatalf("upstream Process: %v", errs)
 	}
 	rawModule := upstreamModules.Modules["compat-ast-store-uses"]
-	compatRoot := compat.ToEntry(rawModule)
+	compatRoot := compat.ToEntry(compatModule)
 	upstreamRoot := upstream.ToEntry(rawModule)
 
 	compatTop := compatRoot.Find("top")
@@ -1025,14 +1184,14 @@ func TestToEntryASTModuleStoreUsesMatchesGoyang(t *testing.T) {
 		t.Fatalf("Find(top) = (%#v,%#v), want both non-nil", compatTop, upstreamTop)
 	}
 	if got, want := len(compatTop.Uses), len(upstreamTop.Uses); got != want {
-		t.Fatalf("ToEntry(upstream module) top Uses len = %d, want goyang %d", got, want)
+		t.Fatalf("ToEntry(module) top Uses len = %d, want goyang %d", got, want)
 	}
 	if len(compatTop.Uses) != 0 {
 		if got, want := compatTop.Uses[0].Uses.Name, upstreamTop.Uses[0].Uses.Name; got != want {
-			t.Fatalf("ToEntry(upstream module) top Uses[0].Uses.Name = %q, want goyang %q", got, want)
+			t.Fatalf("ToEntry(module) top Uses[0].Uses.Name = %q, want goyang %q", got, want)
 		}
 		if got, want := compatTop.Uses[0].Grouping.Name, upstreamTop.Uses[0].Grouping.Name; got != want {
-			t.Fatalf("ToEntry(upstream module) top Uses[0].Grouping.Name = %q, want goyang %q", got, want)
+			t.Fatalf("ToEntry(module) top Uses[0].Grouping.Name = %q, want goyang %q", got, want)
 		}
 	}
 }
@@ -1203,6 +1362,19 @@ func TestToEntryASTModuleExpandsImportedAndIncludedUsesLikeGoyang(t *testing.T) 
 	writeYANG(t, filepath.Join(dir, "compat-to-entry-foreign-import.yang"), importSource)
 	writeYANG(t, filepath.Join(dir, "compat-to-entry-foreign-sub.yang"), submoduleSource)
 
+	compatModules := compat.NewModules()
+	compatModules.AddPath(dir)
+	if err := compatModules.Read("compat-to-entry-foreign-uses"); err != nil {
+		t.Fatalf("compat Read: %v", err)
+	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-foreign-uses"]
+	if compatModule == nil {
+		t.Fatal("compat module not recorded")
+	}
+
 	upstreamModules := upstream.NewModules()
 	upstreamModules.AddPath(dir)
 	if err := upstreamModules.Read("compat-to-entry-foreign-uses"); err != nil {
@@ -1212,7 +1384,7 @@ func TestToEntryASTModuleExpandsImportedAndIncludedUsesLikeGoyang(t *testing.T) 
 		t.Fatalf("upstream Process: %v", errs)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-foreign-uses"]
-	compatEntry := compat.ToEntry(rawModule)
+	compatEntry := compat.ToEntry(compatModule)
 	if errs := compatEntry.GetErrors(); len(errs) != 0 {
 		t.Fatalf("compat ToEntry errors = %v", errs)
 	}
@@ -1307,20 +1479,12 @@ func TestToEntryASTFindImportedAbsolutePrefixMatchesGoyang(t *testing.T) {
 	if compatFound.Name != upstreamFound.Name || compatFound.Kind.String() != upstreamFound.Kind.String() {
 		t.Fatalf("compat ToEntry Find(%q) = %s/%s, want goyang %s/%s", path, compatFound.Name, compatFound.Kind, upstreamFound.Name, upstreamFound.Kind)
 	}
-	compatRawEntry := compat.ToEntry(upstreamModule)
-	compatRawFound := compatRawEntry.Find(path)
-	if compatRawFound == nil {
-		t.Fatalf("compat ToEntry(upstream module) Find(%q) = nil, want goyang %s", path, upstreamFound.Name)
+	compatFoundModules := compatFound.Modules()
+	if compatFoundModules == nil {
+		t.Fatalf("compat ToEntry(module) Find(%q).Modules = nil, want module set", path)
 	}
-	if compatRawFound.Name != upstreamFound.Name || compatRawFound.Kind.String() != upstreamFound.Kind.String() {
-		t.Fatalf("compat ToEntry(upstream module) Find(%q) = %s/%s, want goyang %s/%s", path, compatRawFound.Name, compatRawFound.Kind, upstreamFound.Name, upstreamFound.Kind)
-	}
-	compatRawModules := compatRawFound.Modules()
-	if compatRawModules == nil {
-		t.Fatalf("compat ToEntry(upstream module) Find(%q).Modules = nil, want goyang module set", path)
-	}
-	if imported, err := compatRawModules.FindModuleByNamespace("urn:compat-to-entry-find-imported"); err != nil || imported.Name != "compat-to-entry-find-imported" {
-		t.Fatalf("compat ToEntry(upstream module) imported namespace lookup = (%#v,%v), want compat-to-entry-find-imported,nil", imported, err)
+	if imported, err := compatFoundModules.FindModuleByNamespace("urn:compat-to-entry-find-imported"); err != nil || imported.Name != "compat-to-entry-find-imported" {
+		t.Fatalf("compat ToEntry(module) imported namespace lookup = (%#v,%v), want compat-to-entry-find-imported,nil", imported, err)
 	}
 }
 
@@ -1346,6 +1510,19 @@ func TestToEntryASTSubmoduleNamespaceMatchesGoyang(t *testing.T) {
 	writeYANG(t, filepath.Join(dir, "compat-to-entry-submodule-main.yang"), mainSource)
 	writeYANG(t, filepath.Join(dir, "compat-to-entry-submodule-child.yang"), submoduleSource)
 
+	compatModules := compat.NewModules()
+	compatModules.AddPath(dir)
+	if err := compatModules.Read("compat-to-entry-submodule-main"); err != nil {
+		t.Fatalf("compat Read: %v", err)
+	}
+	if err := compatModules.Read("compat-to-entry-submodule-child"); err != nil {
+		t.Fatalf("compat Read submodule: %v", err)
+	}
+	compatSubmodule := compatModules.SubModules["compat-to-entry-submodule-child"]
+	if compatSubmodule == nil {
+		t.Fatal("compat submodule not recorded")
+	}
+
 	upstreamModules := upstream.NewModules()
 	upstreamModules.AddPath(dir)
 	if err := upstreamModules.Read("compat-to-entry-submodule-main"); err != nil {
@@ -1358,7 +1535,7 @@ func TestToEntryASTSubmoduleNamespaceMatchesGoyang(t *testing.T) {
 	if rawSubmodule == nil {
 		t.Fatal("upstream submodule not recorded")
 	}
-	compatEntry := compat.ToEntry(rawSubmodule)
+	compatEntry := compat.ToEntry(compatSubmodule)
 	upstreamEntry := upstream.ToEntry(rawSubmodule)
 	compatFound := compatEntry.Find("from-submodule/value")
 	upstreamFound := upstreamEntry.Find("from-submodule/value")
@@ -1368,11 +1545,11 @@ func TestToEntryASTSubmoduleNamespaceMatchesGoyang(t *testing.T) {
 	if got, want := valueName(compatFound.Namespace()), upstreamValueName(upstreamFound.Namespace()); got != want {
 		t.Fatalf("submodule leaf Namespace = %q, want goyang %q", got, want)
 	}
-	compatModules := compatFound.Modules()
-	if compatModules == nil {
+	foundModules := compatFound.Modules()
+	if foundModules == nil {
 		t.Fatal("submodule leaf Modules = nil, want goyang module set")
 	}
-	if parent, err := compatModules.FindModuleByNamespace("urn:compat-to-entry-submodule-main"); err != nil || parent.Name != "compat-to-entry-submodule-main" {
+	if parent, err := foundModules.FindModuleByNamespace("urn:compat-to-entry-submodule-main"); err != nil || parent.Name != "compat-to-entry-submodule-main" {
 		t.Fatalf("submodule parent namespace lookup = (%#v,%v), want compat-to-entry-submodule-main,nil", parent, err)
 	}
 	gotModule, gotErr := compatFound.InstantiatingModule()
@@ -1449,20 +1626,28 @@ func TestToEntryASTMatchingEntryExtensionsMatchesGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
 	upstreamModules := upstream.NewModules()
 	for name, source := range map[string]string{
 		"compat-to-entry-ext-def.yang":  defSource,
 		"compat-to-entry-ext-user.yang": userSource,
 	} {
+		if err := compatModules.Parse(source, name); err != nil {
+			t.Fatalf("compat Parse(%s): %v", name, err)
+		}
 		if err := upstreamModules.Parse(source, name); err != nil {
 			t.Fatalf("upstream Parse(%s): %v", name, err)
 		}
 	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
 	if errs := upstreamModules.Process(); len(errs) != 0 {
 		t.Fatalf("upstream Process: %v", errs)
 	}
+	compatModule := compatModules.Modules["compat-to-entry-ext-user"]
 	rawModule := upstreamModules.Modules["compat-to-entry-ext-user"]
-	compatTagged := compat.ToEntry(rawModule).Find("top/tagged")
+	compatTagged := compat.ToEntry(compatModule).Find("top/tagged")
 	upstreamTagged := upstream.ToEntry(rawModule).Find("top/tagged")
 	if compatTagged == nil || upstreamTagged == nil {
 		t.Fatalf("Find(top/tagged) = (%#v,%#v), want both non-nil", compatTagged, upstreamTagged)
@@ -1501,6 +1686,12 @@ func TestToEntryASTModulePropagatesUsesMetadataLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-uses-metadata.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-uses-metadata"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-uses-metadata.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
@@ -1509,7 +1700,7 @@ func TestToEntryASTModulePropagatesUsesMetadataLikeGoyang(t *testing.T) {
 		t.Fatalf("upstream Process: %v", errs)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-uses-metadata"]
-	compatLeaf := compat.ToEntry(rawModule).Find("top/grouped")
+	compatLeaf := compat.ToEntry(compatModule).Find("top/grouped")
 	upstreamLeaf := upstream.ToEntry(rawModule).Find("top/grouped")
 	if compatLeaf == nil || upstreamLeaf == nil {
 		t.Fatalf("Find(top/grouped) = (%#v,%#v), want both non-nil", compatLeaf, upstreamLeaf)
@@ -1540,6 +1731,15 @@ func TestToEntryUsesNodeMatchesGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-uses-node.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
+	compatUses := compatModules.Modules["compat-to-entry-uses-node"].Container[0].Uses[0]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-uses-node.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
@@ -1548,7 +1748,7 @@ func TestToEntryUsesNodeMatchesGoyang(t *testing.T) {
 		t.Fatalf("upstream Process: %v", errs)
 	}
 	uses := upstreamModules.Modules["compat-to-entry-uses-node"].Container[0].Uses[0]
-	compatEntry := compat.ToEntry(uses)
+	compatEntry := compat.ToEntry(compatUses)
 	upstreamEntry := upstream.ToEntry(uses)
 	if compatEntry == nil || upstreamEntry == nil {
 		t.Fatalf("ToEntry(uses) = (%#v,%#v), want both non-nil", compatEntry, upstreamEntry)
@@ -1580,6 +1780,15 @@ func TestToEntryGroupingNodeMatchesGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-grouping-node.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
+	compatGrouping := compatModules.Modules["compat-to-entry-grouping-node"].Grouping[1]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-grouping-node.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
@@ -1588,7 +1797,7 @@ func TestToEntryGroupingNodeMatchesGoyang(t *testing.T) {
 		t.Fatalf("upstream Process: %v", errs)
 	}
 	grouping := upstreamModules.Modules["compat-to-entry-grouping-node"].Grouping[1]
-	compatEntry := compat.ToEntry(grouping)
+	compatEntry := compat.ToEntry(compatGrouping)
 	upstreamEntry := upstream.ToEntry(grouping)
 	if compatEntry == nil || upstreamEntry == nil {
 		t.Fatalf("ToEntry(grouping) = (%#v,%#v), want both non-nil", compatEntry, upstreamEntry)
@@ -1631,12 +1840,18 @@ func TestToEntryASTModuleRecordsAugmentsAndDeviationsLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-augment-deviation.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-augment-deviation"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-augment-deviation.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-augment-deviation"]
-	compatEntry := compat.ToEntry(rawModule)
+	compatEntry := compat.ToEntry(compatModule)
 	upstreamEntry := upstream.ToEntry(rawModule)
 
 	if got, want := len(compatEntry.Augments), len(upstreamEntry.Augments); got != want {
@@ -1662,7 +1877,7 @@ func TestToEntryASTModuleRecordsAugmentsAndDeviationsLikeGoyang(t *testing.T) {
 		t.Fatalf("ToEntry(module).Deviations[0].DeviatedPath = %q, want goyang %q", got, want)
 	}
 
-	compatDeviation := compat.ToEntry(rawModule.Deviation[0])
+	compatDeviation := compat.ToEntry(compatModule.Deviation[0])
 	upstreamDeviation := upstream.ToEntry(rawModule.Deviation[0])
 	if compatDeviation == nil || upstreamDeviation == nil {
 		t.Fatalf("ToEntry(deviation) = (%#v,%#v), want both non-nil", compatDeviation, upstreamDeviation)
@@ -1682,7 +1897,7 @@ func TestToEntryASTModuleRecordsAugmentsAndDeviationsLikeGoyang(t *testing.T) {
 		t.Fatalf("ToEntry(deviate).Units = %q, want goyang %q", got, want)
 	}
 
-	compatAugment := compat.ToEntry(rawModule.Augment[0])
+	compatAugment := compat.ToEntry(compatModule.Augment[0])
 	upstreamAugment := upstream.ToEntry(rawModule.Augment[0])
 	if compatAugment == nil || upstreamAugment == nil {
 		t.Fatalf("ToEntry(augment) = (%#v,%#v), want both non-nil", compatAugment, upstreamAugment)
@@ -1708,24 +1923,30 @@ func TestToEntryDirectRPCAndModuleRPCIOMatchesGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-rpc-direct.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-rpc-direct"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-rpc-direct.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-rpc-direct"]
 
-	compatPing := compat.ToEntry(rawModule.RPC[0])
+	compatPing := compat.ToEntry(compatModule.RPC[0])
 	upstreamPing := upstream.ToEntry(rawModule.RPC[0])
 	if (compatPing.RPC == nil) != (upstreamPing.RPC == nil) {
 		t.Fatalf("direct ToEntry(empty rpc).RPC nil = %v, want goyang %v", compatPing.RPC == nil, upstreamPing.RPC == nil)
 	}
 
-	compatRoot := compat.ToEntry(rawModule)
+	compatRoot := compat.ToEntry(compatModule)
 	upstreamRoot := upstream.ToEntry(rawModule)
 	if (compatRoot.Find("ping/input") == nil) != (upstreamRoot.Find("ping/input") == nil) {
 		t.Fatalf("module ToEntry Find(ping/input) nil = %v, want goyang %v", compatRoot.Find("ping/input") == nil, upstreamRoot.Find("ping/input") == nil)
 	}
-	compatReset := compat.ToEntry(rawModule.RPC[1])
+	compatReset := compat.ToEntry(compatModule.RPC[1])
 	upstreamReset := upstream.ToEntry(rawModule.RPC[1])
 	if (compatReset.RPC == nil) != (upstreamReset.RPC == nil) {
 		t.Fatalf("direct ToEntry(rpc with io).RPC nil = %v, want goyang %v", compatReset.RPC == nil, upstreamReset.RPC == nil)
@@ -1769,12 +1990,18 @@ func TestToEntryASTMetadataExtrasAndChoiceDefaultLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-extra.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-extra"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-extra.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-extra"]
-	compatEntry := compat.ToEntry(rawModule)
+	compatEntry := compat.ToEntry(compatModule)
 	upstreamEntry := upstream.ToEntry(rawModule)
 
 	compatTop := compatEntry.Find("top")
@@ -1824,21 +2051,28 @@ func TestToEntryAnydataAnyxmlDirectoryShapeMatchesGoyang(t *testing.T) {
     anyxml markup;
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-any.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-any"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-any.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-any"]
 	for _, tt := range []struct {
-		name string
-		node upstream.Node
+		name         string
+		compatNode   compat.Node
+		upstreamNode upstream.Node
 	}{
-		{name: "anydata", node: rawModule.Anydata[0]},
-		{name: "anyxml", node: rawModule.Anyxml[0]},
+		{name: "anydata", compatNode: compatModule.Anydata[0], upstreamNode: rawModule.Anydata[0]},
+		{name: "anyxml", compatNode: compatModule.Anyxml[0], upstreamNode: rawModule.Anyxml[0]},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			compatEntry := compat.ToEntry(tt.node)
-			upstreamEntry := upstream.ToEntry(tt.node)
+			compatEntry := compat.ToEntry(tt.compatNode)
+			upstreamEntry := upstream.ToEntry(tt.upstreamNode)
 			if compatEntry == nil || upstreamEntry == nil {
 				t.Fatalf("ToEntry(%s) = (%#v,%#v), want both non-nil", tt.name, compatEntry, upstreamEntry)
 			}
@@ -1874,12 +2108,18 @@ func TestToEntryASTMalformedScalarsReportErrorsLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-invalid-scalars.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-invalid-scalars"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-invalid-scalars.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-invalid-scalars"]
-	compatErrors := compat.ToEntry(rawModule).GetErrors()
+	compatErrors := compat.ToEntry(compatModule).GetErrors()
 	upstreamErrors := upstream.ToEntry(rawModule).GetErrors()
 	if len(upstreamErrors) == 0 {
 		t.Fatal("upstream ToEntry errors = empty, test fixture does not exercise malformed scalar parity")
@@ -1913,12 +2153,18 @@ func TestToEntryASTTypedefChainResolvesLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-typedef-chain.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-typedef-chain"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-typedef-chain.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-typedef-chain"]
-	compatLeaf := compat.ToEntry(rawModule).Find("top/value")
+	compatLeaf := compat.ToEntry(compatModule).Find("top/value")
 	upstreamLeaf := upstream.ToEntry(rawModule).Find("top/value")
 	if compatLeaf == nil || upstreamLeaf == nil {
 		t.Fatalf("Find(top/value) = (%#v,%#v), want both non-nil", compatLeaf, upstreamLeaf)
@@ -1956,20 +2202,28 @@ func TestToEntryASTImportedTypedefResolvesLikeGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
 	upstreamModules := upstream.NewModules()
 	for name, source := range map[string]string{
 		"compat-to-entry-typedef-imported.yang":    importSource,
 		"compat-to-entry-typedef-import-main.yang": mainSource,
 	} {
+		if err := compatModules.Parse(source, name); err != nil {
+			t.Fatalf("compat Parse(%s): %v", name, err)
+		}
 		if err := upstreamModules.Parse(source, name); err != nil {
 			t.Fatalf("upstream Parse(%s): %v", name, err)
 		}
 	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
 	if errs := upstreamModules.Process(); len(errs) != 0 {
 		t.Fatalf("upstream Process: %v", errs)
 	}
+	compatModule := compatModules.Modules["compat-to-entry-typedef-import-main"]
 	rawModule := upstreamModules.Modules["compat-to-entry-typedef-import-main"]
-	compatLeaf := compat.ToEntry(rawModule).Find("value")
+	compatLeaf := compat.ToEntry(compatModule).Find("value")
 	upstreamLeaf := upstream.ToEntry(rawModule).Find("value")
 	if compatLeaf == nil || upstreamLeaf == nil {
 		t.Fatalf("Find(value) = (%#v,%#v), want both non-nil", compatLeaf, upstreamLeaf)
@@ -2225,6 +2479,15 @@ func TestToEntryASTRichTypeMetadataMatchesGoyang(t *testing.T) {
     }
 }
 `
+	compatModules := compat.NewModules()
+	if err := compatModules.Parse(source, "compat-to-entry-rich-types.yang"); err != nil {
+		t.Fatalf("compat Parse: %v", err)
+	}
+	if errs := compatModules.Process(); len(errs) != 0 {
+		t.Fatalf("compat Process: %v", errs)
+	}
+	compatModule := compatModules.Modules["compat-to-entry-rich-types"]
+
 	upstreamModules := upstream.NewModules()
 	if err := upstreamModules.Parse(source, "compat-to-entry-rich-types.yang"); err != nil {
 		t.Fatalf("upstream Parse: %v", err)
@@ -2233,7 +2496,7 @@ func TestToEntryASTRichTypeMetadataMatchesGoyang(t *testing.T) {
 		t.Fatalf("upstream Process: %v", errs)
 	}
 	rawModule := upstreamModules.Modules["compat-to-entry-rich-types"]
-	compatRoot := compat.ToEntry(rawModule)
+	compatRoot := compat.ToEntry(compatModule)
 	upstreamRoot := upstream.ToEntry(rawModule)
 	for _, path := range []string{
 		"top/ranged-int",

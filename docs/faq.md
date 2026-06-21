@@ -2,7 +2,9 @@
 
 Short answers to the questions that come up most when teams first evaluate
 Cambium. For the long-form rationale and the design response see
-[overview.md](./overview.md).
+[overview.md](./overview.md); to start coding, see [install](./guides/install.md) and
+the [quickstart](./guides/quickstart.md). Unfamiliar YANG/NETCONF terms (JSON_IETF,
+leafref, `ordered-by user`, LYB) are defined in the [glossary](./glossary.md).
 
 ## Why not just use goyang or ygot?
 
@@ -12,8 +14,8 @@ in the same ecosystem; both are good fits for a large class of YANG work — loo
 analysis, validation, OpenConfig-style modeling and codegen.
 
 Cambium targets a narrower use case: workflows where **schema declaration order**
-is load-bearing. RFC 7950 §7.8.5 says a container/list entry's children appear in
-schema declaration order, and order-correct, NETCONF-facing serialization plus
+matters. RFC 7950 says a container's (§7.5.7) or list entry's (§7.8.5)
+children appear in schema declaration order, and order-correct, NETCONF-facing serialization plus
 typed-struct codegen need the tree to remember that order. goyang stores a node's
 effective children in a Go map (`Entry.Dir map[string]*Entry`) and returns them
 alphabetically — a reasonable choice for its goals, but not the declaration order
@@ -36,7 +38,7 @@ packages. This is not a convention you have to trust; it is machine-enforced by
 into the default closure.
 
 ```bash
-cd go && CGO_ENABLED=0 go test ./cambium ./codegen ./compat
+cd go && CGO_ENABLED=0 go test ./cambium ./codegen ./compat ./datatree
 ```
 
 That tier covers YANG parse into the ordered schema IR, introspection,
@@ -63,8 +65,9 @@ the cgo build requirement.
   needs cgo and a one-time native build. Use it for production-grade data work.
 
 So: cgo-free and you can live with churn → `datatree`; complete and stable →
-the libyang backend. When in doubt, use the backend. The next two questions cover
-the backend specifically.
+the libyang backend. When in doubt, prefer the backend for its stability — accepting
+the one-time cgo build that buys it. The next two questions cover the backend
+specifically.
 
 ## What happens to `ordered-by system` device order?
 

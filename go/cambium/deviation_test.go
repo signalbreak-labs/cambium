@@ -6,6 +6,7 @@ package cambium_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
@@ -393,6 +394,245 @@ func TestDeviationNotSupportedRemovesTopLevelNode(t *testing.T) {
 	}
 	if _, err := mod.FindPath("/cdnst:bar"); err != nil {
 		t.Fatalf("FindPath /cdnst:bar: %v", err)
+	}
+}
+
+func TestDeviationAddOnGroupingUseDoesNotAliasOtherUses(t *testing.T) {
+	t.Helper()
+	dir := deviationTestDir(t)
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-grouping-isolation-target.yang"), []byte(`module cambium-deviate-grouping-isolation-target {
+    namespace "urn:cambium:deviate-grouping-isolation-target";
+    prefix cdgit;
+    yang-version 1.1;
+
+    grouping common {
+        list item {
+            key "name";
+            leaf name { type string; }
+        }
+        leaf value {
+            type string;
+        }
+    }
+
+    container c1 {
+        uses common;
+    }
+
+    container c2 {
+        uses common;
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-grouping-isolation-source.yang"), []byte(`module cambium-deviate-grouping-isolation-source {
+    namespace "urn:cambium:deviate-grouping-isolation-source";
+    prefix cdgis;
+    yang-version 1.1;
+
+    import cambium-deviate-grouping-isolation-target {
+        prefix tgt;
+    }
+
+    deviation "/tgt:c1/tgt:item" {
+        deviate add {
+            min-elements 1;
+            max-elements 5;
+        }
+    }
+
+    deviation "/tgt:c2/tgt:value" {
+        deviate add {
+            default "only-c2";
+        }
+    }
+}
+`))
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"cambium-deviate-grouping-isolation-target", "cambium-deviate-grouping-isolation-source"} {
+		if err := ctx.LoadModule(name); err != nil {
+			t.Fatalf("LoadModule %s: %v", name, err)
+		}
+	}
+
+	mod, err := ctx.Schema("cambium-deviate-grouping-isolation-target")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	c1Item := mustFindPath(t, mod, "/cdgit:c1/cdgit:item")
+	c2Item := mustFindPath(t, mod, "/cdgit:c2/cdgit:item")
+	c1Value := mustFindPath(t, mod, "/cdgit:c1/cdgit:value")
+	c2Value := mustFindPath(t, mod, "/cdgit:c2/cdgit:value")
+
+	if got, ok := c1Item.MinElements(); !ok || got != 1 {
+		t.Fatalf("c1 item MinElements() = %d, %v, want 1, true", got, ok)
+	}
+	if got, ok := c1Item.MaxElements(); !ok || got != 5 {
+		t.Fatalf("c1 item MaxElements() = %d, %v, want 5, true", got, ok)
+	}
+	if got, ok := c2Item.MinElements(); ok {
+		t.Fatalf("c2 item MinElements() = %d, true, want unset", got)
+	}
+	if got, ok := c2Item.MaxElements(); ok {
+		t.Fatalf("c2 item MaxElements() = %d, true, want unset", got)
+	}
+	if got := c1Value.DefaultValues(); len(got) != 0 {
+		t.Fatalf("c1 value DefaultValues() = %v, want empty", got)
+	}
+	if got, want := c2Value.DefaultValues(), []string{"only-c2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("c2 value DefaultValues() = %v, want %v", got, want)
+	}
+	if got, want := deviationProperties(c1Item.DeviationProvenance()), []string{"min-elements", "max-elements"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("c1 item deviation properties = %v, want %v", got, want)
+	}
+	if got := len(c2Item.DeviationProvenance()); got != 0 {
+		t.Fatalf("c2 item DeviationProvenance() len = %d, want 0", got)
+	}
+	if got := len(c1Value.DeviationProvenance()); got != 0 {
+		t.Fatalf("c1 value DeviationProvenance() len = %d, want 0", got)
+	}
+	if got, want := deviationProperties(c2Value.DeviationProvenance()), []string{"default"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("c2 value deviation properties = %v, want %v", got, want)
+	}
+}
+
+func TestDeviationTargetsAugmentedSameLocalNameByPrefix(t *testing.T) {
+	t.Helper()
+	dir := deviationTestDir(t)
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-augment-collision-target.yang"), []byte(`module cambium-deviate-augment-collision-target {
+    namespace "urn:cambium:deviate-augment-collision-target";
+    prefix cdact;
+    yang-version 1.1;
+
+    container top {
+        leaf state {
+            type string;
+        }
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-augment-collision-augment.yang"), []byte(`module cambium-deviate-augment-collision-augment {
+    namespace "urn:cambium:deviate-augment-collision-augment";
+    prefix cdaca;
+    yang-version 1.1;
+
+    import cambium-deviate-augment-collision-target {
+        prefix tgt;
+    }
+
+    augment "/tgt:top" {
+        leaf state {
+            type boolean;
+        }
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-augment-collision-source.yang"), []byte(`module cambium-deviate-augment-collision-source {
+    namespace "urn:cambium:deviate-augment-collision-source";
+    prefix cdacs;
+    yang-version 1.1;
+
+    import cambium-deviate-augment-collision-target {
+        prefix tgt;
+    }
+    import cambium-deviate-augment-collision-augment {
+        prefix aug;
+    }
+
+    deviation "/tgt:top/aug:state" {
+        deviate replace {
+            type uint8;
+        }
+    }
+}
+`))
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"cambium-deviate-augment-collision-target",
+		"cambium-deviate-augment-collision-augment",
+		"cambium-deviate-augment-collision-source",
+	} {
+		if err := ctx.LoadModule(name); err != nil {
+			t.Fatalf("LoadModule %s: %v", name, err)
+		}
+	}
+
+	mod, err := ctx.Schema("cambium-deviate-augment-collision-target")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	top := mustFindPath(t, mod, "/cdact:top")
+	states := top.Children().LookupAll("state")
+	if states.Len() != 2 {
+		t.Fatalf("state sibling count = %d, want 2", states.Len())
+	}
+	baseState, ok := states.LookupQualified("cambium-deviate-augment-collision-target", "state")
+	if !ok {
+		t.Fatal("base state not found by qualified lookup")
+	}
+	augState, ok := states.LookupQualified("cambium-deviate-augment-collision-augment", "state")
+	if !ok {
+		t.Fatal("augmented state not found by qualified lookup")
+	}
+
+	assertBaseType(t, baseState, cambium.BaseTypeString)
+	assertBaseType(t, augState, cambium.BaseTypeUint8)
+	if got := len(baseState.DeviationProvenance()); got != 0 {
+		t.Fatalf("base state DeviationProvenance() len = %d, want 0", got)
+	}
+	if got, want := deviationProperties(augState.DeviationProvenance()), []string{"type"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("augmented state deviation properties = %v, want %v", got, want)
+	}
+
+	roundTrip, err := mod.FindPath(augState.QualifiedPath())
+	if err != nil {
+		t.Fatalf("FindPath(%q): %v", augState.QualifiedPath(), err)
+	}
+	if roundTrip.QualifiedName() != augState.QualifiedName() {
+		t.Fatalf("FindPath(%q).QualifiedName() = %#v, want %#v", augState.QualifiedPath(), roundTrip.QualifiedName(), augState.QualifiedName())
+	}
+}
+
+func mustFindPath(t *testing.T, mod cambium.Module, path string) cambium.SchemaNodeRef {
+	t.Helper()
+	node, err := mod.FindPath(path)
+	if err != nil {
+		t.Fatalf("FindPath %s: %v", path, err)
+	}
+	return node
+}
+
+func deviationProperties(devs []cambium.Deviation) []string {
+	out := make([]string, len(devs))
+	for i, dev := range devs {
+		out[i] = dev.Property()
+	}
+	return out
+}
+
+func assertBaseType(t *testing.T, node cambium.SchemaNodeRef, want cambium.BaseType) {
+	t.Helper()
+	info, ok := node.LeafType()
+	if !ok {
+		t.Fatalf("%s LeafType() missing", node.QualifiedPath())
+	}
+	if got := info.Base(); got != want {
+		t.Fatalf("%s LeafType().Base() = %s, want %s", node.QualifiedPath(), got, want)
 	}
 }
 
