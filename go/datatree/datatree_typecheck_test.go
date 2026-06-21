@@ -81,6 +81,7 @@ func TestValueTypeChecks(t *testing.T) {
 		{"col", `"red"`, ""},
 		{"col", `"blue"`, "enum"},
 		{"fl", `"a b"`, ""},
+		{"fl", `"a a"`, "duplicate bit"},
 		{"fl", `"a c"`, "not a defined bit"},
 		// binary base64 + length 1..3
 		{"bin", `"YWI="`, ""}, // "ab" => 2 bytes

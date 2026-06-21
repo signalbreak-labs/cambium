@@ -10,17 +10,17 @@
 // is preserved. Input member order is irrelevant — output order comes from the
 // schema.
 //
-// Slice 1a scope: JSON_IETF (RFC 7951) round-trip of containers, leaves,
-// leaf-lists, and lists. Leaf values are preserved verbatim (normalized to
-// compact JSON); type-aware validation and encoding are a later slice. choice
-// nodes are flattened (RFC 7950 §7.9); anydata/anyxml and operations are not yet
-// handled.
+// JSON_IETF (RFC 7951) and XML round-trip containers, leaves, leaf-lists, and
+// lists. Leaf values are held as JSON tokens, with type-aware validation and XML
+// text conversion layered on that representation. choice nodes are flattened
+// (RFC 7950 §7.9); anydata/anyxml and operations are not yet handled.
 package datatree
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -66,15 +66,31 @@ type node struct {
 	entries  [][]*node         // kindList: each entry is its ordered child nodes
 }
 
+type nodeKey struct {
+	module string
+	name   string
+}
+
+func schemaNodeKey(sn cambium.SchemaNodeRef) nodeKey {
+	return nodeKey{module: sn.Module().Name(), name: sn.Name()}
+}
+
+func dataNodeKey(n *node) nodeKey {
+	if n == nil {
+		return nodeKey{}
+	}
+	return nodeKey{module: n.module, name: n.name}
+}
+
 // Parse decodes data against schema m into an ordered Tree.
 func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
 	switch f {
 	case FormatJSONIETF:
-		var raw map[string]json.RawMessage
-		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, fmt.Errorf("datatree: parse root object: %w", err)
+		raw, err := decodeJSONObject("root", data)
+		if err != nil {
+			return nil, err
 		}
-		roots, err := parseChildren(flattenTopLevel(m), raw)
+		roots, err := parseChildren(flattenTopLevel(m), raw, "")
 		if err != nil {
 			return nil, err
 		}
@@ -89,11 +105,11 @@ func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
 // parseChildren builds nodes for the schema children present in raw, in schema
 // declaration order. Unknown members (not matching any schema child) are an
 // error, so no data is silently dropped.
-func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMessage) ([]*node, error) {
+func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMessage, parentModule string) ([]*node, error) {
 	consumed := make(map[string]bool, len(raw))
 	var out []*node
 	for _, sn := range children {
-		member, val, ok := lookupMember(sn, raw)
+		member, val, ok := lookupMember(sn, raw, parentModule)
 		if !ok {
 			continue
 		}
@@ -112,14 +128,21 @@ func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMess
 	return out, nil
 }
 
-// lookupMember returns the raw value for a schema node under either its
-// module-qualified JSON_IETF name ("module:name") or its bare name.
-func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage) (string, json.RawMessage, bool) {
+// lookupMember returns the raw value for a schema node under its
+// module-qualified JSON_IETF name ("module:name"), or under its bare local name
+// only when the node is in the same module as the enclosing data node. Root
+// members are therefore always qualified, and augmentation/module-change children
+// cannot be accidentally matched by bare local-name collisions.
+func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage, parentModule string) (string, json.RawMessage, bool) {
 	qualified := sn.Module().Name() + ":" + sn.Name()
 	if v, ok := raw[qualified]; ok {
 		return qualified, v, true
 	}
-	if v, ok := raw[sn.Name()]; ok {
+	if parentModule != "" && sn.Module().Name() == parentModule {
+		v, ok := raw[sn.Name()]
+		if !ok {
+			return "", nil, false
+		}
 		return sn.Name(), v, true
 	}
 	return "", nil, false
@@ -181,11 +204,11 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 		}
 	case sn.IsContainer():
 		n.kind = kindContainer
-		var obj map[string]json.RawMessage
-		if err := json.Unmarshal(raw, &obj); err != nil {
-			return nil, fmt.Errorf("datatree: container %q: %w", sn.Name(), err)
+		obj, err := decodeJSONObject(fmt.Sprintf("container %q", sn.Name()), raw)
+		if err != nil {
+			return nil, err
 		}
-		kids, err := parseChildren(childRefs(sn.DataChildren(true)), obj)
+		kids, err := parseChildren(childRefs(sn.DataChildren(true)), obj, sn.Module().Name())
 		if err != nil {
 			return nil, err
 		}
@@ -197,11 +220,11 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			return nil, fmt.Errorf("datatree: list %q: %w", sn.Name(), err)
 		}
 		for _, e := range elems {
-			var obj map[string]json.RawMessage
-			if err := json.Unmarshal(e, &obj); err != nil {
-				return nil, fmt.Errorf("datatree: list %q entry: %w", sn.Name(), err)
+			obj, err := decodeJSONObject(fmt.Sprintf("list %q entry", sn.Name()), e)
+			if err != nil {
+				return nil, err
 			}
-			kids, err := parseChildren(childRefs(sn.DataChildren(true)), obj)
+			kids, err := parseChildren(childRefs(sn.DataChildren(true)), obj, sn.Module().Name())
 			if err != nil {
 				return nil, err
 			}
@@ -324,11 +347,61 @@ func compactJSON(raw json.RawMessage) (json.RawMessage, error) {
 }
 
 func splitArray(raw json.RawMessage) ([]json.RawMessage, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '[' {
+		return nil, fmt.Errorf("expected JSON array")
+	}
 	var elems []json.RawMessage
-	if err := json.Unmarshal(raw, &elems); err != nil {
+	if err := json.Unmarshal(trimmed, &elems); err != nil {
 		return nil, err
 	}
 	return elems, nil
+}
+
+func decodeJSONObject(context string, raw []byte) (map[string]json.RawMessage, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	tok, err := dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("datatree: %s: %w", context, err)
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok || delim != '{' {
+		return nil, fmt.Errorf("datatree: %s: expected JSON object", context)
+	}
+	obj := make(map[string]json.RawMessage)
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil, fmt.Errorf("datatree: %s: read member name: %w", context, err)
+		}
+		key, ok := tok.(string)
+		if !ok {
+			return nil, fmt.Errorf("datatree: %s: expected JSON object member name", context)
+		}
+		if _, exists := obj[key]; exists {
+			return nil, fmt.Errorf("datatree: %s: duplicate member %q", context, key)
+		}
+		var val json.RawMessage
+		if err := dec.Decode(&val); err != nil {
+			return nil, fmt.Errorf("datatree: %s member %q: %w", context, key, err)
+		}
+		obj[key] = val
+	}
+	tok, err = dec.Token()
+	if err != nil {
+		return nil, fmt.Errorf("datatree: %s: close object: %w", context, err)
+	}
+	delim, ok = tok.(json.Delim)
+	if !ok || delim != '}' {
+		return nil, fmt.Errorf("datatree: %s: expected end of JSON object", context)
+	}
+	if tok, err = dec.Token(); err != io.EOF {
+		if err != nil {
+			return nil, fmt.Errorf("datatree: %s: trailing data: %w", context, err)
+		}
+		return nil, fmt.Errorf("datatree: %s: unexpected trailing JSON token %v", context, tok)
+	}
+	return obj, nil
 }
 
 // strconvQuote JSON-quotes a member name. Member names are YANG identifiers

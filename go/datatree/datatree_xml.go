@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math/big"
 	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
@@ -25,8 +26,14 @@ import (
 // or ordered child elements.
 type xmlElem struct {
 	local string
+	ns    string
 	text  string
 	kids  []*xmlElem
+}
+
+type xmlQName struct {
+	local string
+	ns    string
 }
 
 func parseXML(m cambium.Module, data []byte) (*Tree, error) {
@@ -61,13 +68,22 @@ func decodeXMLForest(data []byte) ([]*xmlElem, error) {
 				return nil, err
 			}
 			roots = append(roots, el)
+			continue
+		}
+		switch t := tok.(type) {
+		case xml.CharData:
+			if strings.TrimSpace(string(t)) != "" {
+				return nil, fmt.Errorf("datatree: xml: non-whitespace text outside the root element")
+			}
+		case xml.Directive:
+			return nil, fmt.Errorf("datatree: xml: directives are not supported")
 		}
 	}
 	return roots, nil
 }
 
 func decodeXMLElem(dec *xml.Decoder, start xml.StartElement) (*xmlElem, error) {
-	el := &xmlElem{local: start.Name.Local}
+	el := &xmlElem{local: start.Name.Local, ns: start.Name.Space}
 	var text strings.Builder
 	for {
 		tok, err := dec.Token()
@@ -84,24 +100,26 @@ func decodeXMLElem(dec *xml.Decoder, start xml.StartElement) (*xmlElem, error) {
 		case xml.CharData:
 			text.Write(t)
 		case xml.EndElement:
-			el.text = strings.TrimSpace(text.String())
+			el.text = text.String()
 			return el, nil
+		case xml.Directive:
+			return nil, fmt.Errorf("datatree: xml element %q: directives are not supported", el.local)
 		}
 	}
 }
 
-// bindXML matches parsed elements to schema children by local name (grouping
-// repeats for lists/leaf-lists), in schema declaration order. Elements with no
-// matching schema node are an error.
+// bindXML matches parsed elements to schema children by namespace URI and local
+// name (grouping repeats for lists/leaf-lists), in schema declaration order.
+// Elements with no matching schema node are an error.
 func bindXML(children []cambium.SchemaNodeRef, elems []*xmlElem) ([]*node, error) {
-	byName := make(map[string][]*xmlElem, len(elems))
+	byName := make(map[xmlQName][]*xmlElem, len(elems))
 	for _, e := range elems {
-		byName[e.local] = append(byName[e.local], e)
+		byName[xmlQName{local: e.local, ns: e.ns}] = append(byName[xmlQName{local: e.local, ns: e.ns}], e)
 	}
 	matched := make(map[*xmlElem]bool, len(elems))
 	var out []*node
 	for _, sn := range children {
-		group := byName[sn.Name()]
+		group := byName[schemaXMLName(sn)]
 		if len(group) == 0 {
 			continue
 		}
@@ -116,26 +134,45 @@ func bindXML(children []cambium.SchemaNodeRef, elems []*xmlElem) ([]*node, error
 	}
 	for _, e := range elems {
 		if !matched[e] {
-			return nil, fmt.Errorf("datatree: unknown XML element %q (no matching schema node)", e.local)
+			return nil, fmt.Errorf("datatree: unknown XML element %q in namespace %q (no matching schema node)", e.local, e.ns)
 		}
 	}
 	return out, nil
+}
+
+func schemaXMLName(sn cambium.SchemaNodeRef) xmlQName {
+	return xmlQName{local: sn.Name(), ns: sn.Namespace()}
 }
 
 func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 	n := &node{name: sn.Name(), module: sn.Module().Name(), namespace: sn.Namespace()}
 	switch {
 	case sn.IsLeaf():
+		if err := requireSingleXML(sn, group); err != nil {
+			return nil, err
+		}
+		if len(group[0].kids) > 0 {
+			return nil, fmt.Errorf("datatree: XML leaf %q contains child elements", sn.Name())
+		}
 		n.kind = kindLeaf
 		ti, _ := sn.LeafType()
-		n.value = jsonTokenFromText(ti, group[0].text)
+		n.value = jsonTokenFromText(ti, group[0].text, sn.Module().Name())
 	case sn.IsLeafList():
 		n.kind = kindLeafList
 		ti, _ := sn.LeafType()
 		for _, e := range group {
-			n.values = append(n.values, jsonTokenFromText(ti, e.text))
+			if len(e.kids) > 0 {
+				return nil, fmt.Errorf("datatree: XML leaf-list %q contains child elements", sn.Name())
+			}
+			n.values = append(n.values, jsonTokenFromText(ti, e.text, sn.Module().Name()))
 		}
 	case sn.IsContainer():
+		if err := requireSingleXML(sn, group); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(group[0].text) != "" {
+			return nil, fmt.Errorf("datatree: XML container %q contains non-whitespace text", sn.Name())
+		}
 		n.kind = kindContainer
 		kids, err := bindXML(childRefs(sn.DataChildren(true)), group[0].kids)
 		if err != nil {
@@ -145,6 +182,9 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 	case sn.IsList():
 		n.kind = kindList
 		for _, e := range group {
+			if strings.TrimSpace(e.text) != "" {
+				return nil, fmt.Errorf("datatree: XML list %q entry contains non-whitespace text", sn.Name())
+			}
 			kids, err := bindXML(childRefs(sn.DataChildren(true)), e.kids)
 			if err != nil {
 				return nil, err
@@ -157,48 +197,66 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 	return n, nil
 }
 
-type jsonEnc int
+func requireSingleXML(sn cambium.SchemaNodeRef, group []*xmlElem) error {
+	if len(group) <= 1 {
+		return nil
+	}
+	return fmt.Errorf("datatree: duplicate XML element %q in namespace %q", sn.Name(), sn.Namespace())
+}
 
-const (
-	encQuoted jsonEnc = iota // JSON string-encoded
-	encBare                  // JSON number/boolean literal
-	encEmpty                 // the empty type: [null]
-)
-
-// jsonEncoding reports how a leaf's value is JSON-encoded (RFC 7951 §6), which
-// determines how XML element text maps to the internal JSON token.
-func jsonEncoding(ti cambium.TypeInfo) jsonEnc {
+func jsonTokenFromText(ti cambium.TypeInfo, text, leafModule string) json.RawMessage {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedBoolean:
-		return encBare
-	case cambium.ResolvedEmpty:
-		return encEmpty
-	case cambium.ResolvedInt:
-		// int64/uint64 are JSON strings; the narrower widths are JSON numbers.
-		if r.Kind == cambium.IntKindI64 || r.Kind == cambium.IntKindU64 {
-			return encQuoted
+		s := strings.TrimSpace(text)
+		if s == "true" || s == "false" {
+			return json.RawMessage(s)
 		}
-		return encBare
+		return jsonStringToken(text)
+	case cambium.ResolvedEmpty:
+		if strings.TrimSpace(text) == "" {
+			return json.RawMessage("[null]")
+		}
+		return jsonStringToken(text)
+	case cambium.ResolvedInt:
+		return jsonTokenFromIntegerText(text, r.Kind)
+	case cambium.ResolvedUnion:
+		for _, member := range r.Members() {
+			token := jsonTokenFromText(member, text, leafModule)
+			var trial []string
+			validateLeafValue(member, token, "", leafModule, &trial)
+			if len(trial) == 0 {
+				return token
+			}
+		}
+		return jsonStringToken(text)
+	case cambium.ResolvedLeafRef:
+		if rt, ok := r.Realtype(); ok && rt != nil {
+			return jsonTokenFromText(*rt, text, leafModule)
+		}
+		return jsonStringToken(text)
 	default:
-		// string, enum, bits, identityref, instance-identifier, decimal64,
-		// binary, union, leafref: JSON string-encoded.
-		return encQuoted
+		return jsonStringToken(text)
 	}
 }
 
-func jsonTokenFromText(ti cambium.TypeInfo, text string) json.RawMessage {
-	switch jsonEncoding(ti) {
-	case encEmpty:
-		return json.RawMessage("[null]")
-	case encBare:
-		if text == "" {
-			return json.RawMessage(`""`) // defensive: never emit an empty bare token
-		}
-		return json.RawMessage(text)
-	default:
-		b, _ := json.Marshal(text) // marshaling a string never errors
-		return json.RawMessage(b)
+func jsonTokenFromIntegerText(text string, kind cambium.IntKind) json.RawMessage {
+	s := strings.TrimSpace(text)
+	v, ok := new(big.Int).SetString(s, 10)
+	if !ok {
+		return jsonStringToken(text)
 	}
+	if integerJSONQuoted(kind) {
+		return jsonStringToken(v.String())
+	}
+	return json.RawMessage(v.String())
+}
+
+func jsonStringToken(s string) json.RawMessage {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return json.RawMessage(`""`)
+	}
+	return json.RawMessage(b)
 }
 
 // --- serialize ---------------------------------------------------------------

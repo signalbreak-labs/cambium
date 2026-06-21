@@ -15,13 +15,13 @@ func (t *Tree) ApplyDefaults() {
 }
 
 func applyDefaultsLevel(schema []cambium.SchemaNodeRef, data []*node) []*node {
-	present := make(map[string]*node, len(data))
+	present := make(map[nodeKey]*node, len(data))
 	for _, d := range data {
-		present[d.name] = d
+		present[dataNodeKey(d)] = d
 	}
 	var out []*node
 	for _, sn := range schema {
-		dn := present[sn.Name()]
+		dn := present[schemaNodeKey(sn)]
 		switch {
 		case sn.IsLeaf():
 			if dn != nil {
@@ -58,6 +58,6 @@ func defaultLeafNode(sn cambium.SchemaNodeRef, def string) *node {
 		module:    sn.Module().Name(),
 		namespace: sn.Namespace(),
 		kind:      kindLeaf,
-		value:     jsonTokenFromText(ti, def),
+		value:     jsonTokenFromText(ti, def, sn.Module().Name()),
 	}
 }
