@@ -503,6 +503,111 @@ func TestDeviationAddOnGroupingUseDoesNotAliasOtherUses(t *testing.T) {
 	}
 }
 
+func TestDeviationTargetsAugmentedSameLocalNameByPrefix(t *testing.T) {
+	t.Helper()
+	dir := deviationTestDir(t)
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-augment-collision-target.yang"), []byte(`module cambium-deviate-augment-collision-target {
+    namespace "urn:cambium:deviate-augment-collision-target";
+    prefix cdact;
+    yang-version 1.1;
+
+    container top {
+        leaf state {
+            type string;
+        }
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-augment-collision-augment.yang"), []byte(`module cambium-deviate-augment-collision-augment {
+    namespace "urn:cambium:deviate-augment-collision-augment";
+    prefix cdaca;
+    yang-version 1.1;
+
+    import cambium-deviate-augment-collision-target {
+        prefix tgt;
+    }
+
+    augment "/tgt:top" {
+        leaf state {
+            type boolean;
+        }
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-deviate-augment-collision-source.yang"), []byte(`module cambium-deviate-augment-collision-source {
+    namespace "urn:cambium:deviate-augment-collision-source";
+    prefix cdacs;
+    yang-version 1.1;
+
+    import cambium-deviate-augment-collision-target {
+        prefix tgt;
+    }
+    import cambium-deviate-augment-collision-augment {
+        prefix aug;
+    }
+
+    deviation "/tgt:top/aug:state" {
+        deviate replace {
+            type uint8;
+        }
+    }
+}
+`))
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"cambium-deviate-augment-collision-target",
+		"cambium-deviate-augment-collision-augment",
+		"cambium-deviate-augment-collision-source",
+	} {
+		if err := ctx.LoadModule(name); err != nil {
+			t.Fatalf("LoadModule %s: %v", name, err)
+		}
+	}
+
+	mod, err := ctx.Schema("cambium-deviate-augment-collision-target")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	top := mustFindPath(t, mod, "/cdact:top")
+	states := top.Children().LookupAll("state")
+	if states.Len() != 2 {
+		t.Fatalf("state sibling count = %d, want 2", states.Len())
+	}
+	baseState, ok := states.LookupQualified("cambium-deviate-augment-collision-target", "state")
+	if !ok {
+		t.Fatal("base state not found by qualified lookup")
+	}
+	augState, ok := states.LookupQualified("cambium-deviate-augment-collision-augment", "state")
+	if !ok {
+		t.Fatal("augmented state not found by qualified lookup")
+	}
+
+	assertBaseType(t, baseState, cambium.BaseTypeString)
+	assertBaseType(t, augState, cambium.BaseTypeUint8)
+	if got := len(baseState.DeviationProvenance()); got != 0 {
+		t.Fatalf("base state DeviationProvenance() len = %d, want 0", got)
+	}
+	if got, want := deviationProperties(augState.DeviationProvenance()), []string{"type"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("augmented state deviation properties = %v, want %v", got, want)
+	}
+
+	roundTrip, err := mod.FindPath(augState.QualifiedPath())
+	if err != nil {
+		t.Fatalf("FindPath(%q): %v", augState.QualifiedPath(), err)
+	}
+	if roundTrip.QualifiedName() != augState.QualifiedName() {
+		t.Fatalf("FindPath(%q).QualifiedName() = %#v, want %#v", augState.QualifiedPath(), roundTrip.QualifiedName(), augState.QualifiedName())
+	}
+}
+
 func mustFindPath(t *testing.T, mod cambium.Module, path string) cambium.SchemaNodeRef {
 	t.Helper()
 	node, err := mod.FindPath(path)
@@ -518,6 +623,17 @@ func deviationProperties(devs []cambium.Deviation) []string {
 		out[i] = dev.Property()
 	}
 	return out
+}
+
+func assertBaseType(t *testing.T, node cambium.SchemaNodeRef, want cambium.BaseType) {
+	t.Helper()
+	info, ok := node.LeafType()
+	if !ok {
+		t.Fatalf("%s LeafType() missing", node.QualifiedPath())
+	}
+	if got := info.Base(); got != want {
+		t.Fatalf("%s LeafType().Base() = %s, want %s", node.QualifiedPath(), got, want)
+	}
 }
 
 func assertPattern(t *testing.T, leaf cambium.SchemaNodeRef, wantRegex string) {
