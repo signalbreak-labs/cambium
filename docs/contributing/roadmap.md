@@ -51,9 +51,9 @@ lands rather than adding another dated file.
   [`/spec/ordering-invariants.md`](../../spec/ordering-invariants.md) §7). I6's
   mechanism (carrying `ordered-by user` as one atomic JSON_IETF value) is specified
   but not wired to a gNMI output path.
-- **A returning non-Go binding.** The contract (`/spec`, `/conformance`,
-  `/VERSIONS`) is kept language-neutral so a Rust (or other) binding can attach as a
-  peer; none exists today. See [adding a binding](adding-a-binding.md).
+- **An additional language binding.** The contract (`/spec`, `/conformance`,
+  `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
+  none exists today. See [adding a binding](adding-a-binding.md).
 
 ## How status is tracked
 
