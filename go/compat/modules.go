@@ -817,8 +817,8 @@ func moduleFromUpstreamModule(ast *upstream.Module) *Module {
 			return modules.Modules[ast.Name]
 		}
 		modules := NewModules()
-		record := modules.addModuleDecl(moduleDeclFromStatement(ast.Source, "", ast.BelongsTo != nil))
-		record.Parent = ast.Parent
+		record := modules.addModuleDecl(moduleDeclFromStatement(statementFromUpstreamStatement(ast.Source), "", ast.BelongsTo != nil))
+		record.Parent = nativeNodeFromUpstreamNode(ast.Parent)
 		return record
 	}
 	return nil
@@ -887,9 +887,33 @@ func (ms *Modules) addUpstreamModuleRecord(ast *upstream.Module) *Module {
 	if ms == nil || ast == nil || ast.Source == nil {
 		return nil
 	}
-	record := ms.addModuleDecl(moduleDeclFromStatement(ast.Source, "", ast.BelongsTo != nil))
-	record.Parent = ast.Parent
+	record := ms.addModuleDecl(moduleDeclFromStatement(statementFromUpstreamStatement(ast.Source), "", ast.BelongsTo != nil))
+	record.Parent = nativeNodeFromUpstreamNode(ast.Parent)
 	return record
+}
+
+func statementFromUpstreamStatement(in *upstream.Statement) *Statement {
+	if in == nil {
+		return nil
+	}
+	return &Statement{
+		Keyword:     in.Keyword,
+		HasArgument: in.HasArgument,
+		Argument:    in.Argument,
+		statements:  statementsFromUpstreamStatements(in.SubStatements()),
+		file:        in.Location(),
+	}
+}
+
+func statementsFromUpstreamStatements(in []*upstream.Statement) []*Statement {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*Statement, 0, len(in))
+	for _, stmt := range in {
+		out = append(out, statementFromUpstreamStatement(stmt))
+	}
+	return out
 }
 
 func (decl moduleDecl) fullName() string {

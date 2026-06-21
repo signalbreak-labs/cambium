@@ -26,6 +26,8 @@ func TestCompatSmallHelpersDoNotDelegateToUpstream(t *testing.T) {
 		"type ASTModule = upstream.Module",
 		"type ASTIdentity = upstream.Identity",
 		"type Type = upstream.Type",
+		"type Node = upstream.Node",
+		"type Statement = upstream.Statement",
 	} {
 		if strings.Contains(source, forbidden) {
 			t.Fatalf("compat ast.go still delegates helper %q to upstream", forbidden)

@@ -15,14 +15,14 @@ import (
 	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
-// Statement is a generic parsed YANG statement. The compat layer is the
-// goyang-compatible surface, so it intentionally exposes the upstream-shaped
-// statement type. Parsing is backed by Cambium's native cgo-free parser and then
-// converted into this goyang-shaped statement tree.
-type Statement = upstream.Statement
-
 // Node is the goyang-style parsed AST node interface.
-type Node = upstream.Node
+type Node interface {
+	Kind() string
+	NName() string
+	Statement() *Statement
+	ParentNode() Node
+	Exts() []*Statement
+}
 
 // Typedefer is a goyang-style AST node that defines typedefs.
 type Typedefer interface {
@@ -76,33 +76,42 @@ func Source(n Node) string {
 }
 
 // RootNode returns the module or submodule that n was defined in.
-func RootNode(n Node) *Module {
-	if n == nil {
+func RootNode(n any) *Module {
+	if upstreamNode, ok := n.(upstream.Node); ok {
+		return moduleFromUpstreamModule(upstream.RootNode(upstreamNode))
+	}
+	node, ok := n.(Node)
+	if !ok {
 		return nil
 	}
-	root := rootNode(n)
+	if node == nil {
+		return nil
+	}
+	root := rootNode(node)
 	if mod, ok := root.(*Module); ok {
 		return mod
 	}
 	if mod, ok := root.(*ASTModule); ok {
 		return moduleFromASTModule(mod)
 	}
-	if mod, ok := root.(*upstream.Module); ok {
-		return moduleFromUpstreamModule(mod)
-	}
 	return nil
 }
 
 // FindModuleByPrefix resolves prefix relative to n.
-func FindModuleByPrefix(n Node, prefix string) *Module {
-	root := rootNode(n)
+func FindModuleByPrefix(n any, prefix string) *Module {
+	if upstreamNode, ok := n.(upstream.Node); ok {
+		return findCompatModuleByPrefix(moduleFromUpstreamModule(upstream.RootNode(upstreamNode)), prefix)
+	}
+	node, ok := n.(Node)
+	if !ok {
+		return nil
+	}
+	root := rootNode(node)
 	switch mod := root.(type) {
 	case *Module:
 		return findCompatModuleByPrefix(mod, prefix)
 	case *ASTModule:
 		return findASTModuleByPrefix(mod, prefix)
-	case *upstream.Module:
-		return findCompatModuleByPrefix(moduleFromUpstreamModule(mod), prefix)
 	default:
 		return nil
 	}
