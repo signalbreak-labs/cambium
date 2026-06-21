@@ -1,0 +1,17 @@
+submodule schema-augment-submodule-part {
+  yang-version 1.1;
+
+  belongs-to schema-augment-submodule-base {
+    prefix sasb;
+  }
+
+  container protocols {
+    list protocol {
+      key "name";
+      leaf name { type string; }
+      container config {
+        leaf enabled { type boolean; }
+      }
+    }
+  }
+}

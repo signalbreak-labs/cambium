@@ -74,10 +74,14 @@ optional backend (it needs a live data tree + XPath engine).
 ```go
 import backend "github.com/signalbreak-labs/cambium/go/libyangbackend"
 
-ctx, _ := backend.NewContextBuilder().SearchPath("yang").LoadModule("order-demo", nil).Freeze()
-t, _ := backend.Parse(ctx, backend.FormatXML, backend.ParseModeDataOnly, xmlBytes)
-_ = t.Validate(backend.ValidateModeConfigOnly | backend.ValidateModeMultiError)
-out, _ := t.Serialize(backend.FormatXML, backend.SerializeWithSiblings)
+ctx, _ := backend.NewContext()
+defer ctx.Close()
+_ = ctx.SetSearchPath("yang")
+_ = ctx.LoadModule("order-demo")
+
+t, _ := ctx.Parse(backend.FormatXML, backend.ParseModeDataOnly, xmlBytes)
+_ = t.Validate(backend.ValidateMode{MultiError: true})
+out, _ := t.Serialize(backend.FormatXML, backend.DefaultSerializeFlags())
 ```
 
 Serialization is one ordered walk of libyang's sibling chain — never a native

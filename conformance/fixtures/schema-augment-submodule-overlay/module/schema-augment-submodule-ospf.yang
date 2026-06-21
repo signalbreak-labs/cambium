@@ -1,0 +1,17 @@
+module schema-augment-submodule-ospf {
+  namespace "urn:cambium:schema-augment-submodule-ospf";
+  prefix saso;
+  yang-version 1.1;
+
+  import schema-augment-submodule-base { prefix base; }
+
+  grouping metric-policy {
+    leaf metric-style { type string; }
+  }
+
+  augment "/base:protocols/base:protocol/base:config" {
+    when "../base:name = 'ospf'";
+    leaf area { type string; }
+    uses metric-policy;
+  }
+}

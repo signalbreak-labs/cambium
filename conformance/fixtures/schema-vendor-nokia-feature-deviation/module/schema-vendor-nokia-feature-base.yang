@@ -1,0 +1,58 @@
+module schema-vendor-nokia-feature-base {
+  yang-version 1.1;
+  namespace "urn:cambium:schema-vendor-nokia-feature-base";
+  prefix svnfbase;
+
+  container top {
+    leaf mode {
+      type string;
+      default "enabled";
+    }
+    leaf primary-interface {
+      type leafref {
+        path "/svnfbase:top/svnfbase:system/svnfbase:interface/svnfbase:name";
+      }
+    }
+    container system {
+      list interface {
+        key "name";
+        ordered-by user;
+        min-elements 1;
+        max-elements 8;
+        leaf name {
+          type string;
+        }
+        leaf admin-state {
+          type enumeration {
+            enum enable;
+            enum disable;
+          }
+          default "enable";
+        }
+        leaf if-index {
+          type uint32;
+        }
+        leaf description {
+          type string;
+          default "";
+        }
+        leaf legacy-tag {
+          type string;
+        }
+      }
+      leaf-list lag-member {
+        type leafref {
+          path "../interface/name";
+        }
+        ordered-by user;
+        min-elements 1;
+      }
+      container hardware {
+        config true;
+        leaf serial {
+          type string;
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+module schema-augment-deep-oam {
+  namespace "urn:cambium:schema-augment-deep-oam";
+  prefix sado;
+  yang-version 1.1;
+
+  import schema-augment-deep-base { prefix base; }
+
+  augment "/base:network-instances/base:network-instance/base:protocols/base:protocol/base:state" {
+    when "../base:name = 'bfd'";
+    choice session-detail {
+      case single-hop {
+        leaf discriminator { type uint32; }
+      }
+      case multi-hop {
+        leaf remote-address { type string; }
+      }
+    }
+    list history {
+      key "sequence";
+      leaf sequence { type uint32; }
+      leaf reason { type string; }
+    }
+  }
+}

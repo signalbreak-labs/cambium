@@ -1,0 +1,34 @@
+{
+  "module": "schema-vendor-openconfig-base",
+  "load": [
+    "schema-vendor-openconfig-base",
+    "schema-vendor-openconfig-bgp"
+  ],
+  "children": {
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol": ["identifier", "name", "config", "state", "bgp"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/config": ["identifier", "name"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/state": ["identifier", "name"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp/global/config": ["as", "router-id"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp/global/state": ["as", "router-id"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp/afi-safi": ["ipv4-unicast", "l3vpn-ipv4-unicast"]
+  },
+  "dataChildrenFlatten": {
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol": ["identifier", "name", "config", "state", "bgp"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp": ["global", "ipv4-unicast", "l3vpn-ipv4-unicast"]
+  },
+  "keys": {
+    "/schema-vendor-openconfig-base/network-instances/network-instance": ["name"],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol": ["identifier", "name"]
+  },
+  "whens": {
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp": [
+      "base:identifier = 'base:BGP'"
+    ],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp/global": [
+      "base:identifier = 'base:BGP'"
+    ],
+    "/schema-vendor-openconfig-base/network-instances/network-instance/protocols/protocol/schema-vendor-openconfig-bgp:bgp/afi-safi": [
+      "base:identifier = 'base:BGP'"
+    ]
+  }
+}

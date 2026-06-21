@@ -1,0 +1,36 @@
+submodule schema-vendor-nokia-service {
+  yang-version 1.1;
+
+  belongs-to schema-vendor-nokia-sros {
+    prefix svns;
+  }
+
+  include schema-vendor-nokia-policy;
+
+  container service {
+    list vprn {
+      key "name";
+      leaf name {
+        type string;
+      }
+      uses admin-common;
+      container customer {
+        leaf customer-id {
+          mandatory true;
+          type uint32;
+        }
+      }
+      container bgp {
+        list group {
+          key "name";
+          leaf name {
+            type string;
+          }
+          leaf peer-as {
+            type as-number;
+          }
+        }
+      }
+    }
+  }
+}

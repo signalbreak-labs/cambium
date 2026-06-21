@@ -358,6 +358,7 @@ type ResolvedLeafRef struct {
 	realtype        *TypeInfo
 	requireInstance bool
 	path            string
+	sourceModule    *moduleData
 }
 
 func (r ResolvedLeafRef) Target() (SchemaNodeRef, bool) {
@@ -379,6 +380,12 @@ func (r ResolvedLeafRef) Path() (string, bool) {
 		return "", false
 	}
 	return r.path, true
+}
+func (r ResolvedLeafRef) SourceModule() Module {
+	if r.sourceModule == nil {
+		return Module{}
+	}
+	return Module{mod: r.sourceModule}
 }
 func (ResolvedLeafRef) resolvedType() {}
 
@@ -664,6 +671,7 @@ func (f Feature) Status() Status {
 // MustConstraint is a parsed must expression plus optional metadata.
 type MustConstraint struct {
 	cond, errorMessage, errorAppTag, description, reference string
+	sourceModule                                            *moduleData
 }
 
 func (m MustConstraint) Expression() string           { return m.cond }
@@ -671,13 +679,50 @@ func (m MustConstraint) ErrorMessage() (string, bool) { return optional(m.errorM
 func (m MustConstraint) ErrorAppTag() (string, bool)  { return optional(m.errorAppTag) }
 func (m MustConstraint) Description() (string, bool)  { return optional(m.description) }
 func (m MustConstraint) Reference() (string, bool)    { return optional(m.reference) }
+func (m MustConstraint) SourceModule() Module {
+	if m.sourceModule == nil {
+		return Module{}
+	}
+	return Module{mod: m.sourceModule}
+}
 
 // WhenConstraint is a parsed when expression plus optional metadata.
 type WhenConstraint struct {
 	cond, description, reference string
+	contextAncestorDepth         int
+	sourceModule                 *moduleData
+	excludedSubtrees             []*schemaNodeData
 }
 
-func (w WhenConstraint) Expression() string          { return w.cond }
+func (w WhenConstraint) Expression() string { return w.cond }
+
+// ContextAncestorDepth returns how many data-tree ancestors must be climbed
+// before evaluating this when expression. It is non-zero for when statements
+// inherited from schema-rewriting statements such as augment, uses, choice, or
+// case, whose XPath context is an ancestor data node rather than the copied
+// descendant carrying the condition.
+func (w WhenConstraint) ContextAncestorDepth() int { return w.contextAncestorDepth }
+
+func (w WhenConstraint) SourceModule() Module {
+	if w.sourceModule == nil {
+		return Module{}
+	}
+	return Module{mod: w.sourceModule}
+}
+
+func (w WhenConstraint) ExcludedSubtreeRoots() []SchemaNodeRef {
+	if len(w.excludedSubtrees) == 0 {
+		return nil
+	}
+	out := make([]SchemaNodeRef, 0, len(w.excludedSubtrees))
+	for _, n := range w.excludedSubtrees {
+		if n != nil {
+			out = append(out, SchemaNodeRef{node: n})
+		}
+	}
+	return out
+}
+
 func (w WhenConstraint) Description() (string, bool) { return optional(w.description) }
 func (w WhenConstraint) Reference() (string, bool)   { return optional(w.reference) }
 
@@ -796,7 +841,7 @@ type schemaNodeData struct {
 	mandatory      bool
 	presence       bool
 	orderedBy      OrderedBy
-	defaults       []string
+	defaults       []DefaultValue
 	units          string
 	minElements    *uint32
 	maxElements    *uint32
@@ -1757,18 +1802,18 @@ func (m *moduleData) buildNodeSeen(st *yangparse.Statement, parent *schemaNodeDa
 	n.applyPresenceProperty(n.singletonProperty(st, "presence"))
 	n.applyOrderedByProperty(n.singletonProperty(st, "ordered-by"))
 	n.applyCardinalityStatements(st, true)
-	n.defaults = defaultValuesFor(owner, st)
+	n.defaults = defaultValuesFor(m, st)
 	n.extensions = owner.extensionInstances(st)
-	n.musts = n.mustsFrom(st)
+	n.musts = n.mustsFrom(m, st)
 	if when := n.singletonProperty(st, "when"); when != nil {
 		if !n.whenPropertyAllowed(when) {
 			// Error recorded by whenPropertyAllowed.
-		} else if err := owner.validateXPathExpressionPrefixes("when", when); err != nil {
+		} else if err := m.validateXPathExpressionPrefixes("when", when); err != nil {
 			n.recordSchemaError(err)
 		} else if constraint, err := whenFromValidated(when); err != nil {
 			n.recordSchemaError(err)
 		} else {
-			n.whens = []WhenConstraint{constraint}
+			n.whens = []WhenConstraint{constraint.withSourceModule(m)}
 		}
 	}
 	uniqueStatements := direct(st, "unique")
@@ -1870,6 +1915,7 @@ func (m *moduleData) buildChoiceSeen(st *yangparse.Statement, parent *schemaNode
 		}
 	}
 	n.children = children
+	propagateChoiceCaseWhens(n)
 	return n
 }
 
@@ -1923,7 +1969,7 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 			m.recordSchemaError(fmt.Errorf("refine %q target not found at %s", refine.Argument, refine.Location()))
 			continue
 		}
-		applyRefine(target, refine)
+		applyRefine(m, target, refine)
 	}
 	for _, aug := range direct(uses, "augment") {
 		if !m.featureIncluded(aug) {
@@ -1960,19 +2006,7 @@ func (m *moduleData) applyUsesWhen(uses *yangparse.Statement, roots []*schemaNod
 		m.recordSchemaError(err)
 		return
 	}
-	var walk func(*schemaNodeData)
-	walk = func(n *schemaNodeData) {
-		if n == nil {
-			return
-		}
-		n.whens = append(n.whens, when)
-		for _, child := range n.children {
-			walk(child)
-		}
-	}
-	for _, root := range roots {
-		walk(root)
-	}
+	propagateWhenToDataDescendants(roots, when.withSourceModule(m).withExcludedSubtrees(roots), 1)
 }
 
 func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []string) *schemaNodeData {
@@ -2103,25 +2137,6 @@ func removeNodePtr(nodes []*schemaNodeData, target *schemaNodeData) []*schemaNod
 	return out
 }
 
-func containsString(values []string, value string) bool {
-	for _, v := range values {
-		if v == value {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(values []string, value string) []string {
-	out := values[:0]
-	for _, v := range values {
-		if v != value {
-			out = append(out, v)
-		}
-	}
-	return out
-}
-
 func (m *moduleData) buildIndexes() {
 	m.nodesByPath = make(map[string]*schemaNodeData)
 	m.root.path = "/" + m.name
@@ -2237,12 +2252,12 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 				return
 			}
 			seen := make(map[string]bool, len(n.defaults))
-			for _, value := range n.defaults {
-				if seen[value] {
-					n.recordSchemaError(fmt.Errorf("leaf-list %q has duplicate default %q", n.name, value))
+			for _, def := range n.defaults {
+				if seen[def.value] {
+					n.recordSchemaError(fmt.Errorf("leaf-list %q has duplicate default %q", n.name, def.value))
 					return
 				}
-				seen[value] = true
+				seen[def.value] = true
 			}
 			if len(n.defaults) > 0 && m.yangVersionForStatement(n.stmt) != "1.1" {
 				n.recordSchemaError(fmt.Errorf("leaf-list %q default statements require yang-version 1.1", n.name))
@@ -2257,8 +2272,8 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 			case n.mandatory && len(n.defaults) > 0:
 				n.recordSchemaError(fmt.Errorf("mandatory choice %q cannot have a default", n.name))
 				return
-			case len(n.defaults) == 1 && n.directChild(n.defaults[0]) == nil:
-				n.recordSchemaError(fmt.Errorf("choice %q default %q does not reference a case", n.name, n.defaults[0]))
+			case len(n.defaults) == 1 && n.directChild(n.defaults[0].value) == nil:
+				n.recordSchemaError(fmt.Errorf("choice %q default %q does not reference a case", n.name, n.defaults[0].value))
 				return
 			}
 		}
@@ -2431,8 +2446,8 @@ func validateDefaultValuesForNode(n *schemaNodeData) error {
 	if n == nil || n.typeInfo == nil || len(n.defaults) == 0 {
 		return nil
 	}
-	for _, value := range n.defaults {
-		if err := validateDefaultValueForType(n, value); err != nil {
+	for _, def := range n.defaults {
+		if err := validateDefaultValueForType(n, def); err != nil {
 			return err
 		}
 	}
@@ -2455,7 +2470,8 @@ func (m *moduleData) validateDefaultValues() error {
 	return walk(m.root)
 }
 
-func validateDefaultValueForType(n *schemaNodeData, value string) error {
+func validateDefaultValueForType(n *schemaNodeData, def DefaultValue) error {
+	value := def.value
 	switch resolved := n.typeInfo.resolved.(type) {
 	case ResolvedBoolean:
 		if value != "true" && value != "false" {
@@ -2492,13 +2508,13 @@ func validateDefaultValueForType(n *schemaNodeData, value string) error {
 			return err
 		}
 	case ResolvedIdentityRef:
-		if err := validateIdentityRefDefaultValue(n, value, resolved); err != nil {
+		if err := validateIdentityRefDefaultValue(n, def, resolved); err != nil {
 			return err
 		}
 	case ResolvedEmpty:
 		return fmt.Errorf("empty %s %q cannot have a default", nodeStatementKeyword(n), n.name)
 	case ResolvedUnion:
-		if !unionDefaultValueValid(n, value, resolved) {
+		if !unionDefaultValueValid(n, def, resolved) {
 			return fmt.Errorf("default %q is not valid for union %s %q", value, nodeStatementKeyword(n), n.name)
 		}
 	case ResolvedLeafRef:
@@ -2506,7 +2522,7 @@ func validateDefaultValueForType(n *schemaNodeData, value string) error {
 			memberNode := *n
 			memberInfo := *realtype
 			memberNode.typeInfo = &memberInfo
-			return validateDefaultValueForType(&memberNode, value)
+			return validateDefaultValueForType(&memberNode, def)
 		}
 	}
 	return nil
@@ -2531,12 +2547,12 @@ func conditionalEnumDefault(values []EnumValue, name string) bool {
 	return ok && value.conditional
 }
 
-func unionDefaultValueValid(n *schemaNodeData, value string, resolved ResolvedUnion) bool {
+func unionDefaultValueValid(n *schemaNodeData, def DefaultValue, resolved ResolvedUnion) bool {
 	for _, member := range resolved.Members() {
 		memberNode := *n
 		memberInfo := member
 		memberNode.typeInfo = &memberInfo
-		if validateDefaultValueForType(&memberNode, value) == nil {
+		if validateDefaultValueForType(&memberNode, def) == nil {
 			return true
 		}
 	}
@@ -2621,8 +2637,9 @@ func validateBinaryDefaultValue(n *schemaNodeData, value string, resolved Resolv
 	return nil
 }
 
-func validateIdentityRefDefaultValue(n *schemaNodeData, value string, resolved ResolvedIdentityRef) error {
-	source := n.module
+func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolved ResolvedIdentityRef) error {
+	value := def.value
+	source := def.sourceOr(n.module)
 	if source == nil {
 		source = n.typeModule
 	}
@@ -2748,13 +2765,24 @@ func (m *moduleData) applyRefImplementedPolicy() {
 			source = m
 		}
 		for _, must := range n.musts {
-			source.markImplementedPrefixes(must.Expression())
+			constraintSource := must.sourceModule
+			if constraintSource == nil {
+				constraintSource = source
+			}
+			constraintSource.markImplementedPrefixes(must.Expression())
 		}
 		for _, when := range n.whens {
-			source.markImplementedPrefixes(when.Expression())
+			constraintSource := when.sourceModule
+			if constraintSource == nil {
+				constraintSource = source
+			}
+			constraintSource.markImplementedPrefixes(when.Expression())
 		}
-		for _, value := range n.defaults {
-			source.markImplementedPrefixes(value)
+		for _, def := range n.defaults {
+			defaultSource := def.sourceOr(source)
+			if defaultSource != nil {
+				defaultSource.markImplementedPrefixes(def.value)
+			}
 		}
 		for _, c := range n.children {
 			walk(c)
@@ -3210,6 +3238,30 @@ func (i Identity) Derived() []Identity {
 	return out
 }
 
+// DefaultValue is one effective schema default and the module whose statement
+// supplied it. Value returns the lexical default exactly as written after
+// refinement/deviation/typedef inheritance has been applied.
+type DefaultValue struct {
+	value        string
+	sourceModule *moduleData
+}
+
+func (d DefaultValue) Value() string { return d.value }
+
+func (d DefaultValue) SourceModule() Module {
+	if d.sourceModule == nil {
+		return Module{}
+	}
+	return Module{mod: d.sourceModule}
+}
+
+func (d DefaultValue) sourceOr(fallback *moduleData) *moduleData {
+	if d.sourceModule != nil {
+		return d.sourceModule
+	}
+	return fallback
+}
+
 // SchemaNodeRef is a handle to an ordered schema IR node.
 type SchemaNodeRef struct{ node *schemaNodeData }
 
@@ -3409,13 +3461,25 @@ func (n SchemaNodeRef) DefaultValue() (string, bool) {
 	if n.node == nil || len(n.node.defaults) == 0 {
 		return "", false
 	}
-	return n.node.defaults[0], true
+	return n.node.defaults[0].value, true
 }
 func (n SchemaNodeRef) DefaultValues() []string {
 	if n.node == nil {
 		return nil
 	}
-	return append([]string(nil), n.node.defaults...)
+	return defaultValueStrings(n.node.defaults)
+}
+func (n SchemaNodeRef) DefaultEntry() (DefaultValue, bool) {
+	if n.node == nil || len(n.node.defaults) == 0 {
+		return DefaultValue{}, false
+	}
+	return n.node.defaults[0], true
+}
+func (n SchemaNodeRef) DefaultEntries() []DefaultValue {
+	if n.node == nil {
+		return nil
+	}
+	return append([]DefaultValue(nil), n.node.defaults...)
 }
 func (n SchemaNodeRef) TypeDefaultValue() (string, bool) {
 	if n.node == nil || n.node.typeStmt == nil {
@@ -3902,14 +3966,14 @@ func parentKindLabel(parent *schemaNodeData) string {
 	return parent.stmt.Keyword
 }
 
-func (n *schemaNodeData) mustsFrom(st *yangparse.Statement) []MustConstraint {
+func (n *schemaNodeData) mustsFrom(source *moduleData, st *yangparse.Statement) []MustConstraint {
 	var out []MustConstraint
 	for _, m := range direct(st, "must") {
 		if !n.mustPropertyAllowed(m) {
 			continue
 		}
-		if n.module != nil {
-			if err := n.module.validateXPathExpressionPrefixes("must", m); err != nil {
+		if source != nil {
+			if err := source.validateXPathExpressionPrefixes("must", m); err != nil {
 				n.recordSchemaError(err)
 				continue
 			}
@@ -3919,7 +3983,7 @@ func (n *schemaNodeData) mustsFrom(st *yangparse.Statement) []MustConstraint {
 			n.recordSchemaError(err)
 			continue
 		}
-		out = append(out, constraint)
+		out = append(out, constraint.withSourceModule(source))
 	}
 	return out
 }
@@ -4345,20 +4409,50 @@ func (m *moduleData) lookupScopedGrouping(name string, from *yangparse.Statement
 	return nil
 }
 
-func defaultValuesFor(m *moduleData, st *yangparse.Statement) []string {
-	var out []string
+func defaultValuesFor(m *moduleData, st *yangparse.Statement) []DefaultValue {
+	var out []DefaultValue
 	for _, d := range direct(st, "default") {
-		out = append(out, d.Argument)
+		out = append(out, DefaultValue{value: d.Argument, sourceModule: m})
 	}
 	if len(out) > 0 {
 		return out
 	}
 	if typ := first(st, "type"); typ != nil {
-		if d, ok := m.typedefDefaultFrom(typ.Argument, typ); ok {
-			return []string{d}
+		if d, ok := m.typedefDefaultEntryFrom(typ.Argument, typ); ok {
+			return []DefaultValue{d}
 		}
 	}
 	return nil
+}
+
+func defaultValueStrings(defaults []DefaultValue) []string {
+	if len(defaults) == 0 {
+		return nil
+	}
+	out := make([]string, len(defaults))
+	for i, def := range defaults {
+		out[i] = def.value
+	}
+	return out
+}
+
+func containsDefaultValue(defaults []DefaultValue, value string) bool {
+	for _, def := range defaults {
+		if def.value == value {
+			return true
+		}
+	}
+	return false
+}
+
+func removeDefaultValue(defaults []DefaultValue, value string) []DefaultValue {
+	out := defaults[:0]
+	for _, def := range defaults {
+		if def.value != value {
+			out = append(out, def)
+		}
+	}
+	return out
 }
 
 func requireInstance(st *yangparse.Statement) (bool, error) {

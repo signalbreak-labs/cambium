@@ -419,7 +419,7 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 			return
 		}
 		if f.optional {
-			defaultValue, hasDefault := f.node.DefaultValue()
+			defaultValue, hasDefault := f.node.DefaultEntry()
 			valueRef := "(*n." + ident + ")"
 			if f.isUnion {
 				valueRef = "n." + ident
@@ -445,7 +445,7 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 				out.WriteString("\t}\n")
 			}
 		} else {
-			if defaultValue, hasDefault := f.node.DefaultValue(); hasDefault {
+			if defaultValue, hasDefault := f.node.DefaultEntry(); hasDefault {
 				fmt.Fprintf(out, "\tif mode != WithDefaultsTrim || %s != %s {\n", g.jsonLiteralExpr("n."+ident, f), g.defaultJSONLiteralExpr(f, defaultValue))
 				g.emitScalarJSON(wire, "b", "depth+1", "n."+ident, f, out)
 				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
@@ -456,7 +456,7 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 			}
 		}
 	case cambium.SchemaNodeKindLeafList:
-		defaults := f.node.DefaultValues()
+		defaults := f.node.DefaultEntries()
 		defaultVar := ""
 		if len(defaults) > 0 {
 			defaultVar = g.emitLeafListDefaultCheck("n", f, defaults, out, "\t")
@@ -563,13 +563,14 @@ func (g *goEmitter) jsonLiteralExpr(valueRef string, f fieldInfo) string {
 	}
 }
 
-func (g *goEmitter) defaultJSONLiteralExpr(f fieldInfo, value string) string {
+func (g *goEmitter) defaultJSONLiteralExpr(f fieldInfo, def cambium.DefaultValue) string {
 	if info, ok := f.node.LeafType(); ok {
-		if literal, ok := g.typeDefaultJSONLiteralExpr(info, value); ok {
+		if literal, ok := g.typeDefaultJSONLiteralExpr(info, def, f.node.Module()); ok {
 			return literal
 		}
-		g.recordEmitError(fmt.Errorf("invalid default %q for %s", value, f.node.Path()))
+		g.recordEmitError(fmt.Errorf("invalid default %q for %s", def.Value(), f.node.Path()))
 	}
+	value := def.Value()
 	switch f.jsonKind {
 	case "String", "InstanceIdentifier":
 		return g.jsonStringLiteralExpr(value)
@@ -584,16 +585,17 @@ func (g *goEmitter) defaultJSONLiteralExpr(f fieldInfo, value string) string {
 	}
 }
 
-func (g *goEmitter) typeDefaultJSONLiteralExpr(info cambium.TypeInfo, value string) (string, bool) {
+func (g *goEmitter) typeDefaultJSONLiteralExpr(info cambium.TypeInfo, def cambium.DefaultValue, leafModule cambium.Module) (string, bool) {
+	value := def.Value()
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
-			return g.typeDefaultJSONLiteralExpr(*realtype, value)
+			return g.typeDefaultJSONLiteralExpr(*realtype, def, leafModule)
 		}
 		return g.jsonStringLiteralExpr(value), true
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			if literal, ok := g.typeDefaultJSONLiteralExpr(member, value); ok {
+			if literal, ok := g.typeDefaultJSONLiteralExpr(member, def, leafModule); ok {
 				return literal, true
 			}
 		}
@@ -640,7 +642,7 @@ func (g *goEmitter) typeDefaultJSONLiteralExpr(info cambium.TypeInfo, value stri
 		}
 		return g.jsonStringLiteralExpr(canonical), true
 	case cambium.ResolvedIdentityRef:
-		jsonName, ok := g.identityrefDefaultJSONName(value, r)
+		jsonName, ok := g.identityrefDefaultJSONName(value, r, def.SourceModule(), leafModule)
 		if !ok {
 			return "", false
 		}
@@ -913,21 +915,39 @@ func bitsASCIIFields(value string) []string {
 	return names
 }
 
-func (g *goEmitter) identityrefDefaultJSONName(value string, resolved cambium.ResolvedIdentityRef) (string, bool) {
+func (g *goEmitter) identityrefDefaultJSONName(value string, resolved cambium.ResolvedIdentityRef, sourceModule, leafModule cambium.Module) (string, bool) {
+	if sourceModule.Name() == "" {
+		sourceModule = leafModule
+	}
+	leafModuleName := leafModule.Name()
+	if leafModuleName == "" {
+		leafModuleName = g.moduleName
+	}
+	prefix, local, prefixed := strings.Cut(value, ":")
+	if !prefixed {
+		local = value
+	}
 	for _, member := range collectIdentityrefMembers(resolved.Bases()) {
+		if member.name != local || !identityrefDefaultModuleMatches(prefix, prefixed, member.module, sourceModule) {
+			continue
+		}
 		jsonName := member.name
-		if member.module != g.moduleName {
+		if member.module != leafModuleName {
 			jsonName = member.module + ":" + member.name
 		}
-		prefixedName := ""
-		if member.prefix != "" {
-			prefixedName = member.prefix + ":" + member.name
-		}
-		if value == jsonName || value == prefixedName || (member.module == g.moduleName && value == member.name) {
-			return jsonName, true
-		}
+		return jsonName, true
 	}
 	return "", false
+}
+
+func identityrefDefaultModuleMatches(prefix string, prefixed bool, identityModule string, sourceModule cambium.Module) bool {
+	if !prefixed {
+		return sourceModule.Name() == identityModule
+	}
+	if resolved, ok := sourceModule.ResolvePrefix(prefix); ok {
+		return resolved.Name() == identityModule
+	}
+	return prefix == identityModule
 }
 
 func (g *goEmitter) emitAnyDataJSON(wire, writer, depthExpr, valueRef string, f fieldInfo, out *strings.Builder) {
@@ -952,7 +972,7 @@ func (g *goEmitter) emitLeafListJSONArray(wire, writer, depthExpr, elemDepthExpr
 	fmt.Fprintf(out, "\t\t%s.WriteByte(']')\n", writer)
 }
 
-func (g *goEmitter) emitDefaultLeafListJSONArray(wire, writer, depthExpr, elemDepthExpr string, defaults []string, f fieldInfo, out *strings.Builder) {
+func (g *goEmitter) emitDefaultLeafListJSONArray(wire, writer, depthExpr, elemDepthExpr string, defaults []cambium.DefaultValue, f fieldInfo, out *strings.Builder) {
 	defaults = g.orderedDefaultValues(defaults, f)
 	fmt.Fprintf(out, "\t\tif !first { %s.WriteByte(',') }\n", writer)
 	out.WriteString("\t\tfirst = false\n")
@@ -969,14 +989,16 @@ func (g *goEmitter) emitDefaultLeafListJSONArray(wire, writer, depthExpr, elemDe
 	fmt.Fprintf(out, "\t\t%s.WriteByte(']')\n", writer)
 }
 
-func (g *goEmitter) orderedDefaultValues(defaults []string, f fieldInfo) []string {
-	out := append([]string(nil), defaults...)
+func (g *goEmitter) orderedDefaultValues(defaults []cambium.DefaultValue, f fieldInfo) []cambium.DefaultValue {
+	out := append([]cambium.DefaultValue(nil), defaults...)
 	if len(out) < 2 || !g.shouldSortCollection(f) {
 		return out
 	}
 	info, ok := f.node.LeafType()
 	if !ok {
-		sort.Strings(out)
+		sort.Slice(out, func(i, j int) bool {
+			return out[i].Value() < out[j].Value()
+		})
 		return out
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -985,14 +1007,14 @@ func (g *goEmitter) orderedDefaultValues(defaults []string, f fieldInfo) []strin
 	return out
 }
 
-func (g *goEmitter) defaultValueLess(info cambium.TypeInfo, left, right string, f fieldInfo) bool {
+func (g *goEmitter) defaultValueLess(info cambium.TypeInfo, left, right cambium.DefaultValue, f fieldInfo) bool {
 	if f.isUnion {
-		leftText, leftOK := g.defaultTextForType(info, left)
-		rightText, rightOK := g.defaultTextForType(info, right)
+		leftText, leftOK := g.defaultTextForType(info, left, f.node.Module())
+		rightText, rightOK := g.defaultTextForType(info, right, f.node.Module())
 		if leftOK && rightOK {
 			return leftText < rightText
 		}
-		return left < right
+		return left.Value() < right.Value()
 	}
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
@@ -1000,47 +1022,48 @@ func (g *goEmitter) defaultValueLess(info cambium.TypeInfo, left, right string, 
 			return g.defaultValueLess(*realtype, left, right, f)
 		}
 	case cambium.ResolvedBoolean:
-		if (left == "true" || left == "false") && (right == "true" || right == "false") {
-			return left == "false" && right == "true"
+		if (left.Value() == "true" || left.Value() == "false") && (right.Value() == "true" || right.Value() == "false") {
+			return left.Value() == "false" && right.Value() == "true"
 		}
 	case cambium.ResolvedInt:
-		leftValue, leftOK := integerDefaultSortValue(left, r)
-		rightValue, rightOK := integerDefaultSortValue(right, r)
+		leftValue, leftOK := integerDefaultSortValue(left.Value(), r)
+		rightValue, rightOK := integerDefaultSortValue(right.Value(), r)
 		if leftOK && rightOK {
 			return leftValue.Cmp(rightValue) < 0
 		}
 	case cambium.ResolvedDecimal64:
 		fd := r.FractionDigits().Value()
-		leftRaw, leftOK := decimal64DefaultRaw(left, fd)
-		rightRaw, rightOK := decimal64DefaultRaw(right, fd)
+		leftRaw, leftOK := decimal64DefaultRaw(left.Value(), fd)
+		rightRaw, rightOK := decimal64DefaultRaw(right.Value(), fd)
 		if leftOK && rightOK {
 			return leftRaw < rightRaw
 		}
 	case cambium.ResolvedIdentityRef:
-		leftText, leftOK := g.identityrefDefaultJSONName(left, r)
-		rightText, rightOK := g.identityrefDefaultJSONName(right, r)
+		leftText, leftOK := g.identityrefDefaultJSONName(left.Value(), r, left.SourceModule(), f.node.Module())
+		rightText, rightOK := g.identityrefDefaultJSONName(right.Value(), r, right.SourceModule(), f.node.Module())
 		if leftOK && rightOK {
 			return leftText < rightText
 		}
 	}
-	leftText, leftOK := g.defaultTextForType(info, left)
-	rightText, rightOK := g.defaultTextForType(info, right)
+	leftText, leftOK := g.defaultTextForType(info, left, f.node.Module())
+	rightText, rightOK := g.defaultTextForType(info, right, f.node.Module())
 	if leftOK && rightOK {
 		return leftText < rightText
 	}
-	return left < right
+	return left.Value() < right.Value()
 }
 
-func (g *goEmitter) defaultTextForType(info cambium.TypeInfo, value string) (string, bool) {
+func (g *goEmitter) defaultTextForType(info cambium.TypeInfo, def cambium.DefaultValue, leafModule cambium.Module) (string, bool) {
+	value := def.Value()
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
-			return g.defaultTextForType(*realtype, value)
+			return g.defaultTextForType(*realtype, def, leafModule)
 		}
 		return value, true
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			if text, ok := g.defaultTextForType(member, value); ok {
+			if text, ok := g.defaultTextForType(member, def, leafModule); ok {
 				return text, true
 			}
 		}
@@ -1072,7 +1095,7 @@ func (g *goEmitter) defaultTextForType(info cambium.TypeInfo, value string) (str
 	case cambium.ResolvedBits:
 		return bitsDefaultCanonical(value, r.Values())
 	case cambium.ResolvedIdentityRef:
-		return g.identityrefDefaultJSONName(value, r)
+		return g.identityrefDefaultJSONName(value, r, def.SourceModule(), leafModule)
 	case cambium.ResolvedInstanceIdentifier, cambium.ResolvedUnknown:
 		return value, true
 	default:
@@ -1301,7 +1324,7 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 			return
 		}
 		if f.optional {
-			defaultValue, hasDefault := f.node.DefaultValue()
+			defaultValue, hasDefault := f.node.DefaultEntry()
 			valueRef := "(*m." + ident + ")"
 			if f.isUnion {
 				valueRef = "m." + ident
@@ -1327,7 +1350,7 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 				out.WriteString("\t}\n")
 			}
 		} else {
-			if defaultValue, hasDefault := f.node.DefaultValue(); hasDefault {
+			if defaultValue, hasDefault := f.node.DefaultEntry(); hasDefault {
 				fmt.Fprintf(out, "\tif mode != WithDefaultsTrim || %s != %s {\n", g.jsonLiteralExpr("m."+ident, f), g.defaultJSONLiteralExpr(f, defaultValue))
 				g.emitScalarJSON(wire, "w", "1", "m."+ident, f, out)
 				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
@@ -1338,7 +1361,7 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 			}
 		}
 	case cambium.SchemaNodeKindLeafList:
-		defaults := f.node.DefaultValues()
+		defaults := f.node.DefaultEntries()
 		defaultVar := ""
 		if len(defaults) > 0 {
 			defaultVar = g.emitLeafListDefaultCheck("m", f, defaults, out, "\t")

@@ -1,0 +1,11 @@
+module schema-augment-submodule-base {
+  namespace "urn:cambium:schema-augment-submodule-base";
+  prefix sasb;
+  yang-version 1.1;
+
+  include schema-augment-submodule-part;
+
+  container system {
+    leaf name { type string; }
+  }
+}

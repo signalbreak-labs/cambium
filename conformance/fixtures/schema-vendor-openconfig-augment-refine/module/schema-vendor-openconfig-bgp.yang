@@ -1,0 +1,55 @@
+module schema-vendor-openconfig-bgp {
+  yang-version 1.1;
+  namespace "urn:cambium:schema-vendor-openconfig-bgp";
+  prefix svobgp;
+
+  import schema-vendor-openconfig-base {
+    prefix base;
+  }
+
+  grouping bgp-global-config {
+    leaf as {
+      type uint32;
+    }
+    leaf router-id {
+      type string;
+      default "0.0.0.0";
+    }
+  }
+
+  augment "/base:network-instances/base:network-instance/base:protocols/base:protocol" {
+    when "base:identifier = 'base:BGP'";
+    container bgp {
+      container global {
+        container config {
+          uses bgp-global-config {
+            refine "as" {
+              mandatory true;
+            }
+          }
+        }
+        container state {
+          config false;
+          uses bgp-global-config;
+        }
+      }
+      choice afi-safi {
+        case ipv4-unicast {
+          container ipv4-unicast {
+            leaf enabled {
+              type boolean;
+              default "true";
+            }
+          }
+        }
+        case l3vpn-ipv4-unicast {
+          container l3vpn-ipv4-unicast {
+            leaf import-policy {
+              type string;
+            }
+          }
+        }
+      }
+    }
+  }
+}

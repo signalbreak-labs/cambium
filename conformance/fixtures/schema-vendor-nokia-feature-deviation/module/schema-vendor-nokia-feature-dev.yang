@@ -1,0 +1,51 @@
+module schema-vendor-nokia-feature-dev {
+  yang-version 1.1;
+  namespace "urn:cambium:schema-vendor-nokia-feature-dev";
+  prefix svnfdev;
+
+  import schema-vendor-nokia-feature-base {
+    prefix base;
+  }
+
+  feature hardware-profile;
+
+  deviation "/base:top/base:system/base:interface" {
+    deviate replace {
+      min-elements 2;
+      max-elements 6;
+    }
+  }
+
+  deviation "/base:top/base:system/base:interface/base:legacy-tag" {
+    deviate not-supported;
+  }
+
+  deviation "/base:top/base:system/base:interface/base:if-index" {
+    deviate replace {
+      type string;
+    }
+  }
+
+  deviation "/base:top/base:system/base:interface/base:description" {
+    deviate add {
+      units "characters";
+      must "string-length(.) <= 64";
+    }
+    deviate delete {
+      default "";
+    }
+  }
+
+  deviation "/base:top/base:system/base:interface/base:admin-state" {
+    if-feature hardware-profile;
+    deviate replace {
+      default "disable";
+    }
+  }
+
+  deviation "/base:top/base:system/base:hardware" {
+    deviate replace {
+      config false;
+    }
+  }
+}
