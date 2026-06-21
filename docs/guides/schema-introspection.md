@@ -125,9 +125,16 @@ if err != nil {
 
 If you need to pin a specific revision, `SchemaRevision(module, revision string)`
 and `GetModule(name string, revision *string) (Module, bool)` are available, and
+`FindModuleByNamespace(namespace string) (Module, bool)` resolves by namespace.
 `Modules()` returns every loaded module. To jump straight to a node by schema
 path, `Module.FindPath(path string) (SchemaNodeRef, error)` resolves a path
 without walking by hand.
+
+```go
+if mod, ok := ctx.FindModuleByNamespace("urn:acme:vlans"); ok {
+	fmt.Println(mod.Name())
+}
+```
 
 ## Walking the ordered tree
 
@@ -140,12 +147,14 @@ A `Module` exposes several ordered entry points, each returning a
 - `RPCs()`, `Actions()`, `Notifications()` — operation roots in declaration
   order (I4).
 
-`SchemaChildren` is a small cursor, not a slice you index by guessing. Its
+`SchemaChildren` is a small cursor, not a slice you index by guessing. Its core
 methods are `Len()`, `IsEmpty()`, `Get(i int) (SchemaNodeRef, bool)`,
-`Lookup(name string) (SchemaNodeRef, bool)`, and `Iter() iter.Seq[SchemaNodeRef]`
-for `range`-over-func iteration. `Lookup` is a derived name → node-identity
-cache; traversal and ordering always come from `Iter`/`Get`, never from the
-lookup index.
+`Lookup(name string) (SchemaNodeRef, bool)`, `LookupAll(name string)`,
+`LookupQualified(module, name string)`, `LookupQualifiedName(qname)`,
+`QualifiedNames()`, and `Iter() iter.Seq[SchemaNodeRef]` for
+`range`-over-func iteration. `Lookup` and the qualified lookup helpers are
+derived name → node-identity caches; traversal and ordering always come from
+`Iter`/`Get`, never from a map.
 
 Each element is a `SchemaNodeRef` — a handle to one node. To descend, a node
 gives you two ordered child views:
@@ -159,6 +168,62 @@ gives you two ordered child views:
 
 > Use `DataChildren(true)` when you want the on-the-wire data shape; use
 > `Children()` when you care about the `choice`/`case` structure itself.
+
+## Disambiguating augmented siblings
+
+YANG allows different modules to augment same-local-name children under one
+parent. `Lookup(name)` returns the first match in schema order, which is useful
+for simple schemas but not enough when augmented children collide. In those cases,
+use the qualified helpers:
+
+```go
+top, _ := mod.FindPath("/acme-base:top")
+children := top.Children()
+
+for _, qname := range children.QualifiedNames() {
+	fmt.Println(qname.Module, qname.Name)
+}
+
+matches := children.LookupAll("state")
+for node := range matches.Iter() {
+	fmt.Println(node.QualifiedPath())
+}
+
+state, ok := children.LookupQualifiedName(cambium.QualifiedName{
+	Namespace: "urn:acme:state-augment",
+	Name:      "state",
+})
+if ok {
+	fmt.Println(state.QualifiedPath())
+}
+```
+
+`SchemaNodeRef.QualifiedName()` returns the defining module name, source prefix,
+namespace, and local name. `QualifiedPath()` returns an absolute path with module
+names in each segment, for example `/acme-base:top/acme-state:state`; use it when
+you need a stable path that survives same-local-name augments.
+
+## Handling path errors
+
+`FindPath` failures are still wrapped in `*cambium.Error` with
+`RuleCodeContext`, so existing Cambium error handling keeps working. The wrapped
+cause is also a `*cambium.SchemaPathError`, which lets callers avoid string
+matching:
+
+```go
+node, err := mod.FindPath("/acme-base:top/acme-base:missing")
+if err != nil {
+	var pathErr *cambium.SchemaPathError
+	if errors.As(err, &pathErr) {
+		fmt.Printf("%s failed at %s from %s\n", pathErr.Kind, pathErr.Segment, pathErr.From)
+	}
+	return err
+}
+_ = node
+```
+
+The `Kind` is one of `SchemaPathErrorInvalid`,
+`SchemaPathErrorNotFound`, or `SchemaPathErrorNoParent`.
 
 ## Reading list keys first (I3)
 

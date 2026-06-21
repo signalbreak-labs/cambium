@@ -220,9 +220,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - `Context.GetModule(name string, revision *string) (Module, bool)` returns a
     loaded module by name, with `nil` selecting the latest/default same-name
     module and a non-nil revision selecting an exact loaded revision.
-    `Context.FindModuleByNS(namespace string) (Module, bool)` returns the
+    `Context.FindModuleByNamespace(namespace string) (Module, bool)` returns the
     latest/default loaded module for a namespace. These lookup helpers can
-    return imported-but-not-implemented dependency modules.
+    return imported-but-not-implemented dependency modules. Go also keeps
+    `FindModuleByNS` as a deprecated spelling alias for branch compatibility;
+    new code uses `FindModuleByNamespace`.
   - `Context.Modules() []Module` returns borrowed handles for every implemented
     module in the context, including any modules auto-loaded as dependencies.
     The returned order is stable for a materialized context snapshot but is not a
@@ -253,11 +255,18 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - `SchemaNodeRef.Path()` returns the slash-separated schema path beginning with
     the module name, for example `/module-name/container/leaf`, with no prefix
     colons — goyang-compatible in shape.
+  - `SchemaNodeRef.QualifiedName()` returns the node local name plus the defining
+    module name, prefix, and namespace. `SchemaNodeRef.QualifiedPath()` returns
+    an absolute schema path whose segments are qualified with the defining
+    module name, for example `/base-module:top/augment-module:leaf`; it is the
+    non-ambiguous path form for augmented siblings that share a local name.
   - `Module.FindPath(path)` resolves module-name paths and schema-prefix paths.
     Imported prefix bindings take precedence; if a qualifier is otherwise
     unresolved on an augmented child, it may match that child's owning module
     prefix or module name. Missing or invalid schema paths fail with
-    `CAMBIUM_E0001`.
+    `CAMBIUM_E0001`; Go wraps a structured `SchemaPathError` cause that reports
+    `Kind` (`invalid`, `not_found`, or `no_parent`), `Path`, failing `Segment`,
+    and lookup origin `From`.
   - `SchemaNodeRef.Parent()` returns the immediate parent node, or `false` for the
     synthetic module root.
   - `SchemaNodeRef.Ancestors()` returns the ancestor chain in **root-to-leaf**
@@ -265,6 +274,15 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     per-node FFI.
   - `SchemaChildren.Lookup(name)` finds the first child with the given name in
     declaration order.
+  - `SchemaChildren.LookupAll(name)` returns all children with the given local
+    name in declaration order. This is the preferred discovery path when augments
+    can introduce same-local-name siblings from different modules.
+  - `SchemaChildren.LookupQualified(module, name)` and
+    `SchemaChildren.LookupQualifiedName(qname)` resolve a child by local name plus
+    defining module identity. The `QualifiedName` matcher accepts any non-empty
+    combination of module name, source prefix, and namespace. `QualifiedNames()`
+    returns the defining-module identity for each child in order. Go keeps
+    `LookupQName` as a deprecated spelling alias for `LookupQualifiedName`.
   - `SchemaNodeRef.DataChildren(flattenChoices bool)` returns the data children
     of a node, excluding RPC/action/notification operation nodes. When
     `flattenChoices` is `true`, choice and case nodes are skipped and their

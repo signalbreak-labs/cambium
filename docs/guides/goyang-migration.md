@@ -41,6 +41,11 @@ The native replacement for common goyang read use cases is:
 - `Module.ResolvePrefix(prefix)` for native prefix-to-module resolution.
 - `SchemaNodeRef.Path()` and `SchemaNodeRef.FindPath(path)` for goyang-style
   node path inspection and relative traversal.
+- `SchemaNodeRef.QualifiedName()` and `QualifiedPath()` for module-qualified
+  identity and unambiguous paths across augments.
+- `SchemaChildren.LookupAll(name)`, `LookupQualified(module, name)`, and
+  `LookupQualifiedName(qname)` for name collisions introduced by augments.
+- `SchemaPathError` for structured `FindPath` failures via `errors.As`.
 - `Module.MatchingExtensions(module, name)` and
   `SchemaNodeRef.MatchingExtensions(module, name)` for resolved extension
   filtering.
@@ -64,6 +69,64 @@ for _, st := range stmts {
 The returned `Statement` handles are read-only and preserve child order through
 `SubStatements()`. They are for source inspection; use `Context.Schema` when you
 need semantic schema resolution.
+
+## Native replacements for common goyang patterns
+
+For code you can afford to move off the goyang-shaped projection, prefer the
+native `cambium` handles directly:
+
+| goyang-style task | Native Cambium call |
+| --- | --- |
+| Load from search paths | `NewContextBuilder`, `SearchPath`, `LoadModule`, `Build` |
+| Get a module by name | `ctx.Schema("module-name")` |
+| Get a module by namespace | `ctx.FindModuleByNamespace("urn:example")` |
+| Walk children in schema order | `node.Children().Iter()` or `DataChildren(true).Iter()` |
+| Point lookup by local name | `node.Children().Lookup("name")` |
+| Discover same-local-name augments | `node.Children().LookupAll("name")` |
+| Resolve an augmented child exactly | `LookupQualified` or `LookupQualifiedName` |
+| Get a stable node identity | `node.QualifiedName()` |
+| Get an unambiguous path | `node.QualifiedPath()` |
+| Relative path traversal | `node.FindPath("../sibling")` |
+| Absolute path traversal | `mod.FindPath("/module:top/module:leaf")` |
+| Handle lookup failure detail | `errors.As(err, &pathErr)` with `*cambium.SchemaPathError` |
+| Read resolved type constraints | `node.LeafType()` and `TypeInfo.Resolved()` |
+| Read declaration source | `mod.Location()` / `node.Location()` |
+
+The largest semantic difference is still traversal order: native Cambium has no
+map traversal contract to remember. You walk `SchemaChildren`, and the order is
+the effective schema declaration order used by serializers and codegen.
+
+Qualified lookup matters when two augmenting modules contribute the same local
+name under the same parent:
+
+```go
+children := top.Children()
+
+for _, qname := range children.QualifiedNames() {
+	fmt.Println(qname.Module, qname.Name)
+}
+
+state, ok := children.LookupQualifiedName(cambium.QualifiedName{
+	Namespace: "urn:vendor:state",
+	Name:      "state",
+})
+if ok {
+	fmt.Println(state.QualifiedPath())
+}
+```
+
+Path lookup errors still carry `CAMBIUM_E0001`, but native callers can inspect
+the underlying cause without matching error strings:
+
+```go
+_, err := mod.FindPath("/vendor-base:top/vendor-base:missing")
+if err != nil {
+	var pathErr *cambium.SchemaPathError
+	if errors.As(err, &pathErr) {
+		fmt.Println(pathErr.Kind, pathErr.Segment, pathErr.From)
+	}
+}
+```
 
 ## What `compat` is for
 
