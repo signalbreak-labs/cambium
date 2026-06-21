@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package cambium is the default pure-Go schema and codegen surface of Cambium.
 //
 // It builds an ordered schema IR from Cambium's internal YANG parser adapter.

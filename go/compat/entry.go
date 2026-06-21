@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package compat provides a small cgo-free, goyang-shaped schema projection.
 //
 // The projection is read-only. Entry.Dir is available for familiar name lookup,

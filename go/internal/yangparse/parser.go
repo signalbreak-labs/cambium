@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package yangparse is Cambium's internal pure-Go YANG parser adapter.
 //
-// It deliberately hides the forked upstream parser package from public
+// It deliberately hides the vendored upstream parser package from public
 // Cambium code so the default Go API owns its parser boundary.
 package yangparse
 
@@ -9,8 +12,6 @@ import (
 	"os"
 	"strings"
 	"unicode/utf8"
-
-	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 const (
@@ -18,10 +19,9 @@ const (
 	maxStatementDepth = 10000
 )
 
-// Statement is one parsed YANG statement with ordered substatements.
-type Statement = upstream.Statement
-
-// Parse parses one YANG module or submodule source into ordered statements.
+// Parse parses one YANG module or submodule source into ordered statements using
+// Cambium's own cgo-free RFC 7950 parser (see native.go). The Statement type is
+// defined in statement.go.
 func Parse(input, name string) (stmts []*Statement, err error) {
 	if err := checkInputBounds(input, name); err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func Parse(input, name string) (stmts []*Statement, err error) {
 			err = fmt.Errorf("%s: YANG parser panic: %v", displayName(name), recovered)
 		}
 	}()
-	return upstream.Parse(input, name)
+	return parseDocument(input, name)
 }
 
 // ReadFile reads a YANG source file after checking parser input bounds that can
@@ -52,6 +52,14 @@ func ReadFile(path string) (string, error) {
 	return string(raw), nil
 }
 
+// CheckInputBounds validates parser input limits (size, UTF-8, legal source
+// characters, statement nesting depth) without parsing. It is exported so the
+// goyang-compat layer can apply identical pre-parse safety to its upstream-backed
+// parse path while keeping this package free of any upstream dependency.
+func CheckInputBounds(input, name string) error {
+	return checkInputBounds(input, name)
+}
+
 func checkInputBounds(input, name string) error {
 	if len(input) > maxInputBytes {
 		return fmt.Errorf("%s: YANG input is %d bytes, exceeds maximum %d bytes", displayName(name), len(input), maxInputBytes)
@@ -62,7 +70,7 @@ func checkInputBounds(input, name string) error {
 	depth := 0
 	for i := 0; i < len(input); {
 		switch input[i] {
-		case '/', '#':
+		case '/':
 			if next := skipComment(input, i); next > i {
 				i = next
 				continue
@@ -120,8 +128,6 @@ func isLegalYangSourceCharacter(r rune) bool {
 
 func skipComment(input string, start int) int {
 	switch {
-	case input[start] == '#':
-		return skipLine(input, start+1)
 	case start+1 < len(input) && input[start] == '/' && input[start+1] == '/':
 		return skipLine(input, start+2)
 	case start+1 < len(input) && input[start] == '/' && input[start+1] == '*':
@@ -133,7 +139,7 @@ func skipComment(input string, start int) int {
 }
 
 func skipLine(input string, start int) int {
-	for start < len(input) && input[start] != '\n' {
+	for start < len(input) && input[start] != '\n' && input[start] != '\r' {
 		start++
 	}
 	return start

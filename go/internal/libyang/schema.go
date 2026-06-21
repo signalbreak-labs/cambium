@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Coarse and rich schema-tree introspection over libyang's compiled schema nodes.
 //
 // This file is part of the internal cgo adapter; public callers use

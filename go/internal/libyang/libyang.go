@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 // Package libyang is Cambium's internal cgo FFI over a vendored, statically
 // linked libyang + PCRE2 (built by build.sh into .build/). It is the ONLY place
 // in the Go tree that touches C; the public github.com/.../go/cambium package

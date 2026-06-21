@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 package compat
 
 import (
@@ -58,7 +61,7 @@ func (ms *Modules) Parse(data, name string) error {
 	if ms == nil {
 		return fmt.Errorf("nil Modules")
 	}
-	stmts, err := yangparse.Parse(data, name)
+	stmts, err := parseStatements(data, name)
 	if err != nil {
 		return err
 	}

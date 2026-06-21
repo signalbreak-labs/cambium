@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 signalbreak-labs
+
 package confmanifest
 
 import (
@@ -42,8 +45,8 @@ func TestLoadSharedManifest(t *testing.T) {
 		}
 	}
 
-	if schemaIR != 7 {
-		t.Errorf("schema-ir cases = %d, want 7", schemaIR)
+	if schemaIR != 12 {
+		t.Errorf("schema-ir cases = %d, want 12", schemaIR)
 	}
 	if backend == 0 {
 		t.Error("no backend-data cases found")
