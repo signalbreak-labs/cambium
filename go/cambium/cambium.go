@@ -1544,9 +1544,9 @@ func (c *Context) GetModule(name string, revision *string) (Module, bool) {
 	return Module{mod: mod}, true
 }
 
-// FindModuleByNS returns the context's latest/default loaded module for a
+// FindModuleByNamespace returns the context's latest/default loaded module for a
 // namespace.
-func (c *Context) FindModuleByNS(namespace string) (Module, bool) {
+func (c *Context) FindModuleByNamespace(namespace string) (Module, bool) {
 	if err := c.rebuildIfDirty(); err != nil {
 		return Module{}, false
 	}
@@ -1555,6 +1555,14 @@ func (c *Context) FindModuleByNS(namespace string) (Module, bool) {
 		return Module{}, false
 	}
 	return Module{mod: mod}, true
+}
+
+// FindModuleByNS returns the context's latest/default loaded module for a
+// namespace.
+//
+// Deprecated: use FindModuleByNamespace.
+func (c *Context) FindModuleByNS(namespace string) (Module, bool) {
+	return c.FindModuleByNamespace(namespace)
 }
 
 // Modules returns a stable snapshot of modules known to the context.

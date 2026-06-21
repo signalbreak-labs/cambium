@@ -1402,12 +1402,12 @@ func TestContextModuleLookupHelpers(t *testing.T) {
 	if got, _ := old.Revision(); got != oldRevision {
 		t.Fatalf("GetModule old revision = %q, want %q", got, oldRevision)
 	}
-	byNS, ok := ctx.FindModuleByNS("urn:cambium:builder-lookup")
+	byNS, ok := ctx.FindModuleByNamespace("urn:cambium:builder-lookup")
 	if !ok {
-		t.Fatal("FindModuleByNS returned false")
+		t.Fatal("FindModuleByNamespace returned false")
 	}
 	if got, _ := byNS.Revision(); got != newRevision {
-		t.Fatalf("FindModuleByNS revision = %q, want %q", got, newRevision)
+		t.Fatalf("FindModuleByNamespace revision = %q, want %q", got, newRevision)
 	}
 	importOnly, ok := ctx.GetModule("cambium-builder-lookup-target", nil)
 	if !ok {
@@ -1419,8 +1419,8 @@ func TestContextModuleLookupHelpers(t *testing.T) {
 	if _, ok := ctx.GetModule("missing", nil); ok {
 		t.Fatal("GetModule returned true for missing module")
 	}
-	if _, ok := ctx.FindModuleByNS("urn:cambium:missing"); ok {
-		t.Fatal("FindModuleByNS returned true for missing namespace")
+	if _, ok := ctx.FindModuleByNamespace("urn:cambium:missing"); ok {
+		t.Fatal("FindModuleByNamespace returned true for missing namespace")
 	}
 }
 
@@ -1854,8 +1854,8 @@ func TestNilContextPublicMethodsReturnContextErrors(t *testing.T) {
 	if _, ok := ctx.GetModule("missing", nil); ok {
 		t.Fatal("GetModule returned ok for nil context")
 	}
-	if _, ok := ctx.FindModuleByNS("urn:missing"); ok {
-		t.Fatal("FindModuleByNS returned ok for nil context")
+	if _, ok := ctx.FindModuleByNamespace("urn:missing"); ok {
+		t.Fatal("FindModuleByNamespace returned ok for nil context")
 	}
 	if got := ctx.Modules(); got != nil {
 		t.Fatalf("Modules = %v, want nil for nil context", got)
