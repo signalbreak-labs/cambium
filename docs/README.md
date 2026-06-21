@@ -2,77 +2,78 @@
 
 Cambium is an order-correct YANG toolkit and SDK for Go. It loads YANG, builds a
 schema tree that remembers **effective schema declaration order**, generates typed
-Go structs with order-correct serializers, and (through an optional libyang-backed
-backend) parses, validates, and serializes generic data trees. Cambium exists for
-a specific use case: order-sensitive, NETCONF-facing workflows where RFC 7950
-declaration order is structurally meaningful and must survive parse, codegen, and
-serialization. This page is the index to the rest of the documentation.
+Go structs with order-correct serializers, and parses/validates/serializes generic
+data — either with the experimental pure-Go `datatree` tier or the optional
+libyang-backed backend. It exists for one use case: order-sensitive,
+NETCONF-facing workflows where RFC 7950 declaration order is structurally
+meaningful and must survive parse, codegen, and serialization.
 
-Cambium ships in two tiers. The **Schema-IR tier (pure Go, `CGO_ENABLED=0`)**
-covers schema loading, introspection, static validation, and typed-struct codegen.
-The **Backend/data tier (optional, requires cgo)** adds generic data-tree parsing,
-full RFC-7950 semantic validation, diff/merge, and LYB over a vendored, statically
-linked libyang. Start with "Why Cambium" for the rationale, or jump straight to the
-quickstart.
+New here? Read the [overview](overview.md), then the [quickstart](guides/quickstart.md).
 
-## Start here
+## Documentation map
 
-- [why-cambium.md](./why-cambium.md) — the domain problem (YANG/NETCONF order
-  semantics), Cambium's design response, the trade-offs, and who it is for.
-- [quickstart.md](./quickstart.md) — the fast path: load a module, walk the ordered
-  tree, generate typed structs.
+This suite has three authorities, with no overlap between them:
+
+- **godoc** — the API reference (signatures, per-symbol docs). Browse it on
+  [pkg.go.dev](https://pkg.go.dev/github.com/signalbreak-labs/cambium/go). The
+  pages here link into it; they do not restate signatures.
+- **[`/spec`](../spec/)** — the normative, language-neutral contract: behavior,
+  ordering invariants, rule codes.
+- **`docs/`** (this tree) — narrative: concepts, task-oriented guides, and
+  contributor material.
+
+## Orientation
+
+- [overview.md](overview.md) — the domain problem, the design rule, the three
+  tiers, who it is for, and the non-goals.
+- [glossary.md](glossary.md) — YANG and Cambium terms (declaration order,
+  `ordered-by user`/`system`, list key, leafref, IR, field-order manifest, LYB,
+  tier).
+- [faq.md](faq.md) — use-case fit, the cgo-free core, pure-Go vs libyang data,
+  `ordered-by system` device order.
 
 ## Concepts
 
-- [ordering-story.md](./ordering-story.md) — why order is modeled as a structural
-  property of the tree rather than a sort key, sidecar, or map.
-- [architecture.md](./architecture.md) — the hexagonal design, the two tiers, the
-  machine-enforced cgo-free closure, and the language-neutral shared layer.
+- [concepts/ordering.md](concepts/ordering.md) — why order is modeled as a
+  structural property of the tree, the four ordering facets, and a worked example.
+- [concepts/tiers-and-cgo.md](concepts/tiers-and-cgo.md) — the three tiers, the cgo
+  boundary, and how to choose.
+- [concepts/architecture.md](concepts/architecture.md) — the hexagonal design, the
+  machine-enforced cgo-free import closure, and the language-neutral shared layer.
 
-## Guides
+## Using Cambium (consumer guides)
 
-- [guides/schema-introspection.md](./guides/schema-introspection.md) — package
-  `cambium`: build a `Context`, load modules, and walk the ordered schema tree.
-- [guides/codegen.md](./guides/codegen.md) — package `codegen`: `GenerateGo`, what
-  it emits, and the ordering guarantees baked into generated structs and serializers.
-- [guides/goyang-migration.md](./guides/goyang-migration.md) — package `compat`: the
-  goyang-shaped read-only projection and the neutral compatibility notes.
-- [guides/libyang-backend.md](./guides/libyang-backend.md) — package
+- [guides/install.md](guides/install.md) — `go get`, building the optional cgo
+  engine, and verifying the default surface is cgo-free.
+- [guides/quickstart.md](guides/quickstart.md) — load a module, walk the ordered
+  tree, generate typed structs.
+- [guides/schema-introspection.md](guides/schema-introspection.md) — package
+  `cambium`: build a `Context`, load modules, walk the ordered schema tree.
+- [guides/codegen.md](guides/codegen.md) — package `codegen`: `GenerateGo`, what it
+  emits, and the ordering guarantees baked into generated structs and serializers.
+- [guides/data-tree-pure-go.md](guides/data-tree-pure-go.md) — package `datatree`
+  (**experimental**): parse, validate, and serialize generic data without cgo.
+- [guides/data-tree-libyang.md](guides/data-tree-libyang.md) — package
   `libyangbackend`: build the engine, then parse, validate, serialize, diff, merge,
   and emit LYB over real data.
+- [guides/goyang-migration.md](guides/goyang-migration.md) — package `compat`: the
+  goyang-shaped read-only projection and the migration notes.
 
-## Reference
+## Contributing & contract
 
-- [conformance.md](./conformance.md) — the shared `/conformance` corpus and golden
-  outputs, and how the ordering invariants are gated.
-- [faq.md](./faq.md) — concise answers on use-case fit, the cgo-free core, non-goals,
-  and `ordered-by system` device order.
-- [glossary.md](./glossary.md) — YANG and Cambium terms (schema declaration order,
-  `ordered-by user`/`system`, list key, leafref, IR, field-order manifest, LYB, tier).
-- [../spec/api.md](../spec/api.md) — the language-neutral API shape every binding
-  implements against.
-- [../spec/ordering-invariants.md](../spec/ordering-invariants.md) — the normative
-  text for invariants I1–I6.
-- [../spec/rule-codes.md](../spec/rule-codes.md) — the `CAMBIUM_E####` rule-code
-  catalog.
-
-## Background (historical)
-
-These documents capture earlier design intent and point-in-time audits. They are
-useful for context but defer to the docs above and to `/spec` for current status.
-
-- [cambium-kickoff.md](./cambium-kickoff.md) — the original design brief
-  (architecture, invariants, roadmap). Predates the Rust removal; read for intent.
-- [sdk-api-design.md](./sdk-api-design.md) — the early SDK API design exploration.
-- [gaps-analysis-2026-06-20.md](./gaps-analysis-2026-06-20.md) — a gap analysis
-  snapshot.
-- [release-readiness-2026-06-20.md](./release-readiness-2026-06-20.md) — a
-  release-readiness snapshot.
-- [go-quality-followups.md](./go-quality-followups.md) — recorded Go quality
-  follow-ups.
+- [contributing/development.md](contributing/development.md) — build/test/lint, the
+  green-bar gate, the cgo-free purity check, and the TDD rule.
+- [contributing/conformance.md](contributing/conformance.md) — the shared
+  `/conformance` corpus, the manifest, the tiers, and how ordering is gated.
+- [contributing/roadmap.md](contributing/roadmap.md) — current work, what is
+  experimental, and known gaps.
+- [contributing/adding-a-binding.md](contributing/adding-a-binding.md) — how a new
+  language binding attaches as a peer against `/spec` and `/conformance`.
+- [contributing/vendor-yang.md](contributing/vendor-yang.md) — policy for distilling
+  owned conformance fixtures from vendor YANG without vendoring proprietary models.
+- [../spec/api.md](../spec/api.md) · [../spec/ordering-invariants.md](../spec/ordering-invariants.md) · [../spec/rule-codes.md](../spec/rule-codes.md) — the normative contract.
 
 ## See also
 
-- [../README.md](../README.md) — repository overview and capability summary.
-- [../spec/api.md](../spec/api.md) — the shared, language-neutral contract.
-- [why-cambium.md](./why-cambium.md) — start with the rationale.
+- [Repository README](../README.md) — overview and capability summary.
+- [AGENTS.md](../AGENTS.md) — the contributor + agent guide and project rules.

@@ -1,13 +1,19 @@
 # Generating typed Go from YANG (`codegen`)
 
-This guide covers the pure-Go `codegen` package, which turns a loaded Cambium
-schema context into deterministic, typed Go source. The generator exists so that
-the ordering Cambium computes at the schema level (RFC 7950 §7.8.5 declaration
-order, list keys first, `ordered-by user` insertion order) survives all the way
-into the serializers your application ships — without a runtime schema, reflection,
-or a cgo dependency. `codegen` lives in the **Schema-IR tier (pure Go,
-`CGO_ENABLED=0`)**, so the code it produces, and the code that produces it, build
-with cgo disabled.
+The pure-Go `codegen` package turns a loaded Cambium schema context into a single,
+deterministic Go source file: typed structs for the module's data nodes, plus the
+serializers, parser, and validator those structs need. It exists so that the
+ordering Cambium computes at the schema level — RFC 7950 §7.8.5 declaration order,
+list keys first, `ordered-by user` insertion order — survives all the way into the
+code your application ships, without a runtime schema, reflection, or a cgo
+dependency.
+
+`codegen` lives in the **Schema-IR tier (pure Go, `CGO_ENABLED=0`)**: both the
+generator and the code it emits build with cgo disabled. The generated structs are
+**self-contained** — they carry their own field-order manifest, serializers, and
+validation logic, so nothing they do at runtime needs a live `*cambium.Context` or
+the libyang backend. For where this tier sits relative to the data tiers, see
+[Tiers and the cgo boundary](../concepts/tiers-and-cgo.md).
 
 ## The single entry point
 
@@ -17,47 +23,44 @@ with cgo disabled.
 func GenerateGo(ctx *cambium.Context, module string) (string, error)
 ```
 
-It takes a fully built `*cambium.Context` (see
-[schema introspection](./schema-introspection.md) for how to load one) and the
-name of an implemented module, and returns the generated module as a Go source
-string. There is **no options struct** and no configuration surface: the input is
-the loaded context plus a module name, and the output is a single, deterministic,
-`gofmt`-stable file. Re-running the generator on the same context produces the same
-bytes, which makes generated code reviewable in version control and safe to gate in
-CI.
+It takes a fully built `*cambium.Context` and the name of an implemented module,
+and returns the generated module as a Go source string. There is no options struct
+and no configuration surface — the input is the loaded context plus a module name,
+and the generator is otherwise a black box. The complete, authoritative API is on
+[pkg.go.dev](https://pkg.go.dev/github.com/signalbreak-labs/cambium/go/codegen).
 
-The returned string is the entire file, including its `package` declaration and
-imports. Writing it to disk and running your normal `go build` is all that is
-required.
+The output is one `gofmt`-stable file, including its `package` declaration and
+imports. Internally `GenerateGo` runs the assembled source through `go/format`, so
+writing the returned string verbatim and running your normal `go build` is all that
+is required. Re-running the generator on the same context produces the same bytes,
+which makes generated code reviewable in version control and safe to gate in CI.
 
 ## What it emits
 
 For a module, `GenerateGo` produces:
 
-- **A typed struct per schema node** — containers, list entries, RPC/action input
-  and output, and the module root each become a Go struct. Leaves map to typed Go
-  fields (for example a `uint8` leaf becomes `*uint8`; a mandatory string key
-  becomes `string`). Nested containers and list entries are nested struct types.
+- **A typed struct per schema node.** Containers, list entries, RPC/action input
+  and output, notifications, and the module root each become a Go struct; leaves
+  map to typed Go fields, and nested containers and lists are nested struct types.
 - **A per-struct field-order manifest** — a `var <Type>FieldOrder = []string{...}`
-  listing each child's wire name in the exact order the serializers must emit them.
-  This is the field-order manifest the project's "one rule" refers to: serialization
+  listing each child's wire name in the exact order the serializers must emit it.
+  This is the field-order manifest the project's one rule refers to: serialization
   walks this slice, never Go struct field order or map iteration.
-- **Native XML and JSON_IETF serializers** — every data struct implements
+- **Native XML and JSON_IETF serializers.** Every data struct implements
   `ToXML() string`, `ToJSONIETF() string`, and
-  `ToJSONIETFWithDefaults(WithDefaultsMode) string`. The XML output follows
-  declaration order; the JSON_IETF output follows RFC 7951.
-- **A JSON_IETF deserializer** — a top-level `FromJSONIETF(data []byte)` and a
-  per-type `From<Type>JSONIETF(data []byte)` parse JSON_IETF back into the typed
-  structs. (XML is serialize-only; there is no generated `FromXML`.)
-- **`Validate() error`** — every data struct implements value validation (see
-  [What `Validate` covers](#what-validate-covers) below).
-- **With-defaults handling** — `ToJSONIETFWithDefaults` takes a `WithDefaultsMode`
+  `ToJSONIETFWithDefaults(WithDefaultsMode) string`.
+- **A JSON_IETF deserializer** — a top-level `FromJSONIETF(data []byte)` (and a
+  per-operation `From<Type>JSONIETF(data []byte)` for RPC/notification documents)
+  parses JSON_IETF back into the typed structs, then validates the result. XML is
+  serialize-only; there is no generated `FromXML`.
+- **`Validate() error`** on every data struct (see
+  [What `Validate` covers](#what-validate-covers)).
+- **With-defaults handling.** `ToJSONIETFWithDefaults` takes a `WithDefaultsMode`
   (`WithDefaultsExplicit`, `WithDefaultsTrim`, `WithDefaultsAll`,
-  `WithDefaultsAllTagged`) to control how schema-default values appear in output,
-  per RFC 6243 semantics.
-- **RFC 7952 metadata** — structs whose nodes can carry instance metadata get a
-  `CambiumMetadata map[string][]MetadataAnnotation` field, keyed by child wire name,
-  that the XML and JSON_IETF serializers emit and the JSON_IETF deserializer reads.
+  `WithDefaultsAllTagged`) controlling how schema-default values appear in output.
+- **RFC 7952 metadata.** A struct whose leaf or leaf-list children can carry
+  instance metadata gets a `CambiumMetadata map[string][]MetadataAnnotation` field,
+  keyed by child wire name, that the serializers emit and the deserializer reads.
 
 Every generated data struct satisfies a generated `CambiumStruct` interface:
 
@@ -72,60 +75,75 @@ type CambiumStruct interface {
 
 ## Ordering guarantees baked into the generated code
 
-The generated code is where Cambium's ordering invariants become mechanical
-guarantees rather than runtime conventions:
+Generated code is where Cambium's ordering invariants stop being runtime
+conventions and become mechanical properties of the emitted bytes. See
+[Ordering](../concepts/ordering.md) for the model, and
+[`/spec/ordering-invariants.md`](../../spec/ordering-invariants.md) for the
+normative I1–I6 text.
 
 - **Keys first, then schema declaration order (I3, I2).** Each struct's
   `FieldOrder` manifest lists list-key leaves first, in `key`-statement order, then
   the remaining children in effective schema declaration order. The serializers
   walk that manifest, so the emitted order is fixed at generation time and cannot
   drift with Go field rearrangement or map iteration.
-- **`ordered-by user` is positional-only.** A node marked `ordered-by user` is
-  generated as a `UserOrderedVec[T]`, whose only mutators are positional
-  (`InsertFirst`, `InsertLast`, `InsertBefore`, `InsertAfter`, `MoveBefore`,
-  `MoveAfter`, `Remove`) and whose readers are `Len`, `IsEmpty`, `Get`, and `Iter`.
-  Because there is no API that assigns an absolute sequence to a system-ordered
-  node, treating a system-ordered node as if it were user-ordered is a compile-time
-  impossibility rather than a runtime mistake.
-- **RPC/action input and output in schema order (I4).** Generated I/O structs carry
-  their children in effective schema order via the same field-order manifest.
+- **`ordered-by user` is a positional-only type (I1).** A node marked
+  `ordered-by user` is generated as a `UserOrderedVec[T]`, whose only mutators are
+  positional — `InsertFirst`, `InsertLast`, `InsertBefore`, `InsertAfter`,
+  `MoveBefore`, `MoveAfter`, `Remove` — and whose readers are `Len`, `IsEmpty`,
+  `Get`, and `Iter`. There is no API that assigns an absolute sequence to a
+  system-ordered node, so treating a system-ordered node as if it were
+  user-ordered is a **compile error**, not a runtime check.
+- **RPC/action input and output in schema order (I4).** Generated I/O structs
+  carry their children in effective schema order through the same field-order
+  manifest.
 
 Because the generated walk follows the compiled YANG declaration order (keys
-first), serializer output is **byte-identical to libyang's** for the same data.
-That is what lets you run the pure-Go generated serializers in the default
-`CGO_ENABLED=0` build while still matching the conformance golden outputs produced
-through the optional [libyang backend](./libyang-backend.md).
+first), serializer output is byte-identical to libyang's for the same data. That
+is what lets the pure-Go generated serializers run in the default `CGO_ENABLED=0`
+build while still matching the conformance golden outputs produced through the
+optional [libyang backend](./data-tree-libyang.md).
 
 ## What `Validate` covers
 
-The generated `Validate()` performs **value/structural validation** at the schema
-level:
+The generated `Validate()` performs **value and structural validation** at the
+schema level:
 
 - type constraints — integer/decimal `range`, string/binary `length`, string
   `pattern` (RFC 7950 regular expressions);
-- cardinality and `mandatory` presence;
+- `mandatory` presence and list/leaf-list cardinality;
 - `unique` constraints on list entries;
-- `choice` selection rules.
+- `choice` selection rules, including mandatory-choice and mandatory-within-case.
 
 What it does **not** do, by design, is anything that requires evaluating data
 against the rest of an instance tree: there is **no `must`/`when` XPath evaluation
 and no leafref instance-existence checking** in generated code. Those are
-data-tier semantics. For full RFC 7950 semantic validation
-(`must`/`when`/`mandatory` across the tree, leafref resolution), parse and validate
-through the **Backend/data tier (optional, requires cgo)** —
-see [the libyang backend guide](./libyang-backend.md). Keeping the generated
-`Validate()` to value/structural checks is what lets the entire codegen output stay
-inside the cgo-free import closure.
+data-tier semantics. Keeping `Validate()` to value and structural checks is part of
+what lets the entire codegen output stay inside the cgo-free import closure. For
+full RFC 7950 semantic validation (`must`/`when` across the tree, leafref
+resolution), parse and validate through the data tier — see the
+[libyang backend guide](./data-tree-libyang.md).
 
-## Worked example: write generated source to a file
+## Worked example
 
-Given a YANG module that places a container *between* the two leaves of a composite
-key:
+The example is hermetic: it builds a context from an in-memory YANG string, with no
+files on disk and no search path. Consider a module that places a container
+*between* the two leaves of a composite key:
 
-```text
-module composite-key-with-interleaved-containers {
-  namespace "urn:composite-key-with-interleaved-containers";
-  prefix ckwic;
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/signalbreak-labs/cambium/go/cambium"
+    "github.com/signalbreak-labs/cambium/go/codegen"
+)
+
+const routesYANG = `
+module routes {
+  namespace "urn:example:routes";
+  prefix rt;
 
   list route {
     key "dest-prefix next-hop-ip";
@@ -136,44 +154,28 @@ module composite-key-with-interleaved-containers {
     leaf next-hop-ip { type string; }
   }
 }
-```
-
-load it, generate Go, and write the result to disk:
-
-```go
-package main
-
-import (
-    "log"
-    "os"
-
-    "github.com/signalbreak-labs/cambium/go/cambium"
-    "github.com/signalbreak-labs/cambium/go/codegen"
-)
+`
 
 func main() {
-    ctx, err := cambium.NewContext()
+    b, err := cambium.NewContextBuilder(cambium.ContextFlags{})
     if err != nil {
         log.Fatal(err)
     }
-    defer ctx.Close()
-
-    if err := ctx.SetSearchPath("./yang"); err != nil {
+    if err := b.LoadModuleStr(routesYANG); err != nil {
         log.Fatal(err)
     }
-    if err := ctx.LoadModule("composite-key-with-interleaved-containers"); err != nil {
-        log.Fatal(err)
-    }
-
-    src, err := codegen.GenerateGo(ctx, "composite-key-with-interleaved-containers")
+    ctx, err := b.Build()
     if err != nil {
         log.Fatal(err)
     }
 
-    // src is gofmt-stable; writing it verbatim is sufficient.
-    if err := os.WriteFile("generated.go", []byte(src), 0o644); err != nil {
+    src, err := codegen.GenerateGo(ctx, "routes")
+    if err != nil {
         log.Fatal(err)
     }
+
+    // src is one gofmt-stable file; write it verbatim and `go build`.
+    fmt.Print(src)
 }
 ```
 
@@ -181,14 +183,14 @@ The generated route-entry struct keeps `metrics` declared where YANG places it, 
 the field-order manifest the serializers walk lists the **keys first**:
 
 ```go
-type CompositeKeyWithInterleavedContainersRouteEntry struct {
-    DestPrefix string
-    NextHopIp  string
-    Metrics    CompositeKeyWithInterleavedContainersRouteEntryMetrics
+type RoutesRouteEntry struct {
+    DestPrefix      string
+    NextHopIp       string
+    Metrics         RoutesRouteEntryMetrics
     CambiumMetadata map[string][]MetadataAnnotation
 }
 
-var CompositeKeyWithInterleavedContainersRouteEntryFieldOrder = []string{"dest-prefix", "next-hop-ip", "metrics"}
+var RoutesRouteEntryFieldOrder = []string{"dest-prefix", "next-hop-ip", "metrics"}
 ```
 
 So even though `metrics` appears between `dest-prefix` and `next-hop-ip` in the
@@ -204,9 +206,11 @@ CGO_ENABLED=0 go run .
 
 ## See also
 
-- [Documentation index](../README.md)
-- [Why Cambium](../why-cambium.md) — the order-semantics problem this generator serves
+- [Overview](../overview.md) — the order-semantics problem this generator serves
+- [Ordering](../concepts/ordering.md) · [Tiers and the cgo boundary](../concepts/tiers-and-cgo.md)
 - [Schema introspection](./schema-introspection.md) — building the `*cambium.Context` you pass to `GenerateGo`
-- [Migrating from goyang](./goyang-migration.md) — the `compat` package and ordered `Children()`
-- [The libyang backend](./libyang-backend.md) — full RFC 7950 data validation (`must`/`when`/leafref)
+- [Quickstart](./quickstart.md) — load a module, walk the ordered tree, generate structs
+- [The libyang backend](./data-tree-libyang.md) — full RFC 7950 data validation (`must`/`when`/leafref)
+- [Glossary](../glossary.md)
 - [Ordering invariants (spec)](../../spec/ordering-invariants.md) — normative I1–I6
+- [Documentation index](../README.md)
