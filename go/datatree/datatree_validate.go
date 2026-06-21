@@ -27,7 +27,7 @@ func (e *ValidationError) Error() string {
 // instance-identifier resolution, which remain the libyang backend's domain.
 func (t *Tree) Validate() error {
 	var violations []string
-	validateLevel(flattenTopLevel(t.module), t.roots, "", &violations)
+	validateLevel(flattenTopLevel(t.module), [][]*node{t.roots}, "", &violations)
 	if len(violations) == 0 {
 		return nil
 	}
@@ -37,7 +37,8 @@ func (t *Tree) Validate() error {
 // validateLevel walks the schema children in declaration order and checks each
 // against the data present at this level. Driving from the schema (not the data)
 // is what surfaces absent-but-required nodes.
-func validateLevel(schema []cambium.SchemaNodeRef, data []*node, path string, out *[]string) {
+func validateLevel(schema []cambium.SchemaNodeRef, ancestors [][]*node, path string, out *[]string) {
+	data := ancestors[len(ancestors)-1]
 	present := make(map[nodeKey]*node, len(data))
 	for _, d := range data {
 		present[dataNodeKey(d)] = d
@@ -59,7 +60,7 @@ func validateLevel(schema []cambium.SchemaNodeRef, data []*node, path string, ou
 			checkElements(sn, len(dn.entries), childPath, out)
 			checkListKeys(sn, dn, childPath, out)
 			for i, entry := range dn.entries {
-				validateLevel(childRefs(sn.DataChildren(true)), entry, fmt.Sprintf("%s[%d]", childPath, i), out)
+				validateLevel(childRefs(sn.DataChildren(true)), appendFrame(ancestors, entry), fmt.Sprintf("%s[%d]", childPath, i), out)
 			}
 		case sn.IsLeafList():
 			checkElements(sn, len(dn.values), childPath, out)
@@ -70,13 +71,23 @@ func validateLevel(schema []cambium.SchemaNodeRef, data []*node, path string, ou
 				}
 			}
 		case sn.IsContainer():
-			validateLevel(childRefs(sn.DataChildren(true)), dn.children, childPath, out)
+			validateLevel(childRefs(sn.DataChildren(true)), appendFrame(ancestors, dn.children), childPath, out)
 		case sn.IsLeaf():
 			if ti, ok := sn.LeafType(); ok {
 				validateLeafValue(ti, dn.value, childPath, sn.Module().Name(), out)
 			}
+			checkLeafRefInstance(sn, string(dn.value), ancestors, childPath, out)
 		}
 	}
+}
+
+// appendFrame returns a new ancestor chain with frame appended, copying so
+// sibling recursions never alias the same backing array.
+func appendFrame(ancestors [][]*node, frame []*node) [][]*node {
+	out := make([][]*node, len(ancestors)+1)
+	copy(out, ancestors)
+	out[len(ancestors)] = frame
+	return out
 }
 
 func checkElements(sn cambium.SchemaNodeRef, count int, path string, out *[]string) {
