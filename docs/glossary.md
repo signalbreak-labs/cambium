@@ -14,15 +14,6 @@ another module or in a `grouping` — at a target node identified by a schema pa
 augmented children appear in the ordered traversal at their effective declared
 position rather than as a separate sidecar.
 
-## Backend/data tier
-
-The optional Cambium layer that operates on real data trees and **requires cgo**
-(packages `libyangbackend` and `internal/libyang`). It provides a generic
-`DataTree` for parse, validate, serialize, diff, merge, and LYB over a vendored,
-statically linked libyang + PCRE2, including full RFC 7950 semantic validation
-(`must`/`when`/`mandatory`/leafref); it stays outside the default cgo-free import
-closure.
-
 ## choice / case
 
 A YANG `choice` is a schema node whose children are mutually exclusive
@@ -35,10 +26,9 @@ is true.
 ## Conformance corpus
 
 The shared, language-neutral set of fixtures and golden outputs under
-`/conformance` (corpus, fixtures, golden, `manifest.toml`) that every binding
-runs to prove it honors the ordering invariants. Reusing the same corpus and
-golden files is how parity is defined across bindings — not by which language
-landed first.
+`/conformance` (fixtures, golden, `manifest.toml`) that every binding runs to
+prove it honors the ordering invariants. Reusing the same corpus and golden files
+is how parity is defined across bindings — not by which language landed first.
 
 ## Deviation
 
@@ -74,17 +64,27 @@ absolute path (RFC 7950 §9.13). In Cambium's type model it surfaces as the
 
 The IETF JSON encoding of YANG-modeled data defined by RFC 7951, used for the
 NETCONF/RESTCONF data model (namespace-qualified member names, type-specific
-value encodings). Cambium emits JSON_IETF both from the Backend/data tier
-(`Format` value `FormatJSONIETF`) and from generated typed-struct serializers in
-the Schema-IR tier.
+value encodings). Cambium emits JSON_IETF from generated typed-struct serializers
+in the Schema-IR tier, from the experimental pure-Go `datatree` tier, and from the
+libyang backend (`Format` value `FormatJSONIETF`).
 
 ## leafref
 
 The YANG `leafref` built-in type constrains a leaf's value to equal the value of
-another leaf identified by an XPath `path` expression (RFC 7950 §9.9). In
-Cambium it surfaces as the `ResolvedLeafRef` resolved-type variant; verifying
-that the referenced instance actually exists is RFC 7950 semantic validation done
-by the Backend/data tier, not by the Schema-IR tier's `Validate()`.
+another leaf identified by an XPath `path` expression (RFC 7950 §9.9). In Cambium
+it surfaces as the `ResolvedLeafRef` resolved-type variant. Verifying that the
+referenced instance actually exists is RFC 7950 semantic validation: it is done by
+the libyang backend (completely) and by the experimental `datatree` tier (over its
+supported scope), but not by the Schema-IR tier's `Validate()`.
+
+## libyang backend tier
+
+The optional Cambium layer that operates on real data trees and **requires cgo**
+(packages `libyangbackend` and `internal/libyang`). It provides a generic
+`DataTree` for parse, validate, serialize, diff, merge, and LYB over a vendored,
+statically linked libyang + PCRE2, including full RFC 7950 semantic validation
+(`must`/`when`/`mandatory`/leafref); it stays outside the default cgo-free import
+closure. (Sometimes called the Backend/data tier.)
 
 ## list key
 
@@ -97,7 +97,7 @@ satisfying invariant I3.
 ## LYB
 
 LYB (libyang binary) is libyang's compact binary serialization format for data
-trees. Cambium produces it from the Backend/data tier via
+trees. Cambium produces it from the libyang backend tier via
 `DataTree.Serialize(FormatLYB, ...)`; it is one of the `Format` values alongside
 XML, JSON, and JSON_IETF.
 
@@ -124,10 +124,22 @@ as a positional-only type so reordering is an explicit positional operation; the
 The six normative ordering guarantees Cambium implements, defined in
 `/spec/ordering-invariants.md`. The Schema-IR tier guarantees I2 (schema children
 in effective declaration order), I3 (list keys first, in `key` order), and I4
-(RPC/action/notification children in schema order); the Backend/data tier
+(RPC/action/notification children in schema order). The libyang backend
 additionally guarantees I1 (`ordered-by user` preserved across round-trip), I5
 (YANG lists/leaf-lists as JSON arrays carrying I1/I2 order), and I6 (gNMI
-`ordered-by user` output as one atomic JSON_IETF subtree).
+`ordered-by user` output as one atomic JSON_IETF subtree, currently future work).
+The experimental `datatree` tier reproduces I1/I2/I3/I5 over the constructs it
+supports.
+
+## Pure-Go data tree tier
+
+The **experimental**, cgo-free Cambium layer (package `datatree`) that parses,
+serializes, and validates generic instance data without libyang. It handles
+JSON_IETF and XML round-trip, structural and type validation, leafref instance
+existence, `must`/`when` over a core XPath subset, and apply-defaults — but its
+API and internal value representation are unstable and its scope is narrower than
+the libyang backend (no `anydata`/`anyxml`, no RPC/action/notification data,
+partial XPath). It is in the default cgo-free import closure.
 
 ## Rule code (CAMBIUM_E####)
 
@@ -171,14 +183,22 @@ tree** — never a sort key, sidecar, or map. The ordered sibling sequence is th
 source of truth; any keyed index maps key to node identity (not key to position),
 and serialization is one ordered walk of that structure (the libyang backend
 walks the `lyd_node` next/prev chain; native codegen walks the field-order
-manifest), never native map or struct iteration.
+manifest; `datatree` walks its ordered node slices), never native map or struct
+iteration.
+
+## Tier
+
+One of Cambium's three implementation layers, split by what they need to build and
+run: the **Schema-IR tier** (pure Go), the experimental **pure-Go data tree tier**
+(pure Go), and the **libyang backend tier** (cgo). See
+[Tiers & the cgo boundary](concepts/tiers-and-cgo.md).
 
 ## See also
 
-- [Documentation index](./README.md)
-- [Why Cambium](./why-cambium.md)
-- [Architecture](./architecture.md)
-- [Ordering story](./ordering-story.md)
-- [Conformance](./conformance.md)
+- [Documentation index](README.md)
+- [Overview](overview.md)
+- [Ordering](concepts/ordering.md)
+- [Architecture](concepts/architecture.md)
+- [Tiers & the cgo boundary](concepts/tiers-and-cgo.md)
 - [Ordering invariants (spec)](../spec/ordering-invariants.md)
 - [Rule codes (spec)](../spec/rule-codes.md)
