@@ -2937,6 +2937,8 @@ func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, stri
 	mod := source.resolveQNameModule(first)
 	if strictSource {
 		mod = source.resolveSourceQNameModule(first)
+	} else if mod == nil {
+		mod = c.moduleByPublicQName(first)
 	}
 	if mod == nil {
 		if !strictSource && (first == source.name || first == source.prefix) {
@@ -2982,6 +2984,17 @@ func (c *Context) findNodeBySchemaPathMode(source *moduleData, path string, stri
 		cur = next
 	}
 	return mod, cur
+}
+
+func (c *Context) moduleByPublicQName(qname string) *moduleData {
+	if c == nil {
+		return nil
+	}
+	prefix, _, ok := strings.Cut(qname, ":")
+	if !ok || prefix == "" {
+		return nil
+	}
+	return c.modules[prefix]
 }
 
 // Module is a borrowed handle to a loaded module.
@@ -3485,6 +3498,31 @@ func (n SchemaNodeRef) Path() string {
 		return ""
 	}
 	return n.node.path
+}
+
+// QualifiedPath returns an absolute schema path using defining module names.
+func (n SchemaNodeRef) QualifiedPath() string {
+	if n.node == nil {
+		return ""
+	}
+	var parts []string
+	for cur := n.node; cur != nil && cur.kind != SchemaNodeKindModule; cur = cur.parent {
+		if cur.name == "" {
+			continue
+		}
+		name := cur.name
+		if cur.module != nil && cur.module.name != "" {
+			name = cur.module.name + ":" + name
+		}
+		parts = append(parts, name)
+	}
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "/" + strings.Join(parts, "/")
 }
 func (n SchemaNodeRef) FindPath(path string) (SchemaNodeRef, error) {
 	if n.node == nil {
