@@ -87,8 +87,9 @@ A parsed `*Tree` exposes its data as ordered `Node` values:
 - `Find(path) (Node, bool)` — a slash-path lookup.
 - On a `Node`: `Name()`, `Module()`, the kind predicates (`IsLeaf()`,
   `IsLeafList()`, `IsContainer()`, `IsList()`), `LeafValue()` for a leaf's value,
-  `Children()` for a container's ordered children, and `Entries()` for a list's
-  entries (each with keys first).
+  `LeafListValues()` for a leaf-list's ordered values, `Children()` for a
+  container's ordered children, and `Entries()` for a list's entries (each with
+  keys first).
 
 ## Validation and defaults
 

@@ -72,9 +72,11 @@ for child := range top.Children().Iter() {
 // a
 ```
 
-A map-backed library would hand you `a, m, z`. Cambium preserves declaration order
-because order-sensitive serialization and codegen depend on it
-([invariant I2](../concepts/ordering.md)). This program runs as a doc-test in
+A map-backed library — goyang stores a node's children in a Go map — would hand you
+`a, m, z`. Cambium preserves declaration order because a NETCONF server expects
+children on the wire in schema order; emit them sorted or shuffled and a strict
+server rejects the request. That is [invariant I2](../concepts/ordering.md), and
+order-sensitive serialization and codegen depend on it. This program runs as a doc-test in
 `go/cambium/example_test.go`, so it cannot silently drift from the API. The full
 introspection surface — node kinds, list keys, leaf types, constraints — is in the
 [schema introspection guide](schema-introspection.md).

@@ -21,7 +21,8 @@ Start from what you are trying to do, not from a package name.
 
 - **"I need ordered schema information, or to generate typed structs."** → **Schema-IR
   tier.** Load modules, walk the ordered tree, and/or call
-  `codegen.GenerateGo(ctx, module)`. No C build, no cgo. The generated structs
+  `codegen.GenerateGo(ctx, "module-name")` (the second argument is the implemented
+  module's name). No C build, no cgo. The generated structs
   themselves carry order-correct XML/JSON_IETF serializers, so for many codegen
   workflows you never touch a data-tree tier at all. See the
   [schema introspection](../guides/schema-introspection.md) and
@@ -93,8 +94,9 @@ strictly separated.
 The cgo-free guarantee is enforced, not assumed. `scripts/check-go-default-pure.sh`
 exercises `cambium`, `codegen`, `compat`, and `datatree` with `CGO_ENABLED=0`, then
 inspects their actual transitive dependency closure and fails if it contains
-`runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`, or
-`github.com/openconfig/goyang`, or any package carrying cgo source files.
+`runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
+`github.com/openconfig/goyang`, the vendored `internal/yangparse/upstream` lexer, or
+any package carrying cgo source files.
 
 ```bash
 # Prove the default packages have no path to C:
