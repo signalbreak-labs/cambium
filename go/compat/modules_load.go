@@ -224,7 +224,7 @@ func (ms *Modules) FindModuleByNamespace(ns string) (*Module, error) {
 	}
 
 	if ms.ctx != nil {
-		if mod, ok := ms.ctx.FindModuleByNS(ns); ok {
+		if mod, ok := ms.ctx.FindModuleByNamespace(ns); ok {
 			found := ms.recordModule(mod)
 			ms.cacheNamespace(ns, found)
 			return found, nil
