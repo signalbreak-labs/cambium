@@ -12,7 +12,6 @@ import (
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
-	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 // Node is the goyang-style parsed AST node interface.
@@ -76,18 +75,11 @@ func Source(n Node) string {
 }
 
 // RootNode returns the module or submodule that n was defined in.
-func RootNode(n any) *Module {
-	if upstreamNode, ok := n.(upstream.Node); ok {
-		return moduleFromUpstreamModule(upstream.RootNode(upstreamNode))
-	}
-	node, ok := n.(Node)
-	if !ok {
+func RootNode(n Node) *Module {
+	if n == nil {
 		return nil
 	}
-	if node == nil {
-		return nil
-	}
-	root := rootNode(node)
+	root := rootNode(n)
 	if mod, ok := root.(*Module); ok {
 		return mod
 	}
@@ -98,15 +90,8 @@ func RootNode(n any) *Module {
 }
 
 // FindModuleByPrefix resolves prefix relative to n.
-func FindModuleByPrefix(n any, prefix string) *Module {
-	if upstreamNode, ok := n.(upstream.Node); ok {
-		return findCompatModuleByPrefix(moduleFromUpstreamModule(upstream.RootNode(upstreamNode)), prefix)
-	}
-	node, ok := n.(Node)
-	if !ok {
-		return nil
-	}
-	root := rootNode(node)
+func FindModuleByPrefix(n Node, prefix string) *Module {
+	root := rootNode(n)
 	switch mod := root.(type) {
 	case *Module:
 		return findCompatModuleByPrefix(mod, prefix)

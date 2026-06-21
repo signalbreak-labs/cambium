@@ -5,6 +5,7 @@ package compat_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +32,22 @@ func TestCompatSmallHelpersDoNotDelegateToUpstream(t *testing.T) {
 	} {
 		if strings.Contains(source, forbidden) {
 			t.Fatalf("compat ast.go still delegates helper %q to upstream", forbidden)
+		}
+	}
+}
+
+func TestCompatHasNoVendoredGoyangDependency(t *testing.T) {
+	cmd := exec.Command("go", "list", "-deps", "./compat")
+	cmd.Dir = filepath.Join(repoRoot(t), "go")
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list compat dependency closure failed:\n%s", out)
+	}
+	const vendoredGoyang = "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream"
+	for _, dep := range strings.Fields(string(out)) {
+		if strings.HasPrefix(dep, vendoredGoyang) {
+			t.Fatalf("compat depends on vendored goyang package %q; production compat must use Cambium-native code\n%s", dep, out)
 		}
 	}
 }

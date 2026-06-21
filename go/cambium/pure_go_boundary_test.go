@@ -143,8 +143,8 @@ func TestPureGoNoGoyangDependencyClosure(t *testing.T) {
 
 // TestCoreHasNoVendoredGoyangDependency asserts the shipping schema/codegen core
 // is free of the vendored goyang parser and uses Cambium's own native RFC 7950
-// parser instead. compat is intentionally excluded: it is the goyang-compatible
-// surface and deliberately keeps the vendored parser.
+// parser instead. compat has its own package-level guard because it still uses
+// goyang as a test oracle while production code must stay Cambium-native.
 func TestCoreHasNoVendoredGoyangDependency(t *testing.T) {
 	cmd := exec.Command("go", "list", "-deps", "./cambium", "./codegen")
 	cmd.Dir = filepath.Join(repoRoot(t), "go")

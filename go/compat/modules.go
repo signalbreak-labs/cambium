@@ -12,7 +12,6 @@ import (
 	"sync"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	upstream "github.com/signalbreak-labs/cambium/go/internal/yangparse/upstream/yang"
 )
 
 var revisionDateSuffixRegex = regexp.MustCompile(`^@\d{4}-\d{2}-\d{2}\.yang$`)
@@ -799,31 +798,6 @@ func moduleFromASTModule(ast *ASTModule) *Module {
 	return record
 }
 
-func moduleFromUpstreamModule(ast *upstream.Module) *Module {
-	if ast == nil {
-		return nil
-	}
-	if ast.Source != nil {
-		if ast.Modules != nil {
-			modules := modulesFromUpstreamModuleSet(ast)
-			if modules == nil {
-				return nil
-			}
-			if ast.BelongsTo != nil {
-				if record := modules.SubModules[ast.Name]; record != nil {
-					return record
-				}
-			}
-			return modules.Modules[ast.Name]
-		}
-		modules := NewModules()
-		record := modules.addModuleDecl(moduleDeclFromStatement(statementFromUpstreamStatement(ast.Source), "", ast.BelongsTo != nil))
-		record.Parent = nativeNodeFromUpstreamNode(ast.Parent)
-		return record
-	}
-	return nil
-}
-
 func modulesFromASTModuleSet(ast *ASTModule) *Modules {
 	if ast == nil {
 		return nil
@@ -844,29 +818,6 @@ func modulesFromASTModuleSet(ast *ASTModule) *Modules {
 	return modules
 }
 
-func modulesFromUpstreamModuleSet(ast *upstream.Module) *Modules {
-	if ast == nil {
-		return nil
-	}
-	if ast.Modules == nil {
-		if record := moduleFromUpstreamModule(ast); record != nil {
-			return record.Modules
-		}
-		return nil
-	}
-	modules := NewModules()
-	modules.ParseOptions.IgnoreSubmoduleCircularDependencies = ast.Modules.ParseOptions.IgnoreSubmoduleCircularDependencies
-	modules.ParseOptions.StoreUses = ast.Modules.ParseOptions.StoreUses
-	modules.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported = ast.Modules.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported
-	for _, module := range ast.Modules.Modules {
-		modules.addUpstreamModuleRecord(module)
-	}
-	for _, submodule := range ast.Modules.SubModules {
-		modules.addUpstreamModuleRecord(submodule)
-	}
-	return modules
-}
-
 func (ms *Modules) addModuleRecord(record *Module) *Module {
 	if ms == nil || record == nil {
 		return nil
@@ -881,39 +832,6 @@ func (ms *Modules) addModuleRecord(record *Module) *Module {
 		target[record.Name] = record
 	}
 	return record
-}
-
-func (ms *Modules) addUpstreamModuleRecord(ast *upstream.Module) *Module {
-	if ms == nil || ast == nil || ast.Source == nil {
-		return nil
-	}
-	record := ms.addModuleDecl(moduleDeclFromStatement(statementFromUpstreamStatement(ast.Source), "", ast.BelongsTo != nil))
-	record.Parent = nativeNodeFromUpstreamNode(ast.Parent)
-	return record
-}
-
-func statementFromUpstreamStatement(in *upstream.Statement) *Statement {
-	if in == nil {
-		return nil
-	}
-	return &Statement{
-		Keyword:     in.Keyword,
-		HasArgument: in.HasArgument,
-		Argument:    in.Argument,
-		statements:  statementsFromUpstreamStatements(in.SubStatements()),
-		file:        in.Location(),
-	}
-}
-
-func statementsFromUpstreamStatements(in []*upstream.Statement) []*Statement {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]*Statement, 0, len(in))
-	for _, stmt := range in {
-		out = append(out, statementFromUpstreamStatement(stmt))
-	}
-	return out
 }
 
 func (decl moduleDecl) fullName() string {
