@@ -1,6 +1,84 @@
 version: "2"
 
+# Strict quality gate for the Cambium Go module. The cgo-free import boundary
+# (schema/codegen/datatree tiers) is enforced separately and precisely by
+# scripts/check-go-default-pure.sh, so it is not duplicated here.
+#
+# The gocritic performance tag (hugeParam, rangeValCopy) and prealloc are
+# intentionally omitted: they push value-semantics APIs toward pointer params,
+# which would change exported signatures for marginal gains. We keep the
+# diagnostic + style checks, which catch real defects without churning the API.
+
 linters:
+  default: standard
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - predeclared
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments: [checkPrivateReceivers, sayRepetitiveInsteadOfStutters]
+        - name: var-declaration
+        - name: context-as-argument
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+
+    gocritic:
+      enabled-tags: [diagnostic, style]
+      disabled-checks:
+        - ifElseChain # superfluous-else (revive) already covers the meaningful cases
+
+    gosec:
+      excludes:
+        # G304: this is a YANG toolkit — opening schema/data files named by the
+        # caller is the core job, not a vulnerability. Paths are validated at the
+        # context-builder boundary.
+        - G304
+
+  exclusions:
+    generated: lax
+    paths:
+      # Vendored goyang lexer — not ours to restyle.
+      - internal/yangparse/upstream/.*
+    rules:
+      # Tests may use relaxed error handling, weaker file perms, and t.Fatal flows.
+      - path: _test\.go
+        linters:
+          - gosec
+          - unparam
+          - errorlint
+      # Vendored / generated trees are not ours to lint.
+      - path: (third_party|vendor)/
+        linters:
+          - revive
+          - gocritic
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/signalbreak-labs/cambium
   exclusions:
     paths:
       - internal/yangparse/upstream/.*

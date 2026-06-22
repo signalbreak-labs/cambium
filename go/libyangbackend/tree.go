@@ -47,6 +47,8 @@ func (d Decimal64) String() string {
 // ValueKind classifies a typed YANG leaf/leaf-list value.
 type ValueKind int
 
+// Typed value kinds; ValueKindNone is the zero value for an absent or
+// uninterpreted value.
 const (
 	ValueKindNone ValueKind = iota
 	ValueInt8
@@ -141,7 +143,7 @@ func (v Value) Int8() (int8, bool) {
 	if v.kind != ValueInt8 {
 		return 0, false
 	}
-	return int8(v.i64), true
+	return int8(v.i64), true // #nosec G115 -- kind==ValueInt8 guarantees i64 was ParseInt'd at bitSize 8
 }
 
 // Int16 returns the int16 value, if any.
@@ -149,7 +151,7 @@ func (v Value) Int16() (int16, bool) {
 	if v.kind != ValueInt16 {
 		return 0, false
 	}
-	return int16(v.i64), true
+	return int16(v.i64), true // #nosec G115 -- kind==ValueInt16 guarantees i64 was ParseInt'd at bitSize 16
 }
 
 // Int32 returns the int32 value, if any.
@@ -157,7 +159,7 @@ func (v Value) Int32() (int32, bool) {
 	if v.kind != ValueInt32 {
 		return 0, false
 	}
-	return int32(v.i64), true
+	return int32(v.i64), true // #nosec G115 -- kind==ValueInt32 guarantees i64 was ParseInt'd at bitSize 32
 }
 
 // Int64 returns the int64 value, if any.
@@ -173,7 +175,7 @@ func (v Value) Uint8() (uint8, bool) {
 	if v.kind != ValueUint8 {
 		return 0, false
 	}
-	return uint8(v.u64), true
+	return uint8(v.u64), true // #nosec G115 -- kind==ValueUint8 guarantees u64 was ParseUint'd at bitSize 8
 }
 
 // Uint16 returns the uint16 value, if any.
@@ -181,7 +183,7 @@ func (v Value) Uint16() (uint16, bool) {
 	if v.kind != ValueUint16 {
 		return 0, false
 	}
-	return uint16(v.u64), true
+	return uint16(v.u64), true // #nosec G115 -- kind==ValueUint16 guarantees u64 was ParseUint'd at bitSize 16
 }
 
 // Uint32 returns the uint32 value, if any.
@@ -189,7 +191,7 @@ func (v Value) Uint32() (uint32, bool) {
 	if v.kind != ValueUint32 {
 		return 0, false
 	}
-	return uint32(v.u64), true
+	return uint32(v.u64), true // #nosec G115 -- kind==ValueUint32 guarantees u64 was ParseUint'd at bitSize 32
 }
 
 // Uint64 returns the uint64 value, if any.
@@ -208,8 +210,8 @@ func (v Value) Decimal64() (Decimal64, bool) {
 	return v.dec, true
 }
 
-// Bool returns the boolean value, if any.
-func (v Value) Bool() (bool, bool) {
+// Bool returns the boolean value and whether the value is a boolean.
+func (v Value) Bool() (val, ok bool) {
 	if v.kind != ValueBool {
 		return false, false
 	}
@@ -302,7 +304,7 @@ func (n NodeRef) Name() (string, error) {
 
 // ValueStr returns the canonical value string for a leaf or leaf-list.
 // For non-term nodes it returns ("", false, nil).
-func (n NodeRef) ValueStr() (string, bool, error) {
+func (n NodeRef) ValueStr() (value string, ok bool, err error) {
 	if err := n.assertValid("value str"); err != nil {
 		return "", false, err
 	}
@@ -590,7 +592,7 @@ func (v UserOrderedView) Iter() ([]NodeRef, error) {
 
 // FindByKey returns the positional index of the list entry whose key leaves
 // match the supplied [{name,value}, ...] pairs.
-func (v UserOrderedView) FindByKey(keys [][2]string) (int, bool, error) {
+func (v UserOrderedView) FindByKey(keys [][2]string) (index int, ok bool, err error) {
 	// A duplicate key name in the query cannot unambiguously identify a
 	// composite-key entry — it would match the same child twice and inflate the
 	// match count (e.g. [{"a","x"},{"a","x"}] falsely matching an entry keyed on
@@ -651,8 +653,8 @@ func parseValue(s string, info TypeInfo) (Value, error) {
 	base := info.Base()
 	if base == BaseTypeLeafRef {
 		if r, ok := info.Resolved().(ResolvedLeafRef); ok {
-			if real, ok := r.Realtype(); ok {
-				return parseValue(s, *real)
+			if realType, ok := r.Realtype(); ok {
+				return parseValue(s, *realType)
 			}
 		}
 		return Value{kind: ValueStr, str: s}, nil

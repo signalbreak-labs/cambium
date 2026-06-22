@@ -18,8 +18,9 @@ const (
 	MaxInt64 = 1<<63 - 1
 	// MinInt64 corresponds to the minimum value of a signed int64.
 	MinInt64 = -1 << 63
-	// MinDecimal64 and MaxDecimal64 are the decimal64 numeric limits.
+	// MinDecimal64 is the minimum decimal64 numeric limit.
 	MinDecimal64 float64 = -922337203685477580.8
+	// MaxDecimal64 is the maximum decimal64 numeric limit.
 	MaxDecimal64 float64 = 922337203685477580.7
 	// AbsMinInt64 is the absolute value of MinInt64.
 	AbsMinInt64 = 1 << 63
@@ -35,6 +36,9 @@ const (
 	decimalPad18 = "000000000000000000"
 )
 
+// Int8Range, Int16Range, Int32Range, Int64Range, Uint8Range, Uint16Range,
+// Uint32Range, and Uint64Range are the inclusive value ranges of the
+// corresponding YANG integer base types.
 var (
 	Int8Range  = mustParseRangesInt("-128..127")
 	Int16Range = mustParseRangesInt("-32768..32767")
@@ -326,7 +330,11 @@ func decimalValueFromString(s string, fracDigRequired uint8) (Number, error) {
 	dot := strings.Index(s, ".")
 	var fracDigits uint8
 	if dot >= 0 {
-		fracDigits = uint8(len(s) - 1 - dot)
+		n := len(s) - 1 - dot
+		if n > int(MaxFractionDigits) {
+			return Number{}, fmt.Errorf("%s has too much precision, expect <= %d fractional digits", s, fracDigRequired)
+		}
+		fracDigits = uint8(n) //nolint:gosec // n is in [0, MaxFractionDigits]: dot is a valid index and the upper bound is checked above
 		s = s[:dot] + s[dot+1:]
 	}
 	if fracDigits > fracDigRequired {
@@ -336,14 +344,17 @@ func decimalValueFromString(s string, fracDigRequired uint8) (Number, error) {
 
 	v, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return Number{}, fmt.Errorf("%s is not a valid decimal number: %s", raw, err)
+		return Number{}, fmt.Errorf("%s is not a valid decimal number: %w", raw, err)
 	}
-	negative := false
-	if v < 0 {
-		negative = true
-		v = -v
+	negative := v < 0
+	var mag uint64
+	if negative {
+		// Negate in the unsigned domain so math.MinInt64 does not overflow.
+		mag = uint64(-(v + 1)) + 1
+	} else {
+		mag = uint64(v)
 	}
-	return Number{Value: uint64(v), FractionDigits: fracDigRequired, Negative: negative}, nil
+	return Number{Value: mag, FractionDigits: fracDigRequired, Negative: negative}, nil
 }
 
 // ParseRangesInt parses an integer range expression.
@@ -363,16 +374,16 @@ func (r YangRange) parseChildRanges(s string, decimal bool, fracDigRequired uint
 			if len(r) == 0 {
 				return Number{}, errors.New("cannot resolve 'max' keyword using an empty YangRange parent object")
 			}
-			max := r[len(r)-1].Max
-			max.FractionDigits = fracDigRequired
-			return max, nil
+			hi := r[len(r)-1].Max
+			hi.FractionDigits = fracDigRequired
+			return hi, nil
 		case raw == "min":
 			if len(r) == 0 {
 				return Number{}, errors.New("cannot resolve 'min' keyword using an empty YangRange parent object")
 			}
-			min := r[0].Min
-			min.FractionDigits = fracDigRequired
-			return min, nil
+			lo := r[0].Min
+			lo.FractionDigits = fracDigRequired
+			return lo, nil
 		case decimal:
 			return ParseDecimal(raw, fracDigRequired)
 		default:
@@ -384,25 +395,25 @@ func (r YangRange) parseChildRanges(s string, decimal bool, fracDigRequired uint
 	out := make(YangRange, len(parts))
 	for i, part := range parts {
 		bounds := strings.Split(part, "..")
-		min, err := parseNumber(strings.TrimSpace(bounds[0]))
+		lo, err := parseNumber(strings.TrimSpace(bounds[0]))
 		if err != nil {
 			return nil, err
 		}
-		max := min
+		hi := lo
 		switch len(bounds) {
 		case 1:
 		case 2:
-			max, err = parseNumber(strings.TrimSpace(bounds[1]))
+			hi, err = parseNumber(strings.TrimSpace(bounds[1]))
 			if err != nil {
 				return nil, err
 			}
 		default:
 			return nil, fmt.Errorf("too many '..' in %s", part)
 		}
-		if max.Less(min) {
-			return nil, fmt.Errorf("range boundaries out of order (%s less than %s): %s", max, min, part)
+		if hi.Less(lo) {
+			return nil, fmt.Errorf("range boundaries out of order (%s less than %s): %s", hi, lo, part)
 		}
-		out[i] = YRange{Min: min, Max: max}
+		out[i] = YRange{Min: lo, Max: hi}
 	}
 	out.Sort()
 	out = coalesceRanges(out)

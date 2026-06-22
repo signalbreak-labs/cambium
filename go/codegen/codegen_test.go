@@ -68,17 +68,17 @@ func generatedFixtureSource(t *testing.T, fixture, module string) string {
 	return src
 }
 
-func readFixtureGoldenPair(t *testing.T, fixture string) (string, string) {
+func readFixtureGoldenPair(t *testing.T, fixture string) (wantXML, wantJSON string) {
 	t.Helper()
-	wantXML, err := os.ReadFile(goldenPath(t, fixture, "output.xml"))
+	xmlBytes, err := os.ReadFile(goldenPath(t, fixture, "output.xml"))
 	if err != nil {
 		t.Fatalf("read golden xml: %v", err)
 	}
-	wantJSON, err := os.ReadFile(goldenPath(t, fixture, "output.json"))
+	jsonBytes, err := os.ReadFile(goldenPath(t, fixture, "output.json"))
 	if err != nil {
 		t.Fatalf("read golden json: %v", err)
 	}
-	return string(wantXML), string(wantJSON)
+	return string(xmlBytes), string(jsonBytes)
 }
 
 func TestRunGeneratedCommandHonorsContextDeadline(t *testing.T) {

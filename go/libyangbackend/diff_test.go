@@ -87,13 +87,13 @@ func TestDiffEmptyWhenEqual(t *testing.T) {
 	}
 	defer original.Close()
 
-	copy, err := original.Duplicate()
+	dup, err := original.Duplicate()
 	if err != nil {
 		t.Fatalf("Duplicate: %v", err)
 	}
-	defer copy.Close()
+	defer dup.Close()
 
-	diff, err := original.Diff(copy, cambium.DiffOpts{})
+	diff, err := original.Diff(dup, cambium.DiffOpts{})
 	if err != nil {
 		t.Fatalf("Diff: %v", err)
 	}

@@ -58,7 +58,7 @@ func loadDataReadContext(t *testing.T) *cambium.Context {
     }
   }
 }`
-	if err := os.WriteFile(module, []byte(src), 0644); err != nil {
+	if err := os.WriteFile(module, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ctx, err := cambium.NewContext()

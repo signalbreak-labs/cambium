@@ -11,6 +11,7 @@ package conformance
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -232,7 +233,14 @@ func runYanglintOracle(yanglint, moduleDir, inputPath string, format backend.For
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.Command(yanglint)
+	// yanglint is the operator-supplied oracle path from CAMBIUM_YANGLINT (CI/test
+	// harness only). Resolve it to an executable so a missing or non-runnable path
+	// fails here rather than as an opaque exec error.
+	bin, err := exec.LookPath(yanglint)
+	if err != nil {
+		return nil, fmt.Errorf("resolve yanglint %q: %w", yanglint, err)
+	}
+	cmd := exec.Command(bin) //nolint:gosec // resolved trusted oracle path from CAMBIUM_YANGLINT
 	cmd.Args = append(cmd.Args, "-X", "-p", moduleDir)
 	if wdArg := yanglintWithDefaultsArg(wd); wdArg != "" {
 		cmd.Args = append(cmd.Args, "-d", wdArg)
@@ -253,7 +261,8 @@ func runYanglintOracle(yanglint, moduleDir, inputPath string, format backend.For
 
 	out, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return nil, fmt.Errorf("yanglint failed: %s", strings.TrimSpace(string(exitErr.Stderr)))
 		}
 		return nil, fmt.Errorf("yanglint: %w", err)

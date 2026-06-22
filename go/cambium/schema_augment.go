@@ -244,10 +244,8 @@ func (m *moduleData) collectDeviations() {
 				}
 				one := Deviation{targetPath: dev.Argument, sourceModule: m.name, devType: d.Argument, description: desc, reference: ref, ifFeatures: ifFeatureArgs(dev)}
 				m.deviations = append(m.deviations, one)
-				if target != nil {
-					target.devs = append(target.devs, one)
-					m.applyDeviation(targetMod, target, d.Argument, nil)
-				}
+				target.devs = append(target.devs, one)
+				m.applyDeviation(targetMod, target, d.Argument, nil)
 				continue
 			}
 			for _, prop := range props {
@@ -262,10 +260,8 @@ func (m *moduleData) collectDeviations() {
 					ifFeatures:   ifFeatureArgs(dev),
 				}
 				m.deviations = append(m.deviations, one)
-				if target != nil {
-					target.devs = append(target.devs, one)
-					m.applyDeviation(targetMod, target, d.Argument, prop)
-				}
+				target.devs = append(target.devs, one)
+				m.applyDeviation(targetMod, target, d.Argument, prop)
 			}
 		}
 	}
@@ -523,18 +519,23 @@ func (n *schemaNodeData) deviationCardinalityPropertyMatches(prop *yangparse.Sta
 	}
 }
 
+// AugmentedBy returns the names of modules that augment this module.
 func (m Module) AugmentedBy() []string {
 	if m.mod == nil {
 		return nil
 	}
 	return append([]string(nil), m.mod.augmentedBy...)
 }
+
+// Deviations returns the deviations declared by this module.
 func (m Module) Deviations() []Deviation {
 	if m.mod == nil {
 		return nil
 	}
 	return append([]Deviation(nil), m.mod.deviations...)
 }
+
+// DeviationProvenance returns the deviations applied to this node, in apply order.
 func (n SchemaNodeRef) DeviationProvenance() []Deviation {
 	if n.node == nil {
 		return nil

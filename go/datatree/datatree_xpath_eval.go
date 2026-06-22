@@ -106,7 +106,7 @@ func (v xval) toBool() bool {
 	case kNodeset:
 		return len(v.ns) > 0
 	case kStr:
-		return len(v.s) > 0
+		return v.s != ""
 	case kNum:
 		return v.n != 0 && !math.IsNaN(v.n)
 	default:

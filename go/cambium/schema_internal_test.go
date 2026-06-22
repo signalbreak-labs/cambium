@@ -11,7 +11,7 @@ import "testing"
 func TestIfFeatureExpressionOperatorSubstrings(t *testing.T) {
 	mod := &moduleData{
 		ctx: &Context{enabledFeatures: map[string]map[string]struct{}{
-			"demo": map[string]struct{}{"android": struct{}{}, "notable": struct{}{}, "orange": struct{}{}},
+			"demo": {"android": {}, "notable": {}, "orange": {}},
 		}},
 		name:       "demo",
 		featureMap: make(map[string]*featureData),

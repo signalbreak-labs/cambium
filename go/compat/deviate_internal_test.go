@@ -187,7 +187,7 @@ func TestApplyDeviateNotSupportedMatchesGoyangAndMaintainsOrder(t *testing.T) {
 	}
 }
 
-func rawCompatAndUpstreamEntries(t *testing.T, moduleName, source string) (*Entry, *upstream.Entry) {
+func rawCompatAndUpstreamEntries(t *testing.T, moduleName, source string) (compat *Entry, upstreamEntry *upstream.Entry) {
 	t.Helper()
 	compatModules := NewModules()
 	if err := compatModules.Parse(source, moduleName+".yang"); err != nil {

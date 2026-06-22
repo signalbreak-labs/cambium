@@ -818,9 +818,9 @@ func modulesFromASTModuleSet(ast *ASTModule) *Modules {
 	return modules
 }
 
-func (ms *Modules) addModuleRecord(record *Module) *Module {
+func (ms *Modules) addModuleRecord(record *Module) {
 	if ms == nil || record == nil {
-		return nil
+		return
 	}
 	record.Modules = ms
 	target := ms.Modules
@@ -831,7 +831,6 @@ func (ms *Modules) addModuleRecord(record *Module) *Module {
 	if bare := target[record.Name]; bare == nil || bare.FullName() < record.FullName() {
 		target[record.Name] = record
 	}
-	return record
 }
 
 func (decl moduleDecl) fullName() string {

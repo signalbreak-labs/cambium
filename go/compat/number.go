@@ -15,8 +15,9 @@ const (
 	MaxInt64 = cambium.MaxInt64
 	// MinInt64 corresponds to the minimum value of a signed int64.
 	MinInt64 = cambium.MinInt64
-	// MinDecimal64 and MaxDecimal64 are the decimal64 numeric limits.
+	// MinDecimal64 is the smallest representable decimal64 value.
 	MinDecimal64 float64 = cambium.MinDecimal64
+	// MaxDecimal64 is the largest representable decimal64 value.
 	MaxDecimal64 float64 = cambium.MaxDecimal64
 	// AbsMinInt64 is the absolute value of MinInt64.
 	AbsMinInt64 = cambium.AbsMinInt64
@@ -24,6 +25,7 @@ const (
 	MaxFractionDigits uint8 = cambium.MaxFractionDigits
 )
 
+// Range tables for the YANG built-in integer types.
 var (
 	Int8Range  = fromCambiumRange(cambium.Int8Range)
 	Int16Range = fromCambiumRange(cambium.Int16Range)

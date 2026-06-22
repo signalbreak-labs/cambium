@@ -24,6 +24,7 @@ import (
 // TriState may be true, false, or unset.
 type TriState int
 
+// TriState values: unset, true, or false.
 const (
 	TSUnset TriState = iota
 	TSTrue
@@ -57,11 +58,20 @@ type Value struct {
 	Description *Value `yang:"description" json:",omitempty"`
 }
 
-func (Value) Kind() string             { return "string" }
-func (v *Value) ParentNode() Node      { return v.Parent }
-func (v *Value) NName() string         { return v.Name }
+// Kind reports the node kind, always "string".
+func (Value) Kind() string { return "string" }
+
+// ParentNode returns the enclosing AST node.
+func (v *Value) ParentNode() Node { return v.Parent }
+
+// NName returns the value text.
+func (v *Value) NName() string { return v.Name }
+
+// Statement returns the source statement the value was parsed from.
 func (v *Value) Statement() *Statement { return v.Source }
-func (v *Value) Exts() []*Statement    { return v.Extensions }
+
+// Exts returns the value's extension statements.
+func (v *Value) Exts() []*Statement { return v.Extensions }
 
 type entryNode struct {
 	kind       string
@@ -71,30 +81,39 @@ type entryNode struct {
 	extensions []*Statement
 }
 
+// Kind returns the node kind.
 func (n *entryNode) Kind() string {
 	if n == nil {
 		return ""
 	}
 	return n.kind
 }
+
+// ParentNode returns the enclosing AST node, or nil.
 func (n *entryNode) ParentNode() Node {
 	if n == nil {
 		return nil
 	}
 	return n.parent
 }
+
+// NName returns the node name.
 func (n *entryNode) NName() string {
 	if n == nil {
 		return ""
 	}
 	return n.name
 }
+
+// Statement returns the source statement the node was parsed from.
 func (n *entryNode) Statement() *Statement {
 	if n == nil {
 		return nil
 	}
 	return n.source
 }
+
+// Exts returns a copy of the node's extension statements.
 func (n *entryNode) Exts() []*Statement {
 	if n == nil {
 		return nil
@@ -102,6 +121,7 @@ func (n *entryNode) Exts() []*Statement {
 	return append([]*Statement(nil), n.extensions...)
 }
 
+// TypeKind values enumerate the YANG built-in types.
 const (
 	Ynone TypeKind = iota
 	Yint8
@@ -327,25 +347,34 @@ type Identity struct {
 	Values      []*Identity `json:",omitempty"`
 }
 
+// Kind reports the node kind, always "identity".
 func (Identity) Kind() string { return "identity" }
+
+// ParentNode returns the enclosing AST node, or nil.
 func (i *Identity) ParentNode() Node {
 	if i == nil {
 		return nil
 	}
 	return i.Parent
 }
+
+// NName returns the identity name.
 func (i *Identity) NName() string {
 	if i == nil {
 		return ""
 	}
 	return i.Name
 }
+
+// Statement returns the source statement the identity was parsed from.
 func (i *Identity) Statement() *Statement {
 	if i == nil {
 		return nil
 	}
 	return i.Source
 }
+
+// Exts returns a copy of the identity's extension statements.
 func (i *Identity) Exts() []*Statement {
 	if i == nil {
 		return nil
@@ -598,6 +627,7 @@ func stringSlicesEqual(a, b []string) bool {
 // EntryKind is the coarse goyang-style kind of an Entry.
 type EntryKind int
 
+// EntryKind values enumerate the coarse goyang-style entry kinds.
 const (
 	LeafEntry EntryKind = iota
 	DirectoryEntry
@@ -1011,26 +1041,26 @@ func schemaNodeKindKeyword(kind cambium.SchemaNodeKind) string {
 
 func listAttrForStatement(stmt *Statement, entry *Entry) *ListAttr {
 	attr := NewDefaultListAttr()
-	if min := firstChild(stmt, "min-elements"); min != nil {
-		if value, err := strconv.ParseUint(min.Argument, 10, 64); err == nil {
+	if minElem := firstChild(stmt, "min-elements"); minElem != nil {
+		if value, err := strconv.ParseUint(minElem.Argument, 10, 64); err == nil {
 			attr.MinElements = value
 		} else if entry != nil {
-			entry.Errors = append(entry.Errors, fmt.Errorf(`%s: invalid min-elements value %q (expect a non-negative integer): %v`, min.Location(), min.Argument, err))
+			entry.Errors = append(entry.Errors, fmt.Errorf(`%s: invalid min-elements value %q (expect a non-negative integer): %w`, minElem.Location(), minElem.Argument, err))
 		}
 	}
-	if max := firstChild(stmt, "max-elements"); max != nil {
-		if max.Argument == "unbounded" {
+	if maxElem := firstChild(stmt, "max-elements"); maxElem != nil {
+		if maxElem.Argument == "unbounded" {
 			attr.MaxElements = math.MaxUint64
-		} else if value, err := strconv.ParseUint(max.Argument, 10, 64); err == nil {
+		} else if value, err := strconv.ParseUint(maxElem.Argument, 10, 64); err == nil {
 			if value == 0 {
 				if entry != nil {
-					entry.Errors = append(entry.Errors, fmt.Errorf(`%s: invalid max-elements value 0 (expect "unbounded" or a positive integer)`, max.Location()))
+					entry.Errors = append(entry.Errors, fmt.Errorf(`%s: invalid max-elements value 0 (expect "unbounded" or a positive integer)`, maxElem.Location()))
 				}
 			} else {
 				attr.MaxElements = value
 			}
 		} else if entry != nil {
-			entry.Errors = append(entry.Errors, fmt.Errorf(`%s: invalid max-elements value %q (expect "unbounded" or a positive integer): %v`, max.Location(), max.Argument, err))
+			entry.Errors = append(entry.Errors, fmt.Errorf(`%s: invalid max-elements value %q (expect "unbounded" or a positive integer): %w`, maxElem.Location(), maxElem.Argument, err))
 		}
 	}
 	if orderedBy := firstChild(stmt, "ordered-by"); orderedBy != nil {
@@ -1678,7 +1708,7 @@ func (e *Entry) dup() *Entry {
 	return &duplicate
 }
 
-func (e *Entry) merge(prefix *Value, namespace *Value, other *Entry) {
+func (e *Entry) merge(prefix, namespace *Value, other *Entry) {
 	if e == nil || other == nil {
 		return
 	}
@@ -2256,11 +2286,11 @@ func listAttrForNode(node cambium.SchemaNodeRef) *ListAttr {
 		OrderedBy:     &Value{Name: orderedBy},
 		OrderedByUser: node.OrderedBy() == cambium.OrderedByUser,
 	}
-	if min, ok := node.MinElements(); ok {
-		attr.MinElements = uint64(min)
+	if minElem, ok := node.MinElements(); ok {
+		attr.MinElements = uint64(minElem)
 	}
-	if max, ok := node.MaxElements(); ok {
-		attr.MaxElements = uint64(max)
+	if maxElem, ok := node.MaxElements(); ok {
+		attr.MaxElements = uint64(maxElem)
 	}
 	return attr
 }

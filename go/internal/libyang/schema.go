@@ -679,14 +679,14 @@ static struct lysc_node_notif *cam_module_notifs(const struct lys_module *mod) {
     return (mod && mod->compiled) ? mod->compiled->notifs : NULL;
 }
 */
-import "C"
+import "C" //nolint:gocritic // dupImport false positive: gocritic pairs the cgo "C" pseudo-import with "unsafe"
 
 import (
 	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
-	"unsafe"
+	"unsafe" //nolint:gocritic // dupImport false positive: gocritic pairs "unsafe" with the cgo "C" pseudo-import
 )
 
 // Schema node type constants from libyang's tree_schema.h. They are duplicated
@@ -757,6 +757,7 @@ const (
 // RawBaseType is the precise built-in YANG base type.
 type RawBaseType int
 
+// Built-in YANG base types, mirroring libyang's LY_DATA_TYPE enum.
 const (
 	RawBaseTypeUnknown RawBaseType = iota
 	RawBaseTypeString
@@ -1015,7 +1016,7 @@ const (
 )
 
 func extractRange(rangePtr *C.struct_lysc_range, kind rangeKind, fractionDigits uint8) []RawRangeBound {
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(C.cam_range_parts(rangePtr))))
+	count := C.cam_sized_array_count(unsafe.Pointer(C.cam_range_parts(rangePtr)))
 	if count == 0 {
 		return nil
 	}
@@ -1076,7 +1077,7 @@ func FormatDecimal64(raw int64, fractionDigits uint8, trimTrailingZeros bool) st
 }
 
 func extractPatterns(patternsPtr **C.struct_lysc_pattern) []RawPattern {
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(patternsPtr)))
+	count := C.cam_sized_array_count(unsafe.Pointer(patternsPtr))
 	if count == 0 {
 		return nil
 	}
@@ -1096,7 +1097,7 @@ func extractPatterns(patternsPtr **C.struct_lysc_pattern) []RawPattern {
 }
 
 func extractDefaults(node *C.struct_lysc_node) []string {
-	count := C.uint64_t(C.cam_node_dflt_count(node))
+	count := C.cam_node_dflt_count(node)
 	if count == 0 {
 		return nil
 	}
@@ -1109,7 +1110,7 @@ func extractDefaults(node *C.struct_lysc_node) []string {
 
 func extractExtensions(node *C.struct_lysc_node) []RawExtension {
 	exts := C.cam_node_exts(node)
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(exts)))
+	count := C.cam_sized_array_count(unsafe.Pointer(exts))
 	if count == 0 {
 		return nil
 	}
@@ -1130,7 +1131,7 @@ func extractExtensions(node *C.struct_lysc_node) []RawExtension {
 
 func extractMusts(node *C.struct_lysc_node) []RawMust {
 	musts := C.cam_node_musts(node)
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(musts)))
+	count := C.cam_sized_array_count(unsafe.Pointer(musts))
 	if count == 0 {
 		return nil
 	}
@@ -1153,7 +1154,7 @@ func extractMusts(node *C.struct_lysc_node) []RawMust {
 
 func extractWhens(node *C.struct_lysc_node) []RawWhen {
 	whens := C.cam_node_whens(node)
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(whens)))
+	count := C.cam_sized_array_count(unsafe.Pointer(whens))
 	if count == 0 {
 		return nil
 	}
@@ -1174,14 +1175,14 @@ func extractWhens(node *C.struct_lysc_node) []RawWhen {
 
 func extractUniqueConstraints(node *C.struct_lysc_node) [][]unsafe.Pointer {
 	arr := C.cam_node_uniques(node)
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(arr)))
+	count := C.cam_sized_array_count(unsafe.Pointer(arr))
 	if count == 0 {
 		return nil
 	}
 	out := make([][]unsafe.Pointer, 0, count)
 	for i := C.uint64_t(0); i < count; i++ {
 		inner := C.cam_unique_leaf_array_at(arr, i)
-		innerCount := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(inner)))
+		innerCount := C.cam_sized_array_count(unsafe.Pointer(inner))
 		ptrs := make([]unsafe.Pointer, 0, innerCount)
 		for j := C.uint64_t(0); j < innerCount; j++ {
 			leaf := C.cam_unique_leaf_at(inner, j)
@@ -1323,7 +1324,7 @@ func extractTypeInfo(typePtr *C.struct_lysc_type) RawTypeInfo {
 		info.Length = extractRange(C.cam_type_bin_length(typePtr), rangeUnsigned, 0)
 	case RawBaseTypeEnumeration:
 		enums := C.cam_type_enum_enums(typePtr)
-		count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(enums)))
+		count := C.cam_sized_array_count(unsafe.Pointer(enums))
 		for i := C.uint64_t(0); i < count; i++ {
 			item := C.cam_bitenum_at(enums, i)
 			info.EnumValues = append(info.EnumValues, RawEnumValue{
@@ -1333,7 +1334,7 @@ func extractTypeInfo(typePtr *C.struct_lysc_type) RawTypeInfo {
 		}
 	case RawBaseTypeBits:
 		bits := C.cam_type_bits_bits(typePtr)
-		count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(bits)))
+		count := C.cam_sized_array_count(unsafe.Pointer(bits))
 		for i := C.uint64_t(0); i < count; i++ {
 			item := C.cam_bitenum_at(bits, i)
 			info.BitValues = append(info.BitValues, RawEnumValue{
@@ -1343,7 +1344,7 @@ func extractTypeInfo(typePtr *C.struct_lysc_type) RawTypeInfo {
 		}
 	case RawBaseTypeIdentityRef:
 		bases := C.cam_type_ident_bases(typePtr)
-		count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(bases)))
+		count := C.cam_sized_array_count(unsafe.Pointer(bases))
 		for i := C.uint64_t(0); i < count; i++ {
 			baseIdent := C.cam_ident_base_at(bases, i)
 			info.IdentityBases = append(info.IdentityBases, formatIdentityName(baseIdent))
@@ -1358,13 +1359,13 @@ func extractTypeInfo(typePtr *C.struct_lysc_type) RawTypeInfo {
 		if path := C.cam_leafref_path(typePtr); path != nil {
 			info.LeafrefPath = cstrValue(path)
 		}
-		if real := C.cam_leafref_realtype(lr); real != nil {
-			rt := extractTypeInfo(real)
+		if realType := C.cam_leafref_realtype(lr); realType != nil {
+			rt := extractTypeInfo(realType)
 			info.LeafrefRealtype = &rt
 		}
 	case RawBaseTypeUnion:
 		types := C.cam_type_union_types(typePtr)
-		count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(types)))
+		count := C.cam_sized_array_count(unsafe.Pointer(types))
 		for i := C.uint64_t(0); i < count; i++ {
 			member := C.cam_union_type_at(types, i)
 			info.UnionTypes = append(info.UnionTypes, extractTypeInfo(member))
@@ -1427,7 +1428,7 @@ func formatIdentityName(ident *C.struct_lysc_ident) string {
 	return fmt.Sprintf("%s:%s", modName, name)
 }
 
-func walkSchemaSiblings(first *C.struct_lysc_node, parent *C.struct_lysc_node) []RawSchemaNode {
+func walkSchemaSiblings(first, parent *C.struct_lysc_node) []RawSchemaNode {
 	var out []RawSchemaNode
 	cur := first
 	for cur != nil && cur.parent == parent {
@@ -1608,7 +1609,7 @@ func moduleIdentities(mod *C.struct_lys_module) []RawIdentity {
 
 func moduleImports(mod *C.struct_lys_module) []RawImport {
 	imports := C.cam_module_imports(mod)
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(imports)))
+	count := C.cam_sized_array_count(unsafe.Pointer(imports))
 	if count == 0 {
 		return nil
 	}
@@ -1628,7 +1629,7 @@ func moduleImports(mod *C.struct_lys_module) []RawImport {
 }
 
 func moduleProvenance(arr **C.struct_lys_module) []string {
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(arr)))
+	count := C.cam_sized_array_count(unsafe.Pointer(arr))
 	if count == 0 {
 		return nil
 	}
@@ -1645,7 +1646,7 @@ func moduleProvenance(arr **C.struct_lys_module) []string {
 
 func moduleDeviations(mod *C.struct_lys_module) []RawDeviation {
 	devs := C.cam_module_deviations(mod)
-	count := C.uint64_t(C.cam_sized_array_count(unsafe.Pointer(devs)))
+	count := C.cam_sized_array_count(unsafe.Pointer(devs))
 	if count == 0 {
 		return nil
 	}

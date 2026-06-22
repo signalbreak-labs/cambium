@@ -88,28 +88,28 @@ func (m *moduleData) validateIfFeatureExpressions() {
 	}
 }
 
-func (m *moduleData) evalIfFeatureExpr(expr string) (bool, bool) {
+func (m *moduleData) evalIfFeatureExpr(expr string) (value, ok bool) {
 	return m.evalIfFeatureExprFrom(expr, nil)
 }
 
-func (m *moduleData) evalIfFeatureExprFrom(expr string, from *yangparse.Statement) (bool, bool) {
+func (m *moduleData) evalIfFeatureExprFrom(expr string, from *yangparse.Statement) (value, ok bool) {
 	return m.evalIfFeatureExprSeen(expr, from, make(map[string]bool))
 }
 
-func (m *moduleData) evalIfFeatureExprSeen(expr string, from *yangparse.Statement, resolving map[string]bool) (bool, bool) {
+func (m *moduleData) evalIfFeatureExprSeen(expr string, from *yangparse.Statement, resolving map[string]bool) (value, ok bool) {
 	if ref, ok := m.yang10SingleIfFeatureRef(expr, from); ok {
 		return m.featureEnabledSeen(ref, from, resolving)
 	}
-	tokens, ok := tokenizeIfFeatureExpr(expr)
-	if !ok {
+	tokens, tokOK := tokenizeIfFeatureExpr(expr)
+	if !tokOK {
 		return false, false
 	}
 	parser := ifFeatureParser{mod: m, from: from, tokens: tokens, resolving: resolving}
-	value, ok := parser.parseOr()
-	if !ok || parser.pos != len(tokens) {
+	result, parsedOK := parser.parseOr()
+	if !parsedOK || parser.pos != len(tokens) {
 		return false, false
 	}
-	return value, true
+	return result, true
 }
 
 func (m *moduleData) validateIfFeatureExprFrom(expr string, from *yangparse.Statement) bool {

@@ -115,7 +115,7 @@ func loadBackendCRUDContext(t *testing.T) (*Context, *DataTree) {
     }
 }
 `
-	if err := os.WriteFile(module, []byte(source), 0644); err != nil {
+	if err := os.WriteFile(module, []byte(source), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -131,7 +131,8 @@ func loadBackendCRUDContext(t *testing.T) (*Context, *DataTree) {
 		ctx.Close()
 		t.Fatalf("LoadModule: %v", err)
 	}
-	return ctx, ctx.NewData()
+	tree := ctx.NewData()
+	return ctx, tree
 }
 
 func buildBackendBase(t *testing.T, tree *DataTree) {

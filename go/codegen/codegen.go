@@ -489,8 +489,8 @@ func (g *goEmitter) emitStringLengthHelper(name string, info stringLengthInfo, o
 		lo := parseLengthBound(b.Min())
 		hi := parseLengthBound(b.Max())
 		ranges = append(ranges, fmt.Sprintf("(l >= %d && l <= %d)", lo, hi))
-		if minLen == -1 || int64(lo) < minLen {
-			minLen = int64(lo)
+		if minLen == -1 || lo < minLen {
+			minLen = lo
 		}
 	}
 	check := strings.Join(ranges, " || ")
@@ -1549,7 +1549,7 @@ func (g *goEmitter) collectFields(prefix string, children []cambium.SchemaNodeRe
 		mod := child.Module()
 		ident := safeFieldIdent(child.Name(), used)
 		typeIdent := safeTypeIdent(child.Name(), usedTypeComponents)
-		goType, optional, jsonKind, isNewtype, intSigned, isEnum, isBits, isIdentityref, isUnion := g.fieldType(prefix, child, ident, typeIdent)
+		goType, optional, shape := g.fieldType(prefix, child, ident, typeIdent)
 		fields = append(fields, fieldInfo{
 			node:          child,
 			ident:         ident,
@@ -1558,133 +1558,158 @@ func (g *goEmitter) collectFields(prefix string, children []cambium.SchemaNodeRe
 			namespace:     mod.Namespace(),
 			goType:        goType,
 			optional:      optional,
-			jsonKind:      jsonKind,
-			isNewtype:     isNewtype,
-			intSigned:     intSigned,
-			isEnum:        isEnum,
-			isBits:        isBits,
-			isIdentityref: isIdentityref,
-			isUnion:       isUnion,
+			jsonKind:      shape.jsonKind,
+			isNewtype:     shape.isNewtype,
+			intSigned:     shape.intSigned,
+			isEnum:        shape.isEnum,
+			isBits:        shape.isBits,
+			isIdentityref: shape.isIdentityref,
+			isUnion:       shape.isUnion,
 		})
 	}
 	return fields
 }
 
-func (g *goEmitter) fieldType(prefix string, node cambium.SchemaNodeRef, fieldIdent, typeIdent string) (goType string, optional bool, jsonKind string, isNewtype bool, intSigned bool, isEnum bool, isBits bool, isIdentityref bool, isUnion bool) {
+// scalarShape carries the Go type name and classification flags for a leaf's
+// resolved scalar type.
+type scalarShape struct {
+	goType        string
+	jsonKind      string
+	isNewtype     bool
+	intSigned     bool
+	isEnum        bool
+	isBits        bool
+	isIdentityref bool
+	isUnion       bool
+}
+
+// fieldType returns the generated Go type for node's field, whether it is
+// optional, and the scalar classification of its (leaf) value.
+func (g *goEmitter) fieldType(prefix string, node cambium.SchemaNodeRef, fieldIdent, typeIdent string) (goType string, optional bool, shape scalarShape) {
 	switch node.Kind() {
 	case cambium.SchemaNodeKindLeaf, cambium.SchemaNodeKindLeafList:
-		base, jsonKind, isNewtype, intSigned, isEnum, isBits, isIdentityref, isUnion := g.scalarType(prefix, node, fieldIdent)
+		shape = g.scalarType(prefix, node, fieldIdent)
+		base := shape.goType
 		if node.Kind() == cambium.SchemaNodeKindLeafList {
+			shape.isNewtype = false
 			if node.OrderedBy() == cambium.OrderedByUser {
 				g.emittedUserOrdered = true
-				return "UserOrderedVec[" + base + "]", false, jsonKind, false, intSigned, isEnum, isBits, isIdentityref, isUnion
+				shape.goType = "UserOrderedVec[" + base + "]"
+				return shape.goType, false, shape
 			}
-			return "[]" + base, false, jsonKind, false, intSigned, isEnum, isBits, isIdentityref, isUnion
+			shape.goType = "[]" + base
+			return shape.goType, false, shape
 		}
 		optional = (!node.IsMandatory() || node.IsChoiceDescendant() || len(node.Whens()) > 0) && !node.IsListKey()
-		if optional && !isUnion {
+		if optional && !shape.isUnion {
 			base = "*" + base
 		}
-		return base, optional, jsonKind, isNewtype, intSigned, isEnum, isBits, isIdentityref, isUnion
+		shape.goType = base
+		return base, optional, shape
 	case cambium.SchemaNodeKindAnyData:
 		g.emittedAnyData = true
 		optional = !node.IsMandatory() || node.IsChoiceDescendant() || len(node.Whens()) > 0
 		if optional {
-			return "*AnyData", optional, "AnyData", false, false, false, false, false, false
+			return "*AnyData", optional, scalarShape{goType: "*AnyData", jsonKind: "AnyData"}
 		}
-		return "AnyData", optional, "AnyData", false, false, false, false, false, false
+		return "AnyData", optional, scalarShape{goType: "AnyData", jsonKind: "AnyData"}
 	case cambium.SchemaNodeKindContainer:
 		structName := prefix + typeIdent
 		optional = node.IsPresenceContainer()
 		if optional {
 			structName = "*" + structName
 		}
-		return structName, optional, "String", false, false, false, false, false, false
+		return structName, optional, scalarShape{goType: structName, jsonKind: "String"}
 	case cambium.SchemaNodeKindAction, cambium.SchemaNodeKindNotification:
-		structName := prefix + typeIdent
-		return "*" + structName, true, "String", false, false, false, false, false, false
+		structName := "*" + prefix + typeIdent
+		return structName, true, scalarShape{goType: structName, jsonKind: "String"}
 	case cambium.SchemaNodeKindList:
 		entryName := prefix + typeIdent + "Entry"
 		if node.OrderedBy() == cambium.OrderedByUser {
 			g.emittedUserOrdered = true
-			return "UserOrderedVec[" + entryName + "]", false, "String", false, false, false, false, false, false
+			listType := "UserOrderedVec[" + entryName + "]"
+			return listType, false, scalarShape{goType: listType, jsonKind: "String"}
 		}
-		return "[]" + entryName, false, "String", false, false, false, false, false, false
+		listType := "[]" + entryName
+		return listType, false, scalarShape{goType: listType, jsonKind: "String"}
 	default:
-		return "string", false, "String", false, false, false, false, false, false
+		return "string", false, scalarShape{goType: "string", jsonKind: "String"}
 	}
 }
 
-func (g *goEmitter) scalarType(prefix string, node cambium.SchemaNodeRef, fieldIdent string) (goType string, jsonKind string, isNewtype bool, intSigned bool, isEnum bool, isBits bool, isIdentityref bool, isUnion bool) {
+// scalarType returns the scalar shape for node's leaf type, defaulting to string.
+func (g *goEmitter) scalarType(prefix string, node cambium.SchemaNodeRef, fieldIdent string) scalarShape {
 	info, ok := node.LeafType()
 	if !ok {
-		return "string", "String", false, false, false, false, false, false
+		return scalarShape{goType: "string", jsonKind: "String"}
 	}
 	return g.scalarTypeForInfo(prefix, node.Name(), info, fieldIdent)
 }
 
-func (g *goEmitter) scalarTypeForInfo(prefix, yangName string, info cambium.TypeInfo, fieldIdent string) (goType string, jsonKind string, isNewtype bool, intSigned bool, isEnum bool, isBits bool, isIdentityref bool, isUnion bool) {
+// scalarTypeForInfo returns the scalar shape for a resolved type, registering any
+// generated newtype, enum, bits, identityref, or union helper as a side effect.
+func (g *goEmitter) scalarTypeForInfo(prefix, yangName string, info cambium.TypeInfo, fieldIdent string) scalarShape {
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
 			return g.scalarTypeForInfo(prefix, yangName, *realtype, fieldIdent)
 		}
-		return "string", "String", false, false, false, false, false, false
+		return scalarShape{goType: "string", jsonKind: "String"}
 	case cambium.ResolvedBoolean:
-		return "bool", "Bool", false, false, false, false, false, false
+		return scalarShape{goType: "bool", jsonKind: "Bool"}
 	case cambium.ResolvedInt:
-		jsonKind = "BareNumber"
+		jsonKind := "BareNumber"
 		if jsonIntegerKindQuoted(r.Kind) {
 			jsonKind = "QuotedNumber"
 		}
-		intSigned = isSignedIntKind(r.Kind)
+		intSigned := isSignedIntKind(r.Kind)
 		if len(r.Range) > 0 {
 			name := prefix + toPascalCase(fieldIdent) + "Range"
 			g.intRangeTypes[name] = intRangeInfo{kind: r.Kind, bounds: r.Range}
-			return name, jsonKind, true, intSigned, false, false, false, false
+			return scalarShape{goType: name, jsonKind: jsonKind, isNewtype: true, intSigned: intSigned}
 		}
-		return goTypeForIntKind(r.Kind), jsonKind, false, intSigned, false, false, false, false
+		return scalarShape{goType: goTypeForIntKind(r.Kind), jsonKind: jsonKind, intSigned: intSigned}
 	case cambium.ResolvedDecimal64:
 		g.emittedDecimal64 = true
-		return "Decimal64", "QuotedNumber", true, false, false, false, false, false
+		return scalarShape{goType: "Decimal64", jsonKind: "QuotedNumber", isNewtype: true}
 	case cambium.ResolvedString:
 		if len(r.Length) > 0 {
 			name := prefix + toPascalCase(fieldIdent) + "Length"
 			g.stringLengthTypes[name] = stringLengthInfo{bounds: r.Length}
-			return name, "String", true, false, false, false, false, false
+			return scalarShape{goType: name, jsonKind: "String", isNewtype: true}
 		}
-		return "string", "String", false, false, false, false, false, false
+		return scalarShape{goType: "string", jsonKind: "String"}
 	case cambium.ResolvedEmpty:
-		return "struct{}", "Empty", false, false, false, false, false, false
+		return scalarShape{goType: "struct{}", jsonKind: "Empty"}
 	case cambium.ResolvedEnumeration:
 		name := prefix + toPascalCase(fieldIdent) + "Enum"
 		g.ensureEnum(name, yangName, r.Values())
-		return name, "String", false, false, true, false, false, false
+		return scalarShape{goType: name, jsonKind: "String", isEnum: true}
 	case cambium.ResolvedBits:
 		name := prefix + toPascalCase(fieldIdent) + "Bits"
 		g.ensureBits(name, yangName, r.Values())
-		return name, "String", false, false, false, true, false, false
+		return scalarShape{goType: name, jsonKind: "String", isBits: true}
 	case cambium.ResolvedIdentityRef:
 		members := collectIdentityrefMembers(r.Bases())
 		if len(members) == 0 {
-			return "string", "String", false, false, false, false, false, false
+			return scalarShape{goType: "string", jsonKind: "String"}
 		}
 		name := prefix + toPascalCase(fieldIdent) + "Enum"
 		g.ensureIdentityref(name, yangName, members)
-		return name, "String", false, false, false, false, true, false
+		return scalarShape{goType: name, jsonKind: "String", isIdentityref: true}
 	case cambium.ResolvedUnion:
 		name := prefix + toPascalCase(fieldIdent) + "Union"
 		g.ensureUnion(name, yangName, r.Members(), prefix, fieldIdent)
-		return name, "String", false, false, false, false, false, true
+		return scalarShape{goType: name, jsonKind: "String", isUnion: true}
 	case cambium.ResolvedBinary:
-		return "string", "String", false, false, false, false, false, false
+		return scalarShape{goType: "string", jsonKind: "String"}
 	case cambium.ResolvedInstanceIdentifier:
 		g.emittedInstanceID = true
 		g.helpers["xmlEscape"] = true
 		g.helpers["jsonEscape"] = true
-		return "InstanceIdentifier", "InstanceIdentifier", false, false, false, false, false, false
+		return scalarShape{goType: "InstanceIdentifier", jsonKind: "InstanceIdentifier"}
 	default:
-		return "string", "String", false, false, false, false, false, false
+		return scalarShape{goType: "string", jsonKind: "String"}
 	}
 }
 

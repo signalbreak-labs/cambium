@@ -101,8 +101,8 @@ func TestEmptyVersusAbsentArgument(t *testing.T) {
 
 func TestUnterminatedConstructsFailClosed(t *testing.T) {
 	cases := map[string]string{
-		"double-quote": "module m { description \"unterminated",
-		"single-quote": "module m { description 'unterminated",
+		"double-quote":  "module m { description \"unterminated",
+		"single-quote":  "module m { description 'unterminated",
 		"block-comment": "module m { /* unterminated",
 		"block":         "module m { leaf l { type string;",
 	}

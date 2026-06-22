@@ -358,7 +358,9 @@ func (e *Entry) addGroupingChildren(grouping statementGrouping, scopes statement
 	seen[grouping.stmt] = true
 	defer delete(seen, grouping.stmt)
 
-	groupingScopes := append(scopes, groupingScopeForStatement(grouping.stmt))
+	groupingScopes := make(statementGroupingScopes, 0, len(scopes)+1)
+	groupingScopes = append(groupingScopes, scopes...)
+	groupingScopes = append(groupingScopes, groupingScopeForStatement(grouping.stmt))
 	groupingTypedefScopes := typedefScopes
 	if grouping.node != nil {
 		groupingTypedefScopes = typedefScopesForNode(grouping.node)

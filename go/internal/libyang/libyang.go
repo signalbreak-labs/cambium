@@ -61,7 +61,7 @@ static struct lyd_node *cam_set_dnode(const struct ly_set *set, uint32_t i) {
 	return set->dnodes[i];
 }
 */
-import "C"
+import "C" //nolint:gocritic // dupImport false positive: gocritic pairs the cgo "C" pseudo-import with "unsafe"
 
 import (
 	"fmt"
@@ -69,7 +69,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"unsafe"
+	"unsafe" //nolint:gocritic // dupImport false positive: gocritic pairs "unsafe" with the cgo "C" pseudo-import
 )
 
 // validateLogMu protects the ctx-global libyang error-log options and the
@@ -181,7 +181,7 @@ type RawContext struct {
 // NewContext creates an empty context with no search path.
 func NewContext() (*RawContext, error) {
 	var ctx *C.struct_ly_ctx
-	rc := C.ly_ctx_new(nil, C.uint32_t(C.LY_CTX_NO_YANGLIBRARY|C.LY_CTX_LEAFREF_EXTENDED|C.LY_CTX_SET_PRIV_PARSED), &ctx)
+	rc := C.ly_ctx_new(nil, C.uint32_t(C.LY_CTX_NO_YANGLIBRARY|C.LY_CTX_LEAFREF_EXTENDED|C.LY_CTX_SET_PRIV_PARSED), &ctx) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, fmt.Errorf("ly_ctx_new failed: rc=%d", int(rc))
 	}
@@ -233,14 +233,14 @@ func (c *RawContext) ParseData(format Format, parseOptions uint32, data []byte) 
 		keepAlive = append(append([]byte(nil), data...), 0)
 		cdata = (*C.char)(unsafe.Pointer(&keepAlive[0]))
 	} else {
-		if err := checkNul(data); err != nil {
+		if err := checkNul(data); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
 			return nil, err
 		}
 		cdata = C.CString(string(data))
 		defer C.free(unsafe.Pointer(cdata))
 	}
 	var tree *C.struct_lyd_node
-	rc := C.lyd_parse_data_mem(c.ctx, cdata, format.c(), C.uint32_t(parseOptions), 0, &tree)
+	rc := C.lyd_parse_data_mem(c.ctx, cdata, format.c(), C.uint32_t(parseOptions), 0, &tree) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	runtime.KeepAlive(keepAlive)
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(c.ctx, "parse data", int(rc))
@@ -253,14 +253,14 @@ func (c *RawContext) ParseData(format Format, parseOptions uint32, data []byte) 
 
 // ParseOp parses an RPC, action, or notification document.
 func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDataTree, error) {
-	if err := checkNul(data); err != nil {
+	if err := checkNul(data); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
 		return nil, err
 	}
 	cdata := C.CString(string(data))
 	defer C.free(unsafe.Pointer(cdata))
 
 	var in *C.struct_ly_in
-	rc := C.ly_in_new_memory(cdata, &in)
+	rc := C.ly_in_new_memory(cdata, &in) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(c.ctx, "ly_in_new_memory", int(rc))
 	}
@@ -268,7 +268,7 @@ func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDat
 
 	var tree *C.struct_lyd_node
 	var op *C.struct_lyd_node
-	rc = C.lyd_parse_op(c.ctx, nil, in, format.c(), opType.c(), 0, &tree, &op)
+	rc = C.lyd_parse_op(c.ctx, nil, in, format.c(), opType.c(), 0, &tree, &op) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(c.ctx, "parse op", int(rc))
 	}
@@ -289,6 +289,26 @@ func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDat
 // NewData creates an empty in-memory data tree tied to this context.
 func (c *RawContext) NewData() *RawDataTree {
 	return newRawDataTree(nil, c, c.ctx)
+}
+
+// RawDataTree owns a libyang lyd_node tree. It keeps its owning RawContext
+// alive so the context is never finalized while the tree is reachable.
+// The ctx pointer is cached so mutation operations on an empty or detached
+// tree can pass it to libyang without a public accessor on RawContext.
+// Free with Close (finalizer backstop).
+type RawDataTree struct {
+	tree     *C.struct_lyd_node
+	owner    *RawContext
+	ctx      *C.struct_ly_ctx
+	gen      uint64
+	released int32 // free/release performed (exactly-once, atomic)
+}
+
+func newRawDataTree(tree *C.struct_lyd_node, owner *RawContext, ctx *C.struct_ly_ctx) *RawDataTree {
+	owner.retain()
+	t := &RawDataTree{tree: tree, owner: owner, ctx: ctx}
+	runtime.SetFinalizer(t, (*RawDataTree).finalize)
+	return t
 }
 
 // NewPath creates or updates a node at `path`. A nil `value` creates an inner
@@ -316,7 +336,7 @@ func (t *RawDataTree) NewPath(path string, value *string, options uint32) error 
 		0, // any_hints
 		C.uint32_t(options),
 		&newParent,
-		&newNode,
+		&newNode, //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	)
 	if rc != C.LY_SUCCESS {
 		return lyError(t.ctx, "new path", int(rc))
@@ -343,7 +363,7 @@ func (t *RawDataTree) NewPath(path string, value *string, options uint32) error 
 // SetValue changes the value of an existing leaf or leaf-list.
 // It returns true if the value (or default flag) changed, false if the value
 // was identical. A non-leaf/leaf-list target or missing path returns an error.
-func (t *RawDataTree) SetValue(path string, value string) (bool, error) {
+func (t *RawDataTree) SetValue(path, value string) (bool, error) {
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
 	node, ok, err := t.FindNode(path)
@@ -439,7 +459,7 @@ func (t *RawDataTree) UnlinkPath(path string) (*RawDataTree, error) {
 func (t *RawDataTree) AddDefaults(options uint32) error {
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
-	rc := C.lyd_new_implicit_all(&t.tree, t.ctx, C.uint32_t(options), nil)
+	rc := C.lyd_new_implicit_all(&t.tree, t.ctx, C.uint32_t(options), nil) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return lyError(t.ctx, "add defaults", int(rc))
 	}
@@ -503,26 +523,6 @@ func (c *RawContext) finalize() {
 	c.destroyCtx()
 }
 
-// RawDataTree owns a libyang lyd_node tree. It keeps its owning RawContext
-// alive so the context is never finalized while the tree is reachable.
-// The ctx pointer is cached so mutation operations on an empty or detached
-// tree can pass it to libyang without a public accessor on RawContext.
-// Free with Close (finalizer backstop).
-type RawDataTree struct {
-	tree     *C.struct_lyd_node
-	owner    *RawContext
-	ctx      *C.struct_ly_ctx
-	gen      uint64
-	released int32 // free/release performed (exactly-once, atomic)
-}
-
-func newRawDataTree(tree *C.struct_lyd_node, owner *RawContext, ctx *C.struct_ly_ctx) *RawDataTree {
-	owner.retain()
-	t := &RawDataTree{tree: tree, owner: owner, ctx: ctx}
-	runtime.SetFinalizer(t, (*RawDataTree).finalize)
-	return t
-}
-
 // Generation returns the current mutation counter. Public NodeRef snapshots
 // compare against this value to detect stale handles.
 func (t *RawDataTree) Generation() uint64 {
@@ -551,7 +551,7 @@ func (t *RawDataTree) Duplicate() (*RawDataTree, error) {
 	defer runtime.KeepAlive(t.owner)
 	first := C.lyd_first_sibling(t.tree)
 	var out *C.struct_lyd_node
-	rc := C.lyd_dup_siblings(first, nil, C.uint32_t(C.LYD_DUP_RECURSIVE|C.LYD_DUP_WITH_FLAGS), &out)
+	rc := C.lyd_dup_siblings(first, nil, C.uint32_t(C.LYD_DUP_RECURSIVE|C.LYD_DUP_WITH_FLAGS), &out) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(t.ctx, "duplicate", int(rc))
 	}
@@ -594,7 +594,7 @@ func serializeNode(ctx *C.struct_ly_ctx, tree *C.struct_lyd_node, format Format,
 		options |= PrintEmptyCont
 	}
 	var out *C.char
-	rc := C.lyd_print_mem(&out, tree, format.c(), C.uint32_t(options))
+	rc := C.lyd_print_mem(&out, tree, format.c(), C.uint32_t(options)) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(ctx, "serialize", int(rc))
 	}
@@ -615,7 +615,7 @@ func serializeNodeLYB(ctx *C.struct_ly_ctx, tree *C.struct_lyd_node, options uin
 	options &^= PrintWithSiblings
 	var buf *C.char
 	var out *C.struct_ly_out
-	rc := C.ly_out_new_memory(&buf, 0, &out)
+	rc := C.ly_out_new_memory(&buf, 0, &out) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(ctx, "ly_out_new_memory", int(rc))
 	}
@@ -634,6 +634,8 @@ func serializeNodeLYB(ctx *C.struct_ly_ctx, tree *C.struct_lyd_node, options uin
 	return b, nil
 }
 
+// Serialize prints the whole tree to bytes in the given format via lyd_print,
+// treating an empty tree as an error.
 func (t *RawDataTree) Serialize(format Format, options uint32) ([]byte, error) {
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
@@ -651,7 +653,7 @@ func (t *RawDataTree) SerializeLYB(options uint32) ([]byte, error) {
 func (t *RawDataTree) Validate(options uint32) error {
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
-	rc := C.lyd_validate_all(&t.tree, nil, C.uint32_t(options), nil)
+	rc := C.lyd_validate_all(&t.tree, nil, C.uint32_t(options), nil) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return lyError(t.owner.ctx, "validate", int(rc))
 	}
@@ -687,7 +689,7 @@ func (t *RawDataTree) FindNode(path string) (*C.struct_lyd_node, bool, error) {
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	var node *C.struct_lyd_node
-	rc := C.lyd_find_path(t.tree, cpath, C.ly_bool(0), &node)
+	rc := C.lyd_find_path(t.tree, cpath, C.ly_bool(0), &node) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc == C.LY_ENOTFOUND || rc == C.LY_EINCOMPLETE {
 		return nil, false, nil
 	}
@@ -768,7 +770,7 @@ func (t *RawDataTree) XPathPaths(xpath string) ([]string, error) {
 	cxpath := C.CString(xpath)
 	defer C.free(unsafe.Pointer(cxpath))
 	var set *C.struct_ly_set
-	rc := C.lyd_find_xpath(t.tree, cxpath, &set)
+	rc := C.lyd_find_xpath(t.tree, cxpath, &set) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(t.owner.ctx, "xpath", int(rc))
 	}
@@ -793,7 +795,7 @@ func (t *RawDataTree) XPathPaths(xpath string) ([]string, error) {
 
 // ValueStr returns the canonical value string of a leaf or leaf-list node.
 // For non-term nodes it returns ("", false, nil).
-func (t *RawDataTree) ValueStr(path string) (string, bool, error) {
+func (t *RawDataTree) ValueStr(path string) (value string, ok bool, err error) {
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
 	node, ok, err := t.FindNode(path)
@@ -829,7 +831,7 @@ func (t *RawDataTree) IsDefault(path string) (bool, error) {
 
 // SchemaPtr returns the compiled schema pointer for the node at path, if any.
 // Opaque/anydata nodes may have a nil schema pointer.
-func (t *RawDataTree) SchemaPtr(path string) (unsafe.Pointer, bool, error) {
+func (t *RawDataTree) SchemaPtr(path string) (ptr unsafe.Pointer, ok bool, err error) {
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
 	node, ok, err := t.FindNode(path)
@@ -858,7 +860,7 @@ func (t *RawDataTree) ValidateCollect(options uint32) ([]RawDiagnostic, error) {
 	defer C.ly_log_options(prev)
 
 	C.ly_err_clean(t.owner.ctx, nil)
-	rc := C.lyd_validate_all(&t.tree, nil, C.uint32_t(options), nil)
+	rc := C.lyd_validate_all(&t.tree, nil, C.uint32_t(options), nil) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if t.tree != nil {
 		t.tree = C.lyd_first_sibling(t.tree)
 	}
@@ -937,7 +939,7 @@ func (t *RawDataTree) UserOrderedListAt(path string) (*RawUserOrderedList, error
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	var node *C.struct_lyd_node
-	rc := C.lyd_find_path(t.tree, cpath, C.ly_bool(0), &node)
+	rc := C.lyd_find_path(t.tree, cpath, C.ly_bool(0), &node) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS || node == nil {
 		return nil, fmt.Errorf("path not found: %q", path)
 	}
@@ -995,7 +997,7 @@ func (t *RawDataTree) Merge(source *RawDataTree) error {
 		return fmt.Errorf("merge requires both trees to share the same context")
 	}
 	sourceFirst := C.lyd_first_sibling(source.tree)
-	rc := C.lyd_merge_siblings(&t.tree, sourceFirst, 0)
+	rc := C.lyd_merge_siblings(&t.tree, sourceFirst, 0) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return lyError(t.ctx, "merge", int(rc))
 	}
@@ -1012,7 +1014,7 @@ func (t *RawDataTree) DiffApply(diff *RawDataDiff) error {
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(diff)
 	defer runtime.KeepAlive(diff.owner)
-	rc := C.lyd_diff_apply_all(&t.tree, diff.tree)
+	rc := C.lyd_diff_apply_all(&t.tree, diff.tree) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return lyError(t.ctx, "diff apply", int(rc))
 	}
@@ -1041,7 +1043,7 @@ func (t *RawDataTree) Diff(other *RawDataTree, defaults bool) (*RawDataDiff, err
 	first := C.lyd_first_sibling(t.tree)
 	second := C.lyd_first_sibling(other.tree)
 	var diff *C.struct_lyd_node
-	rc := C.lyd_diff_siblings(first, second, options, &diff)
+	rc := C.lyd_diff_siblings(first, second, options, &diff) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return nil, lyError(t.ctx, "diff", int(rc))
 	}
@@ -1054,6 +1056,8 @@ func (t *RawDataTree) Diff(other *RawDataTree, defaults bool) (*RawDataDiff, err
 // RawDiffOp is the operation carried on a diff-tree node.
 type RawDiffOp int
 
+// Diff operations carried on a diff-tree node, mirroring libyang's
+// yang:operation metadata values.
 const (
 	RawDiffOpCreate RawDiffOp = iota
 	RawDiffOpDelete

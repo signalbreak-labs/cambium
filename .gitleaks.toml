@@ -1,0 +1,9 @@
+# Gitleaks config — extends the bundled default ruleset.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "The conformance corpus and golden outputs use placeholder values (e.g. password fields, hunter2) as RFC-7950 test data, not real secrets."
+paths = [
+  '''conformance/.*''',
+]

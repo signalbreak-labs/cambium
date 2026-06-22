@@ -33,20 +33,20 @@ func TestDuplicateDeepCopyIndependent(t *testing.T) {
 		t.Fatalf("NewPath nested/name: %v", err)
 	}
 
-	copy, err := original.Duplicate()
+	dup, err := original.Duplicate()
 	if err != nil {
 		t.Fatalf("Duplicate: %v", err)
 	}
-	defer copy.Close()
+	defer dup.Close()
 
 	// Mutate copy; original must stay unchanged.
-	if _, err := copy.SetValue("/cambium-data-crud-demo:top/counter", "99"); err != nil {
+	if _, err := dup.SetValue("/cambium-data-crud-demo:top/counter", "99"); err != nil {
 		t.Fatalf("SetValue copy counter: %v", err)
 	}
-	if err := copy.RemovePath("/cambium-data-crud-demo:top/nested"); err != nil {
+	if err := dup.RemovePath("/cambium-data-crud-demo:top/nested"); err != nil {
 		t.Fatalf("RemovePath copy nested: %v", err)
 	}
-	if _, err := copy.NewPath("/cambium-data-crud-demo:top/item[id='x']", nil, cambium.NewPathOpts{}); err != nil {
+	if _, err := dup.NewPath("/cambium-data-crud-demo:top/item[id='x']", nil, cambium.NewPathOpts{}); err != nil {
 		t.Fatalf("NewPath copy item: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestDuplicateDeepCopyIndependent(t *testing.T) {
 	if _, err := original.SetValue("/cambium-data-crud-demo:top/counter", "42"); err != nil {
 		t.Fatalf("SetValue original counter: %v", err)
 	}
-	copyNode, err := copy.Get("/cambium-data-crud-demo:top/counter")
+	copyNode, err := dup.Get("/cambium-data-crud-demo:top/counter")
 	if err != nil {
 		t.Fatalf("Get copy counter: %v", err)
 	}
@@ -83,10 +83,10 @@ func TestDuplicateDeepCopyIndependent(t *testing.T) {
 	if u, ok := copyV.Uint64(); !ok || u != 99 {
 		t.Fatalf("copy counter = %v, want 99", u)
 	}
-	if copy.Exists("/cambium-data-crud-demo:top/nested") {
+	if dup.Exists("/cambium-data-crud-demo:top/nested") {
 		t.Fatal("copy nested should be removed")
 	}
-	if !copy.Exists("/cambium-data-crud-demo:top/item[id='x']") {
+	if !dup.Exists("/cambium-data-crud-demo:top/item[id='x']") {
 		t.Fatal("copy item should survive")
 	}
 }
@@ -117,17 +117,17 @@ func TestDuplicatePreservesUserOrder(t *testing.T) {
 	}
 	defer original.Close()
 
-	copy, err := original.Duplicate()
+	dup, err := original.Duplicate()
 	if err != nil {
 		t.Fatalf("Duplicate: %v", err)
 	}
-	defer copy.Close()
+	defer dup.Close()
 
 	origJSON, err := original.Serialize(cambium.FormatJSON, cambium.DefaultSerializeFlags())
 	if err != nil {
 		t.Fatalf("Serialize original: %v", err)
 	}
-	copyJSON, err := copy.Serialize(cambium.FormatJSON, cambium.DefaultSerializeFlags())
+	copyJSON, err := dup.Serialize(cambium.FormatJSON, cambium.DefaultSerializeFlags())
 	if err != nil {
 		t.Fatalf("Serialize copy: %v", err)
 	}
@@ -150,11 +150,11 @@ func TestDuplicateFreedOnce(t *testing.T) {
 	}
 
 	for i := 0; i < 100; i++ {
-		copy, err := tree.Duplicate()
+		dup, err := tree.Duplicate()
 		if err != nil {
 			t.Fatalf("Duplicate iteration %d: %v", i, err)
 		}
-		copy.Close()
+		dup.Close()
 	}
 
 	if !tree.Exists("/cambium-data-crud-demo:top/counter") {
