@@ -15,9 +15,9 @@ validation logic, so nothing they do at runtime needs a live `*cambium.Context` 
 the libyang backend. For where this tier sits relative to the data tiers, see
 [Tiers and the cgo boundary](../concepts/tiers-and-cgo.md).
 
-## The single entry point
+## Entry points
 
-`codegen` exposes exactly one function:
+`GenerateGo` renders the current Go target:
 
 ```go
 func GenerateGo(ctx *cambium.Context, module string) (string, error)
@@ -34,6 +34,20 @@ imports. Internally `GenerateGo` runs the assembled source through `go/format`, 
 writing the returned string verbatim and running your normal `go build` is all that
 is required. Re-running the generator on the same context produces the same bytes,
 which makes generated code reviewable in version control and safe to gate in CI.
+
+`Plan` exposes the ordered model before rendering:
+
+```go
+func Plan(ctx *cambium.Context, module string) (*ModulePlan, error)
+```
+
+`ModulePlan` is tagged with `PlanVersion` and contains ordered records, fields,
+type summaries, identity metadata, serializer field order, and validation
+metadata. It is generic enough for external renderers to consume the same ordered
+schema/codegen planning model without using generated Go. Because Go is the only
+shipping renderer today, the plan still includes Go type expressions; downstream
+renderers can ignore those and use the embedded `cambium.SchemaNodeRef`,
+`BaseType`, resolved type, defaults, constraints, and field-order data instead.
 
 ## What it emits
 
@@ -208,6 +222,7 @@ CGO_ENABLED=0 go run .
 
 - [Overview](../overview.md) — the order-semantics problem this generator serves
 - [Ordering](../concepts/ordering.md) · [Tiers and the cgo boundary](../concepts/tiers-and-cgo.md)
+- [Downstream schema consumers](./downstream-schema-consumers.md) — versioned schema IR and codegen planning API for external renderers
 - [Schema introspection](./schema-introspection.md) — building the `*cambium.Context` you pass to `GenerateGo`
 - [Quickstart](./quickstart.md) — load a module, walk the ordered tree, generate structs
 - [The libyang backend](./data-tree-libyang.md) — full RFC 7950 data validation (`must`/`when`/leafref)

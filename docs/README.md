@@ -49,6 +49,10 @@ This suite has three authorities, with no overlap between them:
   tree, generate typed structs.
 - [guides/schema-introspection.md](guides/schema-introspection.md) — package
   `cambium`: build a `Context`, load modules, walk the ordered schema tree.
+- [guides/downstream-schema-consumers.md](guides/downstream-schema-consumers.md)
+  — stable native APIs for external schema consumers and renderers: versioned
+  schema IR, traversal profiles, provenance, load reports, diagnostics, leafref
+  and identity helpers, and codegen planning.
 - [guides/codegen.md](guides/codegen.md) — package `codegen`: `GenerateGo`, what it
   emits, and the ordering guarantees baked into generated structs and serializers.
 - [guides/data-tree-pure-go.md](guides/data-tree-pure-go.md) — package `datatree`

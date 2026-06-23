@@ -289,6 +289,37 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     non-choice/case descendants are returned in schema declaration order,
     matching goyang's data-child compatibility shape without using `Entry.Dir`
     as the traversal source.
+  - Bindings expose named traversal profiles for schema consumers: structural
+    children preserving choice/case nodes, data children with choice/case
+    flattening, serialization/data-shape order, schema declaration order, and
+    list-entry order with keys first in key-statement order. These profiles are
+    schema/YANG concepts, not target-generator concepts, and each materializes an
+    ordered list from Cambium's IR.
+  - Bindings expose a versioned ordered schema projection for downstream schema
+    consumers. The projection includes modules, schema nodes, local and
+    module/namespace-qualified paths, ordered structural children, flattened data
+    children, list keys in key-statement order, node kind, type metadata,
+    defaults, config/read-only state, constraints, source location, defining and
+    instantiating module, augmenting module when known, grouping/uses origin when
+    known, and deviation provenance/effects. Unknown provenance is left absent
+    rather than inferred from strings or map iteration.
+  - Bindings expose a context load report for observability: explicitly
+    requested modules, loaded transitive imports, included submodules, deviation
+    modules, enabled/disabled features, skipped/excluded modules where the
+    binding supports filtering, warnings/diagnostics, and source files
+    participating in the context.
+  - Leafref helpers resolve one hop, resolve a chain, return a trace, and fail
+    with structured reasons. Identity helpers expose identity lookup, base
+    identities, and transitive derived identity closure.
+  - Errors and warnings are inspectable as structured diagnostics carrying a
+    stable rule code where available, diagnostic category, module/path when
+    known, source location, and related locations when available.
+  - Bindings expose a generic schema diff API for comparing loaded contexts or
+    modules. It reports added/removed nodes, node-kind changes, type changes,
+    list-key changes, default changes, config/read-only changes, constraint
+    changes, augment provenance changes, and deviation provenance/effect
+    changes. The diff walks Cambium's ordered schema IR and may use maps only as
+    lookup indexes, never as an ordering source.
   - Operation nodes are also available through `Children()` for navigation and
     through `Module.RPCs()`, `Module.Actions()`, and `Module.Notifications()`.
     `DataChildren` is the order-sensitive data-child view. If a backend exposes
@@ -304,8 +335,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - Go `go/compat` provides a read-only `Entry` projection for migration from
     goyang-style code. It includes a cgo-free `Modules` facade with
     `NewModules`, `AddPath`, `Parse`, `Read`, `Process`, `GetModule`,
-    `FindModule`, and `FindModuleByNamespace` helpers backed by Cambium's
-    pure-Go builder.
+    `FindModule`, `FindModuleByNamespace`, and `LoadReport` helpers backed by
+    Cambium's pure-Go builder.
     `Process` supports goyang-style in-memory `Parse` sets containing modules
     and submodules by internally staging those parsed sources for the builder's
     ordinary include/import search path; Cambium's public direct-submodule load
@@ -350,12 +381,17 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     schema handles used by helpers such as `Namespace()`, `Path()`, and
     `GetWhenXPath()` remain internal so migrated code can compile against the
     expected field type without making parser nodes a traversal authority.
+    `Modules.LoadReport()` returns the native Cambium load report through compat
+    aliases after a successful `Process()` or `GetModule()` so migrated loader
+    code can inspect requested modules and transitive imports without relying on
+    unordered module maps.
     `Entry.Find(path)` supports goyang-style slash paths, `"."`, `".."`,
     absolute paths, and module/prefix-qualified path parts without iterating
     `Entry.Dir`. The projection carries common goyang-style read fields
     (`Description`, `Default`, `Units`, `Config`, `Mandatory`, `Key`, `Type`,
     `Exts`,
-    `ListAttr`, `RPC`, `Augments`, `Augmented`, `Deviations`, `Deviate`,
+    `ListAttr`, `RPC`, `Augments`, `Augmented`, `AugmentedBy` (a migration alias
+    of `Augmented`), `Deviations`, `Deviate`,
     and `Uses`) from Cambium's effective schema IR where that metadata is
     available. `MatchingEntryExtensions` resolves extension instances whose
     keywords use either a source prefix or Cambium's projected defining module
@@ -950,9 +986,16 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 - **G · Diff / merge / dup (Backend/data tier).** `diff`/`diff_apply`/`merge`/`duplicate`. `DataDiff` flags
   `is_ordered_by_user` edits and preserves libyang's `yang:insert` metadata so a consumer carries
   user-ordered changes **atomically**, never as N scalar updates (I6). `merge` preserves user-ordered
-  order; a conflicting leaf value is an error.
+  order; a conflicting leaf value is an error. This is instance-data diffing; schema/module diffing
+  is part of the Schema-IR tier contract above.
 - **H · Typed-struct codegen.** `generate(ctx, module, opts)` emits typed structs + a per-struct
   field-order manifest (keys-first, declaration order) and a **native** serializer (D-4).
+  Bindings also expose a public planning API before rendering. The planning
+  model is versioned and includes ordered records/structs, ordered fields,
+  target-neutral schema/type handles, identity metadata, serializer field order,
+  and validation metadata. A binding may include renderer-specific type names in
+  its plan, but downstream renderers must be able to ignore them and rely on the
+  ordered Cambium schema metadata instead.
 
   This section describes the full codegen contract, which the **Go** emitter
   (`codegen.GenerateGo`) implements: typed structs, the field-order manifest, the

@@ -169,6 +169,14 @@ gives you two ordered child views:
 > Use `DataChildren(true)` when you want the on-the-wire data shape; use
 > `Children()` when you care about the `choice`/`case` structure itself.
 
+For external schema consumers that want named traversal modes, use
+`SchemaNodeRef.Traverse(profile)` or `Module.Traverse(profile)`. The available
+profiles are structural children, data children with choice/case flattening,
+serialization order, schema declaration order, and list-entry order with keys
+first. See [Downstream schema consumers](./downstream-schema-consumers.md) for
+the versioned IR snapshot, traversal profiles, provenance, load reports,
+diagnostics, schema diffs, leafref/identity helpers, and codegen planning API.
+
 ## Disambiguating augmented siblings
 
 YANG allows different modules to augment same-local-name children under one

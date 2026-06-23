@@ -739,6 +739,7 @@ type Entry struct {
 	Identities  []*Identity                `json:",omitempty"`
 	Augments    []*Entry                   `json:",omitempty"`
 	Augmented   []*Entry                   `json:",omitempty"`
+	AugmentedBy []*Entry                   `json:",omitempty"`
 	Deviations  []*DeviatedEntry           `json:"-"`
 	Deviate     map[deviationType][]*Entry `json:"-"`
 	Uses        []*UsesStmt                `json:",omitempty"`

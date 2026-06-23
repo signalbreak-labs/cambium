@@ -47,7 +47,7 @@ const (
 
 func codeForOp(op string) RuleCode {
 	switch op {
-	case "new context", "context builder", "set search path", "unset search path", "set features", "load module", "schema tree":
+	case "new context", "context builder", "set search path", "unset search path", "set features", "load module", "schema tree", "schema diff":
 		return RuleCodeContext
 	case "parse", "parse op":
 		return RuleCodeParse
@@ -179,7 +179,7 @@ func (b *ContextBuilder) LoadModule(name string, revision *string, features []st
 			return err
 		}
 	}
-	if err := b.ctx.loadModuleByName(name, revision, true); err != nil {
+	if err := b.ctx.loadModuleByName(name, revision, true, true); err != nil {
 		b.ctx.restore(snap)
 		return err
 	}
@@ -192,7 +192,7 @@ func (b *ContextBuilder) LoadModuleFromPath(path string) error {
 		return err
 	}
 	snap := b.ctx.snapshot()
-	if _, err := b.ctx.loadModulePath(path, true); err != nil {
+	if _, err := b.ctx.loadModulePath(path, true, true); err != nil {
 		b.ctx.restore(snap)
 		return wrap("load module", err)
 	}
@@ -205,7 +205,7 @@ func (b *ContextBuilder) LoadModuleStr(source string) error {
 		return err
 	}
 	snap := b.ctx.snapshot()
-	if _, err := b.ctx.loadModuleSource(source, memoryModuleSource, true); err != nil {
+	if _, err := b.ctx.loadModuleSource(source, memoryModuleSource, true, true); err != nil {
 		b.ctx.restore(snap)
 		return wrap("load module", err)
 	}
@@ -265,6 +265,7 @@ type moduleDataSnapshot struct {
 	submodules  []*submoduleData
 	imports     []Import
 	importByPfx map[string]*moduleData
+	requested   bool
 }
 
 // NewContext creates an empty pure-Go schema context.
@@ -327,6 +328,7 @@ func (c *Context) snapshot() contextSnapshot {
 			submodules:  append([]*submoduleData(nil), mod.submodules...),
 			imports:     append([]Import(nil), mod.imports...),
 			importByPfx: cloneModuleMap(mod.importByPfx),
+			requested:   mod.requested,
 		})
 	}
 	return snap
@@ -355,6 +357,7 @@ func (c *Context) restore(snap contextSnapshot) {
 		mod.submodules = state.submodules
 		mod.imports = state.imports
 		mod.importByPfx = state.importByPfx
+		mod.requested = state.requested
 	}
 }
 
@@ -467,7 +470,7 @@ func (c *Context) SetFeatures(module string, features []string) error {
 // LoadModule loads an implemented module by name from the configured search
 // paths. The loader looks for name.yang first, then any name@revision.yang file.
 func (c *Context) LoadModule(name string) error {
-	return c.loadModuleByName(name, nil, true)
+	return c.loadModuleByName(name, nil, true, true)
 }
 
 // LoadModuleFromPath loads an implemented module directly from path.
@@ -476,14 +479,14 @@ func (c *Context) LoadModuleFromPath(path string) error {
 		return err
 	}
 	snap := c.snapshot()
-	if _, err := c.loadModulePath(path, true); err != nil {
+	if _, err := c.loadModulePath(path, true, true); err != nil {
 		c.restore(snap)
 		return wrap("load module", err)
 	}
 	return nil
 }
 
-func (c *Context) loadModuleByName(name string, revision *string, implemented bool) error {
+func (c *Context) loadModuleByName(name string, revision *string, implemented, requested bool) error {
 	if err := c.ensureMutable("load module"); err != nil {
 		return err
 	}
@@ -509,7 +512,7 @@ func (c *Context) loadModuleByName(name string, revision *string, implemented bo
 		c.restore(snap)
 		return wrap("load module", fmt.Errorf("YANG file %q does not declare module %q", path, name))
 	}
-	if _, err := c.loadModulePath(path, implemented); err != nil {
+	if _, err := c.loadModulePath(path, implemented, requested); err != nil {
 		c.restore(snap)
 		return wrap("load module", err)
 	}
@@ -761,7 +764,7 @@ func moduleFileMatchesRevision(path, name, revision string) bool {
 	return err == nil && effectiveRevision == revision
 }
 
-func (c *Context) loadModulePath(path string, implemented bool) (*moduleData, error) {
+func (c *Context) loadModulePath(path string, implemented, requested bool) (*moduleData, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -772,7 +775,7 @@ func (c *Context) loadModulePath(path string, implemented bool) (*moduleData, er
 	}
 	dir := moduleSourceDirectory(abs)
 	addedSearchPath := c.addSearchPathIfMissing(dir)
-	mod, err := c.loadModuleSource(raw, abs, implemented)
+	mod, err := c.loadModuleSource(raw, abs, implemented, requested)
 	if err != nil && addedSearchPath {
 		c.removeSearchPath(dir)
 	}
@@ -809,7 +812,7 @@ func (c *Context) removeSearchPath(path string) {
 	}
 }
 
-func (c *Context) loadModuleSource(source, sourceName string, implemented bool) (*moduleData, error) {
+func (c *Context) loadModuleSource(source, sourceName string, implemented, requested bool) (*moduleData, error) {
 	if c.allImplemented {
 		implemented = true
 	}
@@ -898,6 +901,9 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented bool) 
 	}
 	if implemented {
 		mod.implemented = true
+	}
+	if requested {
+		mod.requested = true
 	}
 	mod.loadMeta()
 	c.registerNameDefault(mod)
@@ -1468,7 +1474,7 @@ func (c *Context) loadImports(mod *moduleData) error {
 				return fmt.Errorf("YANG file %q does not declare module %q", path, targetName)
 			}
 			var loadErr error
-			target, loadErr = c.loadModulePath(path, c.allImplemented)
+			target, loadErr = c.loadModulePath(path, c.allImplemented, false)
 			if loadErr != nil {
 				return loadErr
 			}

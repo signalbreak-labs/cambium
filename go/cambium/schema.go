@@ -1004,6 +1004,7 @@ type moduleData struct {
 	file        string
 	stmt        *yangparse.Statement
 	implemented bool
+	requested   bool
 	submodules  []*submoduleData
 
 	imports          []Import

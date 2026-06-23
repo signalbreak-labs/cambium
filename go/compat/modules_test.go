@@ -143,6 +143,60 @@ func TestModulesFacadeParseProcessGetModule(t *testing.T) {
 	entry.FixChoice()
 }
 
+func TestModulesLoadReportExposesRequestedAndTransitiveImports(t *testing.T) {
+	base := `module compat-load-report-base {
+    namespace "urn:compat-load-report-base";
+    prefix clrb;
+
+    import compat-load-report-import { prefix clri; }
+
+    leaf value { type clri:shared; }
+}
+`
+	imported := `module compat-load-report-import {
+    namespace "urn:compat-load-report-import";
+    prefix clri;
+
+    typedef shared { type string; }
+}
+`
+	dir := t.TempDir()
+	files := map[string]string{
+		"compat-load-report-base.yang":   base,
+		"compat-load-report-import.yang": imported,
+	}
+	for name, source := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(source), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", name, err)
+		}
+	}
+
+	ms := compat.NewModules()
+	ms.AddPath(dir)
+	if err := ms.Read("compat-load-report-base"); err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if errs := ms.Process(); len(errs) != 0 {
+		t.Fatalf("Process errors = %v", errs)
+	}
+
+	report := ms.LoadReport()
+	if got, want := compatModuleLoadNames(report.RequestedModules), []string{"compat-load-report-base"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("requested modules = %v, want %v", got, want)
+	}
+	if got, want := compatModuleLoadNames(report.TransitiveImports), []string{"compat-load-report-import"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("transitive imports = %v, want %v", got, want)
+	}
+}
+
+func compatModuleLoadNames(modules []compat.ModuleLoadInfo) []string {
+	out := make([]string, len(modules))
+	for i, module := range modules {
+		out[i] = module.Name
+	}
+	return out
+}
+
 func TestModulesProcessDeviateOptionsRetainsNotSupportedLikeGoyang(t *testing.T) {
 	target := `module compat-deviate-option-target {
     yang-version 1.1;

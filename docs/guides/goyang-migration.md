@@ -41,11 +41,26 @@ The native replacement for common goyang read use cases is:
 - `Module.ResolvePrefix(prefix)` for native prefix-to-module resolution.
 - `SchemaNodeRef.Path()` and `SchemaNodeRef.FindPath(path)` for goyang-style
   node path inspection and relative traversal.
+- `SchemaNodeRef.LocalPath()` for a module-root local path that omits module
+  qualification.
 - `SchemaNodeRef.QualifiedName()` and `QualifiedPath()` for module-qualified
   identity and unambiguous paths across augments.
+- `SchemaNodeRef.Traverse(profile)` and `Module.Traverse(profile)` for named
+  traversal profiles such as structural children, flattened data children,
+  serialization order, schema declaration order, and list-entry keys-first order.
 - `SchemaChildren.LookupAll(name)`, `LookupQualified(module, name)`, and
   `LookupQualifiedName(qname)` for name collisions introduced by augments.
 - `SchemaPathError` for structured `FindPath` failures via `errors.As`.
+- `Context.LoadReport()` for explicitly requested modules, transitive imports,
+  included submodules, features, deviation modules, diagnostics, and source
+  files.
+- `Context.SchemaIR()` for the versioned ordered schema projection intended for
+  downstream schema consumers and renderers.
+- `DiffModules(oldModule, newModule)` and `DiffContexts(oldCtx, newCtx)` for
+  generic schema changes across model/vendor versions.
+- `ResolveLeafref`, `ResolveLeafrefChain`, `Module.Identity`, and
+  `Identity.DerivedClosure` for generic resolution helpers.
+- `DiagnosticFromError` for structured diagnostic categories and rule codes.
 - `Module.MatchingExtensions(module, name)` and
   `SchemaNodeRef.MatchingExtensions(module, name)` for resolved extension
   filtering.
@@ -91,6 +106,11 @@ native `cambium` handles directly:
 | Handle lookup failure detail | `errors.As(err, &pathErr)` with `*cambium.SchemaPathError` |
 | Read resolved type constraints | `node.LeafType()` and `TypeInfo.Resolved()` |
 | Read declaration source | `mod.Location()` / `node.Location()` |
+| Read structured source | `mod.SourceLocation()` / `node.SourceLocation()` |
+| Inspect module loading | `ctx.LoadReport()` |
+| Get a versioned ordered projection | `ctx.SchemaIR()` |
+| Compare schema versions | `cambium.DiffModules(oldMod, newMod)` |
+| Resolve leafref target/chain | `cambium.ResolveLeafref` / `ResolveLeafrefChain` |
 
 The largest semantic difference is still traversal order: native Cambium has no
 map traversal contract to remember. You walk `SchemaChildren`, and the order is
@@ -128,6 +148,10 @@ if err != nil {
 }
 ```
 
+For external renderers, `codegen.Plan(ctx, module)` exposes the ordered planning
+model before Go rendering. Prefer that or `ctx.SchemaIR()` over adapting new code
+to `compat.Entry`.
+
 ## What `compat` is for
 
 `compat` exists so you can keep familiar goyang call shapes while reading a
@@ -147,6 +171,14 @@ being right and the other wrong.
 If you are writing new code rather than porting, the native `cambium` ordered IR
 (see [./schema-introspection.md](./schema-introspection.md)) is the primary
 surface; `compat` is the bridge for code that already targets goyang's `Entry`.
+
+Two bridge helpers exist for common goyang-shaped call sites:
+
+- `Entry.AugmentedBy` is populated as an alias of `Entry.Augmented`.
+- `ToEntryInContext(root, found)` projects `root` and returns the entry matching
+  `found` inside that root projection, preserving `Path()` parent/module context
+  for code that previously did `FindNode(root.Node, path)` followed by
+  `ToEntry(found)`.
 
 ## The loader: side-by-side
 
@@ -187,10 +219,16 @@ if len(errs) > 0 {
 The method set on `*compat.Modules` is `AddPath(paths ...string)`,
 `Read(name string) error`, `Parse(data, name string) error`,
 `Process() []error`, `GetModule(name string) (*Entry, []error)`,
-`FindModule(n Node) *Module`, and
+`FindModule(n Node) *Module`, `LoadReport() LoadReport`, and
 `FindModuleByNamespace(ns string) (*Module, error)`. The exported fields
 `Modules`, `SubModules`, `ParseOptions`, and `Path` are present as well, mirroring
 goyang's.
+
+After a successful `Process()` or `GetModule()`, `LoadReport()` returns the native
+Cambium report, exposed through compat type aliases. It includes explicitly
+requested modules, transitive imports, included submodules, feature selections,
+deviation modules, diagnostics, and source files without relying on unordered
+module maps.
 
 Two package-level conveniences round out the compat entry points:
 
@@ -303,8 +341,8 @@ the richer metadata.
 you are most likely to depend on:
 
 - **Loader:** `Modules`, `NewModules`, and the `AddPath` / `Read` / `Parse` /
-  `Process` / `GetModule` / `FindModule` / `FindModuleByNamespace` methods, plus
-  the package-level `GetModule` and `Parse`.
+  `Process` / `GetModule` / `FindModule` / `FindModuleByNamespace` /
+  `LoadReport` methods, plus the package-level `GetModule` and `Parse`.
 - **Entry construction:** `ToEntry(n Node) *Entry` projects a goyang-style AST
   node; `FromModule(module cambium.Module) *Entry` projects a Cambium module handle
   directly, which is the bridge from the native IR into the goyang-shaped view.

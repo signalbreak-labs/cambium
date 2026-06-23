@@ -82,6 +82,7 @@ func TestCompatEntryExportedFieldShape(t *testing.T) {
 		"Identities",
 		"Augments",
 		"Augmented",
+		"AugmentedBy",
 		"Deviations",
 		"Deviate",
 		"Uses",
@@ -90,6 +91,39 @@ func TestCompatEntryExportedFieldShape(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Entry exported fields = %v, want %v", got, want)
+	}
+}
+
+func TestToEntryInContextPreservesRootPath(t *testing.T) {
+	source := `module compat-entry-context {
+    namespace "urn:compat-entry-context";
+    prefix cec;
+
+    container top {
+        leaf before { type string; }
+    }
+}`
+	stmts, err := compat.Parse(source, "compat-entry-context.yang")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(stmts) != 1 {
+		t.Fatalf("Parse returned %d statements, want 1", len(stmts))
+	}
+
+	found, err := compat.FindNode(stmts[0], "top/before")
+	if err != nil {
+		t.Fatalf("FindNode: %v", err)
+	}
+	entry := compat.ToEntryInContext(stmts[0], found)
+	if errs := entry.GetErrors(); len(errs) != 0 {
+		t.Fatalf("ToEntryInContext errors = %v", errs)
+	}
+	if got, want := entry.Path(), "/compat-entry-context/top/before"; got != want {
+		t.Fatalf("ToEntryInContext Path = %q, want %q", got, want)
+	}
+	if entry.Parent == nil || entry.Parent.Name != "top" {
+		t.Fatalf("ToEntryInContext parent = %#v, want top", entry.Parent)
 	}
 }
 
