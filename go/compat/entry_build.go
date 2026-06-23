@@ -50,6 +50,82 @@ func ToEntry(n Node) *Entry {
 	}
 }
 
+// ToEntryInContext projects found by first projecting root, then returning the
+// matching entry inside that root projection. It is a migration helper for
+// goyang-shaped callers that find a non-root AST node and then need Entry.Path
+// to retain module/root context.
+func ToEntryInContext(root, found Node) *Entry {
+	if found == nil {
+		return ToEntry(nil)
+	}
+	if root == nil {
+		return ToEntry(found)
+	}
+	rootEntry := ToEntry(root)
+	if rootEntry == nil {
+		return errorEntry(fmt.Errorf("ToEntryInContext failed to project root"))
+	}
+	if root == found {
+		return rootEntry
+	}
+	if path, ok := nodePathBetween(root, found); ok {
+		if entry := entryAtLocalPath(rootEntry, path); entry != nil {
+			return entry
+		}
+	}
+	if stmt := found.Statement(); stmt != nil {
+		if entry := findEntryBySourceStatement(rootEntry, stmt, found.NName()); entry != nil {
+			return entry
+		}
+	}
+	return errorEntry(fmt.Errorf("ToEntryInContext could not locate %s %q under root %q", found.Kind(), found.NName(), root.NName()))
+}
+
+func nodePathBetween(root, found Node) ([]string, bool) {
+	var reverse []string
+	for cur := found; cur != nil; cur = cur.ParentNode() {
+		if cur == root {
+			path := make([]string, len(reverse))
+			for i := range reverse {
+				path[len(reverse)-1-i] = reverse[i]
+			}
+			return path, true
+		}
+		name := cur.NName()
+		if name == "" {
+			return nil, false
+		}
+		reverse = append(reverse, name)
+	}
+	return nil, false
+}
+
+func entryAtLocalPath(root *Entry, path []string) *Entry {
+	cur := root
+	for _, name := range path {
+		if cur == nil {
+			return nil
+		}
+		cur = cur.Lookup(name)
+	}
+	return cur
+}
+
+func findEntryBySourceStatement(root *Entry, stmt *Statement, name string) *Entry {
+	if root == nil || stmt == nil {
+		return nil
+	}
+	if root.Node != nil && root.Node.Statement() == stmt && (name == "" || root.Name == name) {
+		return root
+	}
+	for _, child := range root.Children() {
+		if found := findEntryBySourceStatement(child, stmt, name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
 func entryFromCambiumModule(module cambium.Module) *Entry {
 	root := &Entry{
 		Name:       module.Name(),
@@ -465,7 +541,9 @@ func (e *Entry) Augment(addErrors bool) (processed, skipped int) {
 		}
 		processed++
 		target.merge(nil, augment.Namespace(), augment)
-		target.Augmented = append(target.Augmented, augment.shallowDup())
+		applied := augment.shallowDup()
+		target.Augmented = append(target.Augmented, applied)
+		target.AugmentedBy = append(target.AugmentedBy, applied)
 	}
 	e.Augments = unapplied
 	return processed, skipped

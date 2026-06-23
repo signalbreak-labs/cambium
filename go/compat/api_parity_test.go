@@ -42,7 +42,7 @@ func TestCompatStructFieldsTrackGoyang(t *testing.T) {
 		extraField []string
 		checkTags  bool
 	}{
-		{name: "Entry", upstream: reflect.TypeOf(upstream.Entry{}), compat: reflect.TypeOf(compat.Entry{}), checkTags: true},
+		{name: "Entry", upstream: reflect.TypeOf(upstream.Entry{}), compat: reflect.TypeOf(compat.Entry{}), extraField: []string{"AugmentedBy"}, checkTags: true},
 		{name: "Module", upstream: reflect.TypeOf(upstream.Module{}), compat: reflect.TypeOf(compat.Module{}), checkTags: true},
 		{name: "Modules", upstream: reflect.TypeOf(upstream.Modules{}), compat: reflect.TypeOf(compat.Modules{}), checkTags: true},
 		{name: "Value", upstream: reflect.TypeOf(upstream.Value{}), compat: reflect.TypeOf(compat.Value{}), checkTags: true},
@@ -109,6 +109,7 @@ func TestCompatExportedStructDeclarationsTrackGoyang(t *testing.T) {
 	upstreamSurface := exportedSurface(t, filepath.Join(root, "go", "internal", "yangparse", "upstream", "yang"))
 	compatSurface := exportedSurface(t, filepath.Join(root, "go", "compat"))
 	extraFields := map[string]map[string]bool{
+		"Entry":    {"AugmentedBy": true},
 		"YangType": {"IdentityBases": true},
 	}
 

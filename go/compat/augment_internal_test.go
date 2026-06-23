@@ -49,6 +49,12 @@ func TestAugmentMatchesGoyangAndMaintainsOrder(t *testing.T) {
 	if len(compatTop.Augmented) != len(upstreamTop.Augmented) {
 		t.Fatalf("Augmented len = %d, want goyang %d", len(compatTop.Augmented), len(upstreamTop.Augmented))
 	}
+	if len(compatTop.AugmentedBy) != len(compatTop.Augmented) {
+		t.Fatalf("AugmentedBy len = %d, want Augmented len %d", len(compatTop.AugmentedBy), len(compatTop.Augmented))
+	}
+	if len(compatTop.AugmentedBy) > 0 && compatTop.AugmentedBy[0].Name != compatTop.Augmented[0].Name {
+		t.Fatalf("AugmentedBy[0] = %q, want Augmented[0] %q", compatTop.AugmentedBy[0].Name, compatTop.Augmented[0].Name)
+	}
 	var orderedNames []string
 	for _, child := range compatTop.Children() {
 		orderedNames = append(orderedNames, child.Name)
