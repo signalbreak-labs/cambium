@@ -67,7 +67,34 @@ time).
 5. Run `bash scripts/release-flatten.sh`.
 6. Run `bash scripts/check-flattened-build.sh`.
 7. Commit the updated `vendor/` directory.
-8. Tag the Go module (`go/v0.1.0`).
+8. Pre-flight the tag name, then tag the Go module:
+
+   ```bash
+   scripts/check-release-tags.sh go/v0.1.0   # must pass before you tag
+   git tag go/v0.1.0
+   git push origin go/v0.1.0
+   ```
 
 > Do not publish from a tree where `vendor/` is missing or stale. The flattened
 > build is the publish gate.
+
+## Tag hygiene (read before you tag)
+
+The module is rooted at `/go/`, so **every** version tag MUST carry the `go/`
+subdirectory prefix: `go/vX.Y.Z`. The repo root is not a module.
+
+A **bare** `vX.Y.Z` tag is not just ignored — it actively breaks. Go's module
+proxy does not associate it with `github.com/signalbreak-labs/cambium/go`;
+instead it synthesizes a phantom, `go.mod`-less module at the repo-root path
+`github.com/signalbreak-labs/cambium` and caches it on proxy.golang.org. Proxy
+entries are **immutable**, so a mistaken bare tag cannot be recalled even after
+the git tag is deleted. This is precisely what the legacy `v0.1.0` tag did.
+
+`scripts/check-release-tags.sh` enforces this — it runs in CI (the `release-tags`
+job) and in `scripts/green-bar.sh`, and accepts a tag argument so you can
+pre-flight a name before cutting it. Consumers always install the prefixed
+module path:
+
+```bash
+go get github.com/signalbreak-labs/cambium/go@latest   # resolves go/vX.Y.Z
+```

@@ -12,6 +12,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  release-tags:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags: the guard audits every tag
+      - name: Release-tag hygiene
+        run: scripts/check-release-tags.sh
+
   go-macos:
     runs-on: macos-latest
     steps:
