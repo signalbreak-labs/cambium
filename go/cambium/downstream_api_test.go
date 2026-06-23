@@ -134,6 +134,12 @@ func TestSchemaIRV1IncludesOrderedNodesAndProvenance(t *testing.T) {
 	if after.LocalPath != "/top/after" || after.QualifiedPath != "/downstream-ir:top/downstream-ir:after" {
 		t.Fatalf("after paths = local %q qualified %q", after.LocalPath, after.QualifiedPath)
 	}
+	if got, want := after.NamespaceQualifiedPath, "/{urn:downstream-ir}top/{urn:downstream-ir}after"; got != want {
+		t.Fatalf("after namespace path = %q, want %q", got, want)
+	}
+	if got, want := after.Ref.NamespaceQualifiedPath(), "/{urn:downstream-ir}top/{urn:downstream-ir}after"; got != want {
+		t.Fatalf("after ref namespace path = %q, want %q", got, want)
+	}
 	if after.Config != cambium.ConfigRo {
 		t.Fatalf("after Config = %v, want ConfigRo", after.Config)
 	}
@@ -396,6 +402,44 @@ func TestDiagnosticFromErrorIsStructured(t *testing.T) {
 	}
 }
 
+func TestDiagnosticIncludesRelatedSourceLocations(t *testing.T) {
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatalf("NewContextBuilder: %v", err)
+	}
+	err = builder.LoadModuleStr(`module downstream-diag-related {
+    namespace "urn:downstream-diag-related";
+    prefix ddr;
+
+    typedef reused { type string; }
+    typedef reused { type uint16; }
+}`)
+	if err == nil {
+		_, err = builder.Build()
+	}
+	if err == nil {
+		t.Fatal("duplicate typedef was accepted")
+	}
+
+	var diagErr *cambium.DiagnosticError
+	if !errors.As(err, &diagErr) {
+		t.Fatalf("duplicate typedef error = %T, want *DiagnosticError", err)
+	}
+	diag := cambium.DiagnosticFromError(err)
+	if diag.Kind != cambium.DiagnosticSemanticSchemaError {
+		t.Fatalf("diagnostic kind = %s, want %s", diag.Kind, cambium.DiagnosticSemanticSchemaError)
+	}
+	if diag.Source.Line == 0 {
+		t.Fatalf("diagnostic source = %#v, want structured line", diag.Source)
+	}
+	if len(diag.Related) != 1 {
+		t.Fatalf("diagnostic related = %#v, want 1 location", diag.Related)
+	}
+	if diag.Related[0].Line == 0 || diag.Related[0].Line >= diag.Source.Line {
+		t.Fatalf("diagnostic source/related = %#v / %#v, want previous related location", diag.Source, diag.Related[0])
+	}
+}
+
 func TestSchemaDiffReportsGenericSchemaChanges(t *testing.T) {
 	oldSource := `module downstream-diff {
     namespace "urn:downstream-diff";
@@ -478,6 +522,142 @@ func TestSchemaDiffReportsGenericSchemaChanges(t *testing.T) {
 	}
 }
 
+func TestSchemaDiffReportsAugmentProvenanceChanges(t *testing.T) {
+	base := `module downstream-diff-aug-base {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-aug-base";
+    prefix ddab;
+
+    container top;
+}`
+	oldAugment := `module downstream-diff-aug-old {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-aug-old";
+    prefix dda-old;
+
+    import downstream-diff-aug-base { prefix ddab; }
+
+    augment "/ddab:top" {
+        leaf vendor-state { type string; }
+    }
+}`
+	newAugment := `module downstream-diff-aug-new {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-aug-new";
+    prefix dda-new;
+
+    import downstream-diff-aug-base { prefix ddab; }
+
+    augment "/ddab:top" {
+        leaf vendor-state { type string; }
+    }
+}`
+	oldCtx := loadDownstreamContext(t, base, oldAugment)
+	newCtx := loadDownstreamContext(t, base, newAugment)
+	oldMod, err := oldCtx.Schema("downstream-diff-aug-base")
+	if err != nil {
+		t.Fatalf("old Schema: %v", err)
+	}
+	newMod, err := newCtx.Schema("downstream-diff-aug-base")
+	if err != nil {
+		t.Fatalf("new Schema: %v", err)
+	}
+
+	diff, err := cambium.DiffModules(oldMod, newMod)
+	if err != nil {
+		t.Fatalf("DiffModules: %v", err)
+	}
+	changes := diff.ByKind(cambium.SchemaDiffAugmentChanged)
+	if len(changes) != 1 {
+		t.Fatalf("augment changes = %#v, want 1", changes)
+	}
+	change := changes[0]
+	if change.Path != "/top/vendor-state" {
+		t.Fatalf("augment change path = %q, want /top/vendor-state", change.Path)
+	}
+	if change.OldValue != "downstream-diff-aug-old" || change.NewValue != "downstream-diff-aug-new" {
+		t.Fatalf("augment change values = %q -> %q", change.OldValue, change.NewValue)
+	}
+	if got, want := change.NamespaceQualifiedPath, "/{urn:downstream-diff-aug-base}top/{urn:downstream-diff-aug-new}vendor-state"; got != want {
+		t.Fatalf("augment namespace path = %q, want %q", got, want)
+	}
+}
+
+func TestSchemaDiffDisambiguatesSameLocalAugmentSiblings(t *testing.T) {
+	base := `module downstream-diff-dup-base {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-dup-base";
+    prefix dddb;
+
+    container top;
+}`
+	left := `module downstream-diff-dup-left {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-dup-left";
+    prefix dddl;
+
+    import downstream-diff-dup-base { prefix dddb; }
+
+    augment "/dddb:top" {
+        leaf state { type string; }
+    }
+}`
+	oldRight := `module downstream-diff-dup-right {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-dup-right";
+    prefix dddr;
+
+    import downstream-diff-dup-base { prefix dddb; }
+
+    augment "/dddb:top" {
+        leaf state { type string; }
+    }
+}`
+	newRight := `module downstream-diff-dup-right {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-dup-right";
+    prefix dddr;
+
+    import downstream-diff-dup-base { prefix dddb; }
+
+    augment "/dddb:top" {
+        leaf state { type uint16; }
+    }
+}`
+	oldCtx := loadDownstreamContext(t, base, left, oldRight)
+	newCtx := loadDownstreamContext(t, base, left, newRight)
+	oldMod, err := oldCtx.Schema("downstream-diff-dup-base")
+	if err != nil {
+		t.Fatalf("old Schema: %v", err)
+	}
+	newMod, err := newCtx.Schema("downstream-diff-dup-base")
+	if err != nil {
+		t.Fatalf("new Schema: %v", err)
+	}
+
+	diff, err := cambium.DiffModules(oldMod, newMod)
+	if err != nil {
+		t.Fatalf("DiffModules: %v", err)
+	}
+	changes := diff.ByKind(cambium.SchemaDiffTypeChanged)
+	if len(changes) != 1 {
+		t.Fatalf("type changes = %#v, want 1", changes)
+	}
+	change := changes[0]
+	if change.OldNode.Module().Name() != "downstream-diff-dup-right" || change.NewNode.Module().Name() != "downstream-diff-dup-right" {
+		t.Fatalf("type change modules = %q -> %q, want downstream-diff-dup-right", change.OldNode.Module().Name(), change.NewNode.Module().Name())
+	}
+	if got, want := change.QualifiedPath, "/downstream-diff-dup-base:top/downstream-diff-dup-right:state"; got != want {
+		t.Fatalf("type change qualified path = %q, want %q", got, want)
+	}
+	if got, want := change.NamespaceQualifiedPath, "/{urn:downstream-diff-dup-base}top/{urn:downstream-diff-dup-right}state"; got != want {
+		t.Fatalf("type change namespace path = %q, want %q", got, want)
+	}
+	if got := schemaDiffChangeKeys(diff.Changes); !reflect.DeepEqual(got, []string{"type_changed /top/state"}) {
+		t.Fatalf("schema diff changes = %v, want only right state type change", got)
+	}
+}
+
 func TestSchemaDiffReportsDeviationEffects(t *testing.T) {
 	base := `module downstream-diff-dev-base {
     yang-version 1.1;
@@ -521,6 +701,54 @@ func TestSchemaDiffReportsDeviationEffects(t *testing.T) {
 	want := []string{
 		"default_changed /value",
 		"deviation_changed /value",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("schema diff changes = %v, want %v", got, want)
+	}
+}
+
+func TestSchemaDiffReportsDeviationTypeEffects(t *testing.T) {
+	base := `module downstream-diff-dev-type-base {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-dev-type-base";
+    prefix ddtb;
+
+    leaf value {
+        type string;
+    }
+}`
+	deviator := `module downstream-diff-dev-type-source {
+    yang-version 1.1;
+    namespace "urn:downstream-diff-dev-type-source";
+    prefix ddts;
+
+    import downstream-diff-dev-type-base { prefix ddtb; }
+
+    deviation "/ddtb:value" {
+        deviate replace {
+            type uint16;
+        }
+    }
+}`
+	oldCtx := loadDownstreamContext(t, base)
+	newCtx := loadDownstreamContext(t, base, deviator)
+	oldMod, err := oldCtx.Schema("downstream-diff-dev-type-base")
+	if err != nil {
+		t.Fatalf("old Schema: %v", err)
+	}
+	newMod, err := newCtx.Schema("downstream-diff-dev-type-base")
+	if err != nil {
+		t.Fatalf("new Schema: %v", err)
+	}
+
+	diff, err := cambium.DiffModules(oldMod, newMod)
+	if err != nil {
+		t.Fatalf("DiffModules: %v", err)
+	}
+	got := schemaDiffChangeKeys(diff.Changes)
+	want := []string{
+		"deviation_changed /value",
+		"type_changed /value",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("schema diff changes = %v, want %v", got, want)

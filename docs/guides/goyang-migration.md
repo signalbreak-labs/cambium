@@ -45,6 +45,8 @@ The native replacement for common goyang read use cases is:
   qualification.
 - `SchemaNodeRef.QualifiedName()` and `QualifiedPath()` for module-qualified
   identity and unambiguous paths across augments.
+- `SchemaNodeRef.NamespaceQualifiedPath()` for expanded-name paths such as
+  `/{urn:example}top/{urn:vendor}state`.
 - `SchemaNodeRef.Traverse(profile)` and `Module.Traverse(profile)` for named
   traversal profiles such as structural children, flattened data children,
   serialization order, schema declaration order, and list-entry keys-first order.
@@ -101,6 +103,7 @@ native `cambium` handles directly:
 | Resolve an augmented child exactly | `LookupQualified` or `LookupQualifiedName` |
 | Get a stable node identity | `node.QualifiedName()` |
 | Get an unambiguous path | `node.QualifiedPath()` |
+| Get a namespace-expanded path | `node.NamespaceQualifiedPath()` |
 | Relative path traversal | `node.FindPath("../sibling")` |
 | Absolute path traversal | `mod.FindPath("/module:top/module:leaf")` |
 | Handle lookup failure detail | `errors.As(err, &pathErr)` with `*cambium.SchemaPathError` |

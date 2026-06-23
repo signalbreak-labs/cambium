@@ -34,26 +34,27 @@ type SchemaIRModule struct {
 // SchemaIRNode is one schema node in effective schema declaration order.
 // Children preserves structural nodes; DataChildren flattens choice/case nodes.
 type SchemaIRNode struct {
-	Ref           SchemaNodeRef
-	Name          string
-	Kind          SchemaNodeKind
-	LocalPath     string
-	QualifiedPath string
-	QualifiedName QualifiedName
-	Children      []SchemaIRNode
-	DataChildren  []SchemaIRNode
-	ListKeys      []SchemaIRNode
-	KeyNames      []string
-	Type          *TypeInfo
-	Defaults      []DefaultValue
-	Config        Config
-	Mandatory     bool
-	ReadOnly      bool
-	Musts         []MustConstraint
-	Whens         []WhenConstraint
-	Uniques       []UniqueConstraint
-	Source        SourceLocation
-	Provenance    SchemaProvenance
+	Ref                    SchemaNodeRef
+	Name                   string
+	Kind                   SchemaNodeKind
+	LocalPath              string
+	QualifiedPath          string
+	NamespaceQualifiedPath string
+	QualifiedName          QualifiedName
+	Children               []SchemaIRNode
+	DataChildren           []SchemaIRNode
+	ListKeys               []SchemaIRNode
+	KeyNames               []string
+	Type                   *TypeInfo
+	Defaults               []DefaultValue
+	Config                 Config
+	Mandatory              bool
+	ReadOnly               bool
+	Musts                  []MustConstraint
+	Whens                  []WhenConstraint
+	Uniques                []UniqueConstraint
+	Source                 SourceLocation
+	Provenance             SchemaProvenance
 }
 
 // SchemaProvenance explains why a materialized schema node exists.
@@ -94,6 +95,13 @@ func (n SchemaNodeRef) LocalPath() string {
 	return localPathForNode(n)
 }
 
+// NamespaceQualifiedPath returns an absolute schema path whose segments are
+// qualified with the defining module namespace in expanded-name form:
+// /{namespace}local/{namespace}local.
+func (n SchemaNodeRef) NamespaceQualifiedPath() string {
+	return namespaceQualifiedPathForNode(n)
+}
+
 func schemaIRModule(mod Module) SchemaIRModule {
 	revision, _ := mod.Revision()
 	out := SchemaIRModule{
@@ -115,22 +123,23 @@ func schemaIRModule(mod Module) SchemaIRModule {
 
 func schemaIRNode(ref SchemaNodeRef) SchemaIRNode {
 	out := SchemaIRNode{
-		Ref:           ref,
-		Name:          ref.Name(),
-		Kind:          ref.Kind(),
-		LocalPath:     localPathForNode(ref),
-		QualifiedPath: ref.QualifiedPath(),
-		QualifiedName: ref.QualifiedName(),
-		KeyNames:      ref.KeyNames(),
-		Defaults:      ref.DefaultEntries(),
-		Config:        ref.Config(),
-		Mandatory:     ref.IsMandatory(),
-		ReadOnly:      ref.ReadOnly(),
-		Musts:         ref.Musts(),
-		Whens:         ref.Whens(),
-		Uniques:       ref.UniqueConstraints(),
-		Source:        ref.SourceLocation(),
-		Provenance:    schemaProvenance(ref),
+		Ref:                    ref,
+		Name:                   ref.Name(),
+		Kind:                   ref.Kind(),
+		LocalPath:              localPathForNode(ref),
+		QualifiedPath:          ref.QualifiedPath(),
+		NamespaceQualifiedPath: namespaceQualifiedPathForNode(ref),
+		QualifiedName:          ref.QualifiedName(),
+		KeyNames:               ref.KeyNames(),
+		Defaults:               ref.DefaultEntries(),
+		Config:                 ref.Config(),
+		Mandatory:              ref.IsMandatory(),
+		ReadOnly:               ref.ReadOnly(),
+		Musts:                  ref.Musts(),
+		Whens:                  ref.Whens(),
+		Uniques:                ref.UniqueConstraints(),
+		Source:                 ref.SourceLocation(),
+		Provenance:             schemaProvenance(ref),
 	}
 	if typ, ok := ref.LeafType(); ok {
 		info := typ
@@ -176,8 +185,32 @@ func localPathForNode(ref SchemaNodeRef) string {
 		}
 		parts[i] = localName(part)
 	}
-	if len(parts) > 1 && parts[1] == ref.Module().Name() {
+	if len(parts) > 1 {
 		parts = append(parts[:1], parts[2:]...)
 	}
 	return strings.Join(parts, "/")
+}
+
+func namespaceQualifiedPathForNode(ref SchemaNodeRef) string {
+	if ref.node == nil {
+		return ""
+	}
+	var parts []string
+	for cur := ref.node; cur != nil && cur.kind != SchemaNodeKindModule; cur = cur.parent {
+		if cur.name == "" {
+			continue
+		}
+		namespace := ""
+		if cur.module != nil {
+			namespace = cur.module.namespace
+		}
+		parts = append(parts, "{"+namespace+"}"+cur.name)
+	}
+	for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
+		parts[i], parts[j] = parts[j], parts[i]
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "/" + strings.Join(parts, "/")
 }

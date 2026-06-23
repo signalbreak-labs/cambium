@@ -16,7 +16,8 @@ Nested `SchemaIRNode` values are in effective schema declaration order.
 
 Each node carries:
 
-- local and module-qualified paths (`LocalPath`, `QualifiedPath`);
+- local, module-qualified, and namespace-expanded paths (`LocalPath`,
+  `QualifiedPath`, `NamespaceQualifiedPath`);
 - structural children (`Children`) preserving `choice`/`case`;
 - flattened data children (`DataChildren`);
 - list keys in key-statement order (`ListKeys`, `KeyNames`);
@@ -30,7 +31,9 @@ comes from Cambium's ordered IR slices, never from map iteration.
 For handle-oriented code, use `Context.Schema`, `Module`, `SchemaNodeRef`, and
 `SchemaChildren` directly. `SchemaNodeRef.LocalPath()` returns a local module-root
 path, while `Path()` preserves the existing goyang-shaped path that begins with
-the module name.
+the module name. `SchemaNodeRef.NamespaceQualifiedPath()` returns expanded-name
+path segments such as `/{urn:example}top/{urn:vendor}state`, which stays
+unambiguous even when namespaces contain colons.
 
 ## Traversal profiles
 
@@ -60,11 +63,13 @@ applied to the node. Cambium does not invent provenance it has not tracked; abse
 fields mean the detail is not known for that node.
 
 Errors remain inspectable with `errors.As` against `*cambium.Error` and more
-specific causes such as `*cambium.SchemaPathError` or
-`*cambium.LeafrefResolutionError`. `cambium.DiagnosticFromError(err)` converts an
-error into a structured diagnostic with a stable rule code and category such as
-invalid identifier, missing module, unresolved path, invalid deviation, semantic
-schema error, unsupported construct, or syntax error.
+specific causes such as `*cambium.SchemaPathError`,
+`*cambium.LeafrefResolutionError`, or `*cambium.DiagnosticError`.
+`cambium.DiagnosticFromError(err)` converts an error into a structured diagnostic
+with a stable rule code and category such as invalid identifier, missing module,
+unresolved path, invalid deviation, semantic schema error, unsupported construct,
+or syntax error. When Cambium has structured secondary source statements, such as
+a previous duplicate definition, `Diagnostic.Related` carries those locations.
 
 ## Load reports
 
@@ -94,10 +99,13 @@ Diff changes are generic schema facts:
 - augment provenance changes;
 - deviation provenance/effect changes.
 
-Each `SchemaDiffChange` includes a local path, a qualified path where one is
-available, old/new `SchemaNodeRef` handles when present, and old/new value
-summaries. Ordering is deterministic and produced by walking Cambium's ordered
-schema IR; maps are used only as lookup indexes.
+Each `SchemaDiffChange` includes a local path, module-qualified path,
+namespace-expanded path where a node reference is available, old/new
+`SchemaNodeRef` handles when present, and old/new value summaries. Ordering is
+deterministic and produced by walking Cambium's ordered schema IR; maps are used
+only as lookup indexes. Same-local augmented siblings are matched using qualified
+identity so a change to one augmenting module's `state` leaf is not confused with
+another module's same-local-name sibling.
 
 ## Leafref and identity helpers
 

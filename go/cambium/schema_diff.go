@@ -60,17 +60,19 @@ func (d SchemaDiff) ByKind(kind SchemaDiffKind) []SchemaDiffChange {
 }
 
 // SchemaDiffChange is one changed schema fact. Path is the local module-relative
-// schema path; QualifiedPath is the defining-module-qualified path where a node
-// reference is available. OldNode/NewNode are set for changed and surviving
-// nodes and left zero for the missing side of additions/removals.
+// schema path; QualifiedPath is the defining-module-qualified path; and
+// NamespaceQualifiedPath is the namespace-expanded path where a node reference
+// is available. OldNode/NewNode are set for changed and surviving nodes and left
+// zero for the missing side of additions/removals.
 type SchemaDiffChange struct {
-	Kind          SchemaDiffKind
-	Path          string
-	QualifiedPath string
-	OldNode       SchemaNodeRef
-	NewNode       SchemaNodeRef
-	OldValue      string
-	NewValue      string
+	Kind                   SchemaDiffKind
+	Path                   string
+	QualifiedPath          string
+	NamespaceQualifiedPath string
+	OldNode                SchemaNodeRef
+	NewNode                SchemaNodeRef
+	OldValue               string
+	NewValue               string
 }
 
 type schemaDiffEntry struct {
@@ -100,8 +102,11 @@ func DiffModules(oldModule, newModule Module) (SchemaDiff, error) {
 	}
 
 	diff := SchemaDiff{Version: SchemaDiffVersion}
-	oldEntries := collectSchemaDiffEntries(oldModule)
-	newEntries := collectSchemaDiffEntries(newModule)
+	oldRefs := collectSchemaDiffRefs(oldModule)
+	newRefs := collectSchemaDiffRefs(newModule)
+	duplicateLocals := duplicateSchemaDiffLocalPaths(oldRefs, newRefs)
+	oldEntries := schemaDiffEntries(oldRefs, duplicateLocals)
+	newEntries := schemaDiffEntries(newRefs, duplicateLocals)
 	oldByPath := schemaDiffEntryMap(oldEntries)
 	newByPath := schemaDiffEntryMap(newEntries)
 
@@ -168,13 +173,12 @@ func DiffContexts(oldCtx, newCtx *Context) (SchemaDiff, error) {
 	return diff, nil
 }
 
-func collectSchemaDiffEntries(mod Module) []schemaDiffEntry {
-	var out []schemaDiffEntry
+func collectSchemaDiffRefs(mod Module) []SchemaNodeRef {
+	var out []SchemaNodeRef
 	var walk func(SchemaNodeRef)
 	walk = func(ref SchemaNodeRef) {
-		key := schemaDiffPath(ref)
-		if key != "" {
-			out = append(out, schemaDiffEntry{key: key, ref: ref})
+		if schemaDiffPath(ref) != "" {
+			out = append(out, ref)
 		}
 		for child := range ref.Children().Iter() {
 			walk(child)
@@ -184,6 +188,43 @@ func collectSchemaDiffEntries(mod Module) []schemaDiffEntry {
 		walk(child)
 	}
 	return out
+}
+
+func duplicateSchemaDiffLocalPaths(oldRefs, newRefs []SchemaNodeRef) map[string]bool {
+	out := make(map[string]bool)
+	for _, refs := range [][]SchemaNodeRef{oldRefs, newRefs} {
+		counts := make(map[string]int)
+		for _, ref := range refs {
+			local := schemaDiffPath(ref)
+			if local == "" {
+				continue
+			}
+			counts[local]++
+		}
+		for local, count := range counts {
+			if count > 1 {
+				out[local] = true
+			}
+		}
+	}
+	return out
+}
+
+func schemaDiffEntries(refs []SchemaNodeRef, duplicateLocals map[string]bool) []schemaDiffEntry {
+	entries := make([]schemaDiffEntry, 0, len(refs))
+	for _, ref := range refs {
+		key := schemaDiffPath(ref)
+		if duplicateLocals[key] {
+			key = ref.NamespaceQualifiedPath()
+			if key == "" {
+				key = ref.QualifiedPath()
+			}
+		}
+		if key != "" {
+			entries = append(entries, schemaDiffEntry{key: key, ref: ref})
+		}
+	}
+	return entries
 }
 
 func schemaDiffEntryMap(entries []schemaDiffEntry) map[string]schemaDiffEntry {
@@ -232,14 +273,19 @@ func newSchemaDiffChange(kind SchemaDiffKind, oldNode, newNode SchemaNodeRef, ol
 	if qualifiedPath == "" {
 		qualifiedPath = oldNode.QualifiedPath()
 	}
+	namespaceQualifiedPath := newNode.NamespaceQualifiedPath()
+	if namespaceQualifiedPath == "" {
+		namespaceQualifiedPath = oldNode.NamespaceQualifiedPath()
+	}
 	return SchemaDiffChange{
-		Kind:          kind,
-		Path:          path,
-		QualifiedPath: qualifiedPath,
-		OldNode:       oldNode,
-		NewNode:       newNode,
-		OldValue:      oldValue,
-		NewValue:      newValue,
+		Kind:                   kind,
+		Path:                   path,
+		QualifiedPath:          qualifiedPath,
+		NamespaceQualifiedPath: namespaceQualifiedPath,
+		OldNode:                oldNode,
+		NewNode:                newNode,
+		OldValue:               oldValue,
+		NewValue:               newValue,
 	}
 }
 
@@ -449,11 +495,12 @@ func schemaDiffModuleKey(module SchemaIRModule) string {
 func schemaDiffModuleChange(kind SchemaDiffKind, module SchemaIRModule, oldValue, newValue string) SchemaDiffChange {
 	path := "/" + schemaDiffModuleKey(module)
 	return SchemaDiffChange{
-		Kind:          kind,
-		Path:          path,
-		QualifiedPath: path,
-		OldValue:      oldValue,
-		NewValue:      newValue,
+		Kind:                   kind,
+		Path:                   path,
+		QualifiedPath:          path,
+		NamespaceQualifiedPath: path,
+		OldValue:               oldValue,
+		NewValue:               newValue,
 	}
 }
 

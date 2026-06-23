@@ -1878,7 +1878,16 @@ func (m *moduleData) addIdentityDefinition(st *yangparse.Statement) error {
 	seenBases := make(map[string]*yangparse.Statement)
 	for _, b := range direct(st, "base") {
 		if prev := seenBases[b.Argument]; prev != nil {
-			return fmt.Errorf("identity %q has duplicate base %q at %s; previous base at %s", name, b.Argument, b.Location(), prev.Location())
+			return diagnosticErrorf(
+				DiagnosticSemanticSchemaError,
+				b,
+				[]*yangparse.Statement{prev},
+				"identity %q has duplicate base %q at %s; previous base at %s",
+				name,
+				b.Argument,
+				b.Location(),
+				prev.Location(),
+			)
 		}
 		seenBases[b.Argument] = b
 		id.baseNames = append(id.baseNames, b.Argument)
@@ -1889,11 +1898,30 @@ func (m *moduleData) addIdentityDefinition(st *yangparse.Statement) error {
 }
 
 func duplicateDefinitionError(kind, name string, prev, current *yangparse.Statement) error {
-	return fmt.Errorf("duplicate %s %q at %s; previous definition at %s", kind, name, current.Location(), prev.Location())
+	return diagnosticErrorf(
+		DiagnosticSemanticSchemaError,
+		current,
+		[]*yangparse.Statement{prev},
+		"duplicate %s %q at %s; previous definition at %s",
+		kind,
+		name,
+		current.Location(),
+		prev.Location(),
+	)
 }
 
 func definitionCollisionError(kind, name, reason string, prev, current *yangparse.Statement) error {
-	return fmt.Errorf("duplicate %s %q at %s: %s at %s", kind, name, current.Location(), reason, prev.Location())
+	return diagnosticErrorf(
+		DiagnosticSemanticSchemaError,
+		current,
+		[]*yangparse.Statement{prev},
+		"duplicate %s %q at %s: %s at %s",
+		kind,
+		name,
+		current.Location(),
+		reason,
+		prev.Location(),
+	)
 }
 
 func singletonDefinitionArg(kind, name string, st *yangparse.Statement, keyword string) (string, error) {

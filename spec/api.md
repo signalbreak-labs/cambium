@@ -296,13 +296,14 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     schema/YANG concepts, not target-generator concepts, and each materializes an
     ordered list from Cambium's IR.
   - Bindings expose a versioned ordered schema projection for downstream schema
-    consumers. The projection includes modules, schema nodes, local and
-    module/namespace-qualified paths, ordered structural children, flattened data
-    children, list keys in key-statement order, node kind, type metadata,
-    defaults, config/read-only state, constraints, source location, defining and
-    instantiating module, augmenting module when known, grouping/uses origin when
-    known, and deviation provenance/effects. Unknown provenance is left absent
-    rather than inferred from strings or map iteration.
+    consumers. The projection includes modules, schema nodes, local paths,
+    module-qualified paths, namespace-expanded paths, ordered structural
+    children, flattened data children, list keys in key-statement order, node
+    kind, type metadata, defaults, config/read-only state, constraints, source
+    location, defining and instantiating module, augmenting module when known,
+    grouping/uses origin when known, and deviation provenance/effects. Unknown
+    provenance is left absent rather than inferred from strings or map
+    iteration.
   - Bindings expose a context load report for observability: explicitly
     requested modules, loaded transitive imports, included submodules, deviation
     modules, enabled/disabled features, skipped/excluded modules where the
@@ -313,13 +314,18 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     identities, and transitive derived identity closure.
   - Errors and warnings are inspectable as structured diagnostics carrying a
     stable rule code where available, diagnostic category, module/path when
-    known, source location, and related locations when available.
+    known, source location, and related locations when available. Structured
+    diagnostic causes remain recoverable through the host language's equivalent
+    of `errors.As`; message parsing is only a fallback classifier.
   - Bindings expose a generic schema diff API for comparing loaded contexts or
     modules. It reports added/removed nodes, node-kind changes, type changes,
     list-key changes, default changes, config/read-only changes, constraint
     changes, augment provenance changes, and deviation provenance/effect
-    changes. The diff walks Cambium's ordered schema IR and may use maps only as
-    lookup indexes, never as an ordering source.
+    changes. Diff change records carry local, module-qualified, and
+    namespace-expanded paths where applicable. Same-local augmented siblings are
+    matched by qualified identity when local paths collide. The diff walks
+    Cambium's ordered schema IR and may use maps only as lookup indexes, never
+    as an ordering source.
   - Operation nodes are also available through `Children()` for navigation and
     through `Module.RPCs()`, `Module.Actions()`, and `Module.Notifications()`.
     `DataChildren` is the order-sensitive data-child view. If a backend exposes

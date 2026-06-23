@@ -175,7 +175,8 @@ profiles are structural children, data children with choice/case flattening,
 serialization order, schema declaration order, and list-entry order with keys
 first. See [Downstream schema consumers](./downstream-schema-consumers.md) for
 the versioned IR snapshot, traversal profiles, provenance, load reports,
-diagnostics, schema diffs, leafref/identity helpers, and codegen planning API.
+diagnostics, namespace-expanded paths, schema diffs, leafref/identity helpers,
+and codegen planning API.
 
 ## Disambiguating augmented siblings
 
