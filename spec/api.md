@@ -80,14 +80,16 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 - **A · Context / loading.** `ContextBuilder` (mutable: search paths, `load_module(name, revision?,
   features)`, `load_module_str`, `load_module_path(path)`, flags) → `build()` → frozen `Context`
   (safe to share for reads). The frozen context enumerates modules (`modules()`), returns `Module` handles,
-  parses data/op documents, and creates empty in-memory trees (`new_data`). `ParseMode`/
-  `ValidateMode`/`ContextFlags` are **composable flag structs**, not mutually-exclusive enums.
+  parses data/op documents, and creates empty in-memory trees (`new_data`). `ParseMode`,
+  data `ValidateMode`, and `ContextFlags` are **composable flag structs**. Schema-source
+  validation strictness is a separate builder-level `ValidationMode` enum.
 
   Module loading and enumeration:
   - Go exposes `NewContextBuilder(ContextFlags)` with `SearchPath`,
-    `UnsetSearchPath`, `SearchPaths`, `SetFeatures`, `LoadModule(name, revision, features)`,
-    `LoadModuleFromPath`, `LoadModuleStr`, and `Build`. `Build` returns a
-    frozen `Context`; post-build search-path, feature, or module-loading
+    `UnsetSearchPath`, `SearchPaths`, `SetFeatures`, `SetValidationMode`,
+    `LoadModule(name, revision, features)`, `LoadModuleFromPath`,
+    `LoadModuleStr`, and `Build`. `Build` returns a frozen `Context`;
+    post-build search-path, feature, validation-mode, or module-loading
     mutation returns `CAMBIUM_E0001`. The legacy mutable `NewContext` path
     remains for the migration ramp. Public methods on a nil Go `*Context` do
     not panic; mutating methods and schema lookups return `CAMBIUM_E0001`, and
@@ -147,6 +149,14 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     non-extension children of `revision` are limited to those statements. The
     same singleton metadata rule applies to import/include `description` and
     `reference` metadata.
+  - `ValidationStrict` is the default schema-source validation mode. An explicit
+    `ValidationVendorCompatible` mode may downgrade duplicate direct
+    module/submodule `revision` dates to `LoadReport.Warnings` diagnostics for
+    real-world vendor YANG compatibility. The warning includes the
+    module/submodule name, duplicate revision date, the duplicate statement
+    source location, and the previous declaration as a related location when
+    available. Other revision defects, including malformed dates and duplicate
+    dependency `revision-date` statements, remain errors.
   - A namespace cannot be reused by different module names in one context;
     namespace collisions fail loading with `CAMBIUM_E0001`.
   - Conflicting duplicate loads of the same module name plus revision fail with
@@ -171,6 +181,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     unpinned lookup may select it; an explicit revision pin also fails closed if
     the matching revision-suffixed candidate exists but its effective revision
     differs, rather than falling back to `name.yang`.
+    In `ValidationVendorCompatible`, a revision-suffixed filename may match any
+    direct `revision` statement with that date after duplicate-revision warnings
+    are collected; the loaded module identity and cache key still use the
+    effective/latest declared revision.
     Explicit revision strings passed to `LoadModule` must be valid
     `YYYY-MM-DD` calendar dates; malformed pins fail with `CAMBIUM_E0001`
     before search-path lookup. Failed module loads are transactional at the
@@ -248,8 +262,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     Absent values return `false`.
   - `Module.Revision() (string, bool)` returns the latest declared revision
     date when present. `Module.Revisions() []Revision` returns module revision
-    statements in declaration order. `Revision` exposes `Date()`, optional
-    `Description()`, and optional `Reference()`.
+    statements in declaration order, preserving duplicate dates accepted by
+    `ValidationVendorCompatible`. `Revision` exposes `Date()`, optional
+    `Description()`, optional `Reference()`, and extension instances attached to
+    that revision statement.
 
   Navigation and provenance:
   - `SchemaNodeRef.Path()` returns the slash-separated schema path beginning with

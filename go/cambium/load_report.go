@@ -54,6 +54,7 @@ func (c *Context) LoadReport() LoadReport {
 	_ = c.rebuildIfDirty()
 
 	var report LoadReport
+	report.Warnings = append(report.Warnings, c.loadWarnings...)
 	seenSource := make(map[string]bool)
 	addSource := func(path string) {
 		if path == "" || seenSource[path] {

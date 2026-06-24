@@ -84,7 +84,10 @@ a previous duplicate definition, `Diagnostic.Related` carries those locations.
 - diagnostics/warnings when available.
 
 This is a reporting API only; it does not change module loading, validation, or
-feature semantics.
+feature semantics. The default schema loader is strict. If a builder opts into
+`cambium.ValidationVendorCompatible`, duplicate direct `revision` dates are
+reported here as warnings while the module still loads and preserves the
+duplicate `Module.Revisions()` entries in declaration order.
 
 ## Schema diffs
 

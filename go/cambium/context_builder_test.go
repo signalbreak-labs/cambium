@@ -153,6 +153,158 @@ func TestContextBuilderInvalidRevisionPinReturnsContextRuleCode(t *testing.T) {
 	}
 }
 
+func TestValidationStrictRejectsDuplicateRevisionDates(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "cisco-semver.yang"), []byte(ciscoSemverModuleForRevisionTests()))
+	writeModuleFile(t, filepath.Join(dir, "cambium-duplicate-revision.yang"), []byte(ciscoStyleDuplicateRevisionModule("cambium-duplicate-revision")))
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatalf("NewContextBuilder: %v", err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatalf("SearchPath: %v", err)
+	}
+	err = builder.LoadModule("cambium-duplicate-revision", nil, nil)
+	if err == nil {
+		t.Fatal("strict validation accepted duplicate revision dates")
+	}
+	var ce *cambium.Error
+	if !errors.As(err, &ce) || ce.RuleCode() != cambium.RuleCodeContext {
+		t.Fatalf("LoadModule error = %v, want RuleCodeContext", err)
+	}
+	if !strings.Contains(err.Error(), `duplicate revision "2019-04-05"`) {
+		t.Fatalf("LoadModule error = %q, want duplicate revision", err.Error())
+	}
+}
+
+func TestValidationVendorCompatibleAllowsDuplicateRevisionDates(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "cisco-semver.yang"), []byte(ciscoSemverModuleForRevisionTests()))
+	writeModuleFile(t, filepath.Join(dir, "cambium-duplicate-revision.yang"), []byte(ciscoStyleDuplicateRevisionModule("cambium-duplicate-revision")))
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatalf("NewContextBuilder: %v", err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatalf("SetValidationMode: %v", err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatalf("SearchPath: %v", err)
+	}
+	if err := builder.LoadModule("cambium-duplicate-revision", nil, nil); err != nil {
+		t.Fatalf("LoadModule: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+
+	mod, err := ctx.Schema("cambium-duplicate-revision")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	if got, ok := mod.Revision(); !ok || got != "2020-01-01" {
+		t.Fatalf("Revision = (%q,%v), want 2020-01-01,true", got, ok)
+	}
+	revisions := mod.Revisions()
+	if got, want := len(revisions), 3; got != want {
+		t.Fatalf("Revisions len = %d, want %d", got, want)
+	}
+	if got := revisions[1].Date(); got != "2019-04-05" {
+		t.Fatalf("revisions[1].Date = %q, want duplicate date", got)
+	}
+	if got := revisions[2].Date(); got != "2019-04-05" {
+		t.Fatalf("revisions[2].Date = %q, want duplicate date", got)
+	}
+	if got, ok := revisions[1].Description(); !ok || got != "Fixing backward compatibility error in module" {
+		t.Fatalf("revisions[1].Description = (%q,%v), want Cisco-style metadata", got, ok)
+	}
+	semver := revisions[1].MatchingExtensions("cisco-semver", "module-version")
+	if len(semver) != 1 {
+		t.Fatalf("revisions[1] semver extensions = %#v, want one module-version", semver)
+	}
+	if got, ok := semver[0].Argument(); !ok || got != "1.0.0" {
+		t.Fatalf("semver module-version argument = (%q,%v), want 1.0.0,true", got, ok)
+	}
+	if got, ok := revisions[2].Description(); !ok || got != "Establish semantic version baseline." {
+		t.Fatalf("revisions[2].Description = (%q,%v), want baseline metadata", got, ok)
+	}
+
+	warning, ok := findDuplicateRevisionWarning(ctx.LoadReport().Warnings, "cambium-duplicate-revision", "2019-04-05")
+	if !ok {
+		t.Fatalf("LoadReport warnings = %#v, want duplicate revision warning", ctx.LoadReport().Warnings)
+	}
+	if warning.Source.Line == 0 {
+		t.Fatalf("warning source = %#v, want duplicate statement location", warning.Source)
+	}
+	if len(warning.Related) != 1 || warning.Related[0].Line == 0 {
+		t.Fatalf("warning related = %#v, want original revision location", warning.Related)
+	}
+	if warning.Related[0].Line >= warning.Source.Line {
+		t.Fatalf("warning locations = related %#v source %#v, want original before duplicate", warning.Related[0], warning.Source)
+	}
+}
+
+func TestValidationVendorCompatibleRevisionedFilenameMatchesDuplicateLatest(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "cisco-semver.yang"), []byte(ciscoSemverModuleForRevisionTests()))
+	source := `module cambium-duplicate-latest-revision {
+    namespace "urn:cambium:duplicate-latest-revision";
+    prefix cdlr;
+    import cisco-semver { prefix semver; }
+
+    revision 2019-04-05 {
+        description "Fixing backward compatibility error in module";
+        semver:module-version "1.0.0";
+    }
+    revision 2019-04-05 {
+        description "Establish semantic version baseline.";
+    }
+    revision 2018-01-01 {
+        description "Previous revision.";
+    }
+
+    leaf value { type string; }
+}`
+	writeModuleFile(t, filepath.Join(dir, "cambium-duplicate-latest-revision@2019-04-05.yang"), []byte(source))
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatalf("NewContextBuilder: %v", err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatalf("SetValidationMode: %v", err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatalf("SearchPath: %v", err)
+	}
+	if err := builder.LoadModule("cambium-duplicate-latest-revision", nil, nil); err != nil {
+		t.Fatalf("LoadModule revisioned filename: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+
+	mod, err := ctx.Schema("cambium-duplicate-latest-revision")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	if got, ok := mod.Revision(); !ok || got != "2019-04-05" {
+		t.Fatalf("Revision = (%q,%v), want 2019-04-05,true", got, ok)
+	}
+	if _, err := ctx.SchemaRevision("cambium-duplicate-latest-revision", "2019-04-05"); err != nil {
+		t.Fatalf("SchemaRevision for duplicate latest: %v", err)
+	}
+	if _, ok := findDuplicateRevisionWarning(ctx.LoadReport().Warnings, "cambium-duplicate-latest-revision", "2019-04-05"); !ok {
+		t.Fatalf("LoadReport warnings = %#v, want duplicate revision warning", ctx.LoadReport().Warnings)
+	}
+}
+
 func TestContextBuilderLoadModuleStr(t *testing.T) {
 	source := `module cambium-builder-memory {
     namespace "urn:cambium:builder-memory";
@@ -1805,6 +1957,9 @@ func TestContextBuilderFreezesContext(t *testing.T) {
 	if err := builder.UnsetSearchPath(dir); err == nil {
 		t.Fatal("builder accepted UnsetSearchPath after Build")
 	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err == nil {
+		t.Fatal("builder accepted SetValidationMode after Build")
+	}
 	if _, err := builder.Build(); err == nil {
 		t.Fatal("builder accepted second Build")
 	}
@@ -1897,4 +2052,47 @@ func contextModuleNameSet(ctx *cambium.Context) map[string]bool {
 		names[mod.Name()] = true
 	}
 	return names
+}
+
+func ciscoSemverModuleForRevisionTests() string {
+	return `module cisco-semver {
+    namespace "urn:cisco-semver";
+    prefix semver;
+
+    extension module-version {
+        argument version;
+    }
+}`
+}
+
+func ciscoStyleDuplicateRevisionModule(name string) string {
+	return `module ` + name + ` {
+    namespace "urn:` + name + `";
+    prefix cdr;
+    import cisco-semver { prefix semver; }
+
+    revision 2020-01-01 {
+        description "Current revision.";
+    }
+    revision 2019-04-05 {
+        description "Fixing backward compatibility error in module";
+        semver:module-version "1.0.0";
+    }
+    revision 2019-04-05 {
+        description "Establish semantic version baseline.";
+    }
+
+    leaf value { type string; }
+}`
+}
+
+func findDuplicateRevisionWarning(warnings []cambium.Diagnostic, module, revision string) (cambium.Diagnostic, bool) {
+	for _, warning := range warnings {
+		if warning.Module == module &&
+			strings.Contains(warning.Message, "duplicate revision") &&
+			strings.Contains(warning.Message, revision) {
+			return warning, true
+		}
+	}
+	return cambium.Diagnostic{}, false
 }
