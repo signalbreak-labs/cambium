@@ -1211,16 +1211,6 @@ func (m *moduleData) sourceTopStatements() []*yangparse.Statement {
 	return out
 }
 
-func (m *moduleData) sourceImports() []*yangparse.Statement {
-	var imports []*yangparse.Statement
-	for _, st := range m.sourceTopStatements() {
-		if st.Keyword == "import" {
-			imports = append(imports, st)
-		}
-	}
-	return imports
-}
-
 type importScope struct {
 	root            *yangparse.Statement
 	label           string
@@ -3284,10 +3274,6 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 		return false
 	}
 	return pfx == mod.prefix
-}
-
-func (c *Context) findNodeBySourceSchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	return c.findNodeBySourceSchemaPathFrom(source, path, nil)
 }
 
 func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData) {
@@ -6227,10 +6213,6 @@ func validateExtensionInstanceArgument(instance, def *yangparse.Statement) error
 	default:
 		return nil
 	}
-}
-
-func (m *moduleData) extensionModuleForPrefix(prefix string) *moduleData {
-	return m.extensionModuleForPrefixFrom(prefix, nil)
 }
 
 func (m *moduleData) extensionModuleForPrefixFrom(prefix string, from *yangparse.Statement) *moduleData {
