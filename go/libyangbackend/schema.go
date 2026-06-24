@@ -17,83 +17,54 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/signalbreak-labs/cambium/go/cambium"
 	"github.com/signalbreak-labs/cambium/go/internal/libyang"
 )
 
-// SchemaNodeKind classifies a compiled YANG schema node.
-// The discriminant order matches rust/cambium-core/src/schema.rs.
-type SchemaNodeKind int
+// SchemaNodeKind classifies a compiled YANG schema node. It is a type alias for
+// the canonical cambium.SchemaNodeKind in the pure-Go core: the schema-kind
+// taxonomy is a language-neutral contract that must not drift between the core
+// and this backend adapter. The constants and the String() method are inherited
+// from the core; this tier re-exports the constants so existing
+// libyangbackend.SchemaNodeKind* references keep resolving. The discriminant
+// order is the canonical cross-binding order defined beside the core type.
+// See docs/adr/0001-unify-schemanodekind.md.
+type SchemaNodeKind = cambium.SchemaNodeKind
 
 const (
 	// SchemaNodeKindModule is the synthetic root wrapping a module's top-level nodes.
-	SchemaNodeKindModule SchemaNodeKind = iota
+	SchemaNodeKindModule = cambium.SchemaNodeKindModule
 	// SchemaNodeKindContainer is a container statement.
-	SchemaNodeKindContainer
+	SchemaNodeKindContainer = cambium.SchemaNodeKindContainer
 	// SchemaNodeKindLeaf is a leaf statement.
-	SchemaNodeKindLeaf
+	SchemaNodeKindLeaf = cambium.SchemaNodeKindLeaf
 	// SchemaNodeKindLeafList is a leaf-list statement.
-	SchemaNodeKindLeafList
+	SchemaNodeKindLeafList = cambium.SchemaNodeKindLeafList
 	// SchemaNodeKindList is a list statement.
-	SchemaNodeKindList
+	SchemaNodeKindList = cambium.SchemaNodeKindList
 	// SchemaNodeKindChoice is a choice statement.
-	SchemaNodeKindChoice
+	SchemaNodeKindChoice = cambium.SchemaNodeKindChoice
 	// SchemaNodeKindCase is a case statement.
-	SchemaNodeKindCase
+	SchemaNodeKindCase = cambium.SchemaNodeKindCase
 	// SchemaNodeKindAnyData is an anydata statement.
-	SchemaNodeKindAnyData
+	SchemaNodeKindAnyData = cambium.SchemaNodeKindAnyData
 	// SchemaNodeKindRPC is an RPC statement.
-	SchemaNodeKindRPC
+	SchemaNodeKindRPC = cambium.SchemaNodeKindRPC
 	// SchemaNodeKindAction is an action statement.
-	SchemaNodeKindAction
+	SchemaNodeKindAction = cambium.SchemaNodeKindAction
 	// SchemaNodeKindInput is RPC/action input.
-	SchemaNodeKindInput
+	SchemaNodeKindInput = cambium.SchemaNodeKindInput
 	// SchemaNodeKindOutput is RPC/action output.
-	SchemaNodeKindOutput
+	SchemaNodeKindOutput = cambium.SchemaNodeKindOutput
 	// SchemaNodeKindNotification is a notification statement.
-	SchemaNodeKindNotification
+	SchemaNodeKindNotification = cambium.SchemaNodeKindNotification
 	// SchemaNodeKindAnyXML is an anyxml statement, distinct from anydata
-	// (RFC 7950 section 7.11; anyxml is YANG 1.0, anydata section 7.10 is YANG 1.1).
-	SchemaNodeKindAnyXML
+	// (RFC 7950 section 7.11; anyxml is YANG 1.0, anydata section 7.10 is
+	// YANG 1.1).
+	SchemaNodeKindAnyXML = cambium.SchemaNodeKindAnyXML
 	// SchemaNodeKindUnknown is anything not mapped above.
-	SchemaNodeKindUnknown
+	SchemaNodeKindUnknown = cambium.SchemaNodeKindUnknown
 )
-
-// String returns the canonical YANG keyword for the schema node kind
-// ("container", "leaf", "anydata", "anyxml", "rpc", ...), or "unknown".
-func (k SchemaNodeKind) String() string {
-	switch k {
-	case SchemaNodeKindModule:
-		return "module"
-	case SchemaNodeKindContainer:
-		return "container"
-	case SchemaNodeKindLeaf:
-		return "leaf"
-	case SchemaNodeKindLeafList:
-		return "leaf-list"
-	case SchemaNodeKindList:
-		return "list"
-	case SchemaNodeKindChoice:
-		return "choice"
-	case SchemaNodeKindCase:
-		return "case"
-	case SchemaNodeKindAnyData:
-		return "anydata"
-	case SchemaNodeKindRPC:
-		return "rpc"
-	case SchemaNodeKindAction:
-		return "action"
-	case SchemaNodeKindInput:
-		return "input"
-	case SchemaNodeKindOutput:
-		return "output"
-	case SchemaNodeKindNotification:
-		return "notification"
-	case SchemaNodeKindAnyXML:
-		return "anyxml"
-	default:
-		return "unknown"
-	}
-}
 
 // Config is read-write vs read-only.
 type Config int

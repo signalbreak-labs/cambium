@@ -15,7 +15,11 @@ import (
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
 )
 
-// SchemaNodeKind classifies a YANG schema node.
+// SchemaNodeKind classifies a YANG schema node. It is the single canonical
+// schema-kind taxonomy for every tier and binding: the cgo backend aliases this
+// type rather than redefining it (see docs/adr/0001-unify-schemanodekind.md).
+// The discriminant order is a language-neutral cross-binding contract: append
+// new kinds before SchemaNodeKindUnknown; never renumber existing values.
 type SchemaNodeKind int
 
 const (
