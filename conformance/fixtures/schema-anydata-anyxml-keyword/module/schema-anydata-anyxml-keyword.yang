@@ -1,0 +1,13 @@
+module schema-anydata-anyxml-keyword {
+  namespace "urn:cambium:schema-anydata-anyxml-keyword";
+  prefix saak;
+  yang-version 1.1;
+
+  // anydata (YANG 1.1, RFC 7950 section 7.10) and anyxml (YANG 1.0,
+  // section 7.11) are distinct statements that must surface as distinct
+  // schema kinds and keywords.
+  container root {
+    anydata payload;
+    anyxml raw-data;
+  }
+}

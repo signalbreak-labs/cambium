@@ -26,6 +26,12 @@
 # bytes. Backend runners must skip them.
 
 [[case]]
+name = "schema-anydata-anyxml-keyword"
+tier = "schema-ir"
+module = "fixtures/schema-anydata-anyxml-keyword/module"
+expected-ir = "fixtures/schema-anydata-anyxml-keyword/expected-ir.json"
+
+[[case]]
 name = "schema-cross-kind-order"
 invariants = ["I2"]
 tier = "schema-ir"

@@ -4,6 +4,7 @@
 package cambium_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -31,6 +32,8 @@ type schemaIRExpected struct {
 	Defaults            map[string]string              `json:"defaults"`
 	MinElements         map[string]uint32              `json:"minElements"`
 	MaxElements         map[string]string              `json:"maxElements"`
+	Kinds               map[string]string              `json:"kinds"`
+	Keywords            map[string]string              `json:"keywords"`
 	Imports             map[string][]schemaIRImport    `json:"imports"`
 	Prefixes            map[string]map[string]string   `json:"prefixes"`
 	IdentityDerived     map[string][]string            `json:"identityDerived"`
@@ -64,6 +67,7 @@ type schemaIRDeviation struct {
 
 func TestSchemaIRManifestTier(t *testing.T) {
 	want := map[string]struct{}{
+		"schema-anydata-anyxml-keyword":           {},
 		"schema-cross-kind-order":                 {},
 		"schema-uses-site-order":                  {},
 		"schema-augment-order":                    {},
@@ -186,7 +190,9 @@ func runSchemaIRFixture(t *testing.T, c confmanifest.Case) {
 		t.Fatal(err)
 	}
 	var expected schemaIRExpected
-	if err := json.Unmarshal(raw, &expected); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&expected); err != nil {
 		t.Fatal(err)
 	}
 	ctx, err := cambium.NewContext()
@@ -244,6 +250,18 @@ func runSchemaIRFixture(t *testing.T, c confmanifest.Case) {
 		node := schemaIRNode(t, mod, path)
 		if got := schemaIRConfig(node); got != want {
 			t.Fatalf("%s config = %q, want %q", path, got, want)
+		}
+	}
+	for path, want := range expected.Kinds {
+		node := schemaIRNode(t, mod, path)
+		if got := node.Kind().String(); got != want {
+			t.Fatalf("%s kind = %q, want %q", path, got, want)
+		}
+	}
+	for path, want := range expected.Keywords {
+		node := schemaIRNode(t, mod, path)
+		if got := node.Statement().Keyword(); got != want {
+			t.Fatalf("%s keyword = %q, want %q", path, got, want)
 		}
 	}
 	for path, want := range expected.Mandatory {

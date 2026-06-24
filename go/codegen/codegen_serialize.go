@@ -50,7 +50,7 @@ func (g *goEmitter) emitFieldXML(f fieldInfo, currentNS string, out *strings.Bui
 		fmt.Fprintf(out, "\tfor _, v := range %s {\n", itemsExpr)
 		g.emitLeafListValue(wire, f, currentNS, out)
 		out.WriteString("\t}\n")
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
 			fmt.Fprintf(out, "\tif n.%s != nil {\n", ident)
 			g.emitAnyDataXML(wire, f, "(*n."+ident+")", currentNS, out)
@@ -492,7 +492,7 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 			g.emitDefaultLeafListJSONArray(wire, "b", "depth+1", "depth+2", defaults, f, out)
 			out.WriteString("\t}\n")
 		}
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
 			fmt.Fprintf(out, "\tif n.%s != nil {\n", ident)
 			g.emitAnyDataJSON(wire, "b", "depth+1", "(*n."+ident+")", out)
@@ -1262,7 +1262,7 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 		}
 		fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, wire, expr, wire)
 		out.WriteString("\t}\n")
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
 			fmt.Fprintf(out, "\tif m.%s != nil {\n", ident)
 			g.emitTopAnyDataXML(wire, f, "(*m."+ident+")", out)
@@ -1397,7 +1397,7 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 			g.emitDefaultLeafListJSONArray(wire, "w", "1", "2", defaults, f, out)
 			out.WriteString("\t}\n")
 		}
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
 			fmt.Fprintf(out, "\tif m.%s != nil {\n", ident)
 			g.emitAnyDataJSON(wire, "w", "1", "(*m."+ident+")", out)

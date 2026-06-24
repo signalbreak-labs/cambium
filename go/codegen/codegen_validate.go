@@ -477,7 +477,7 @@ func (g *goEmitter) emitSelectedCaseDescendantValidation(children cambium.Schema
 		case cambium.SchemaNodeKindChoice:
 			choicePath := append(append([]string(nil), path...), child.Name())
 			g.emitChoiceValidationForChoice(child, owner, choicePath, byNode, out, indent, choiceCounter)
-		case cambium.SchemaNodeKindLeaf, cambium.SchemaNodeKindAnyData:
+		case cambium.SchemaNodeKindLeaf, cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 			if !hasField {
 				continue
 			}
@@ -712,7 +712,7 @@ func (g *goEmitter) emitScalarFieldValidationAt(f fieldInfo, owner, pathExpr str
 func mandatoryFieldMissingExpr(owner string, f fieldInfo) string {
 	ref := owner + "." + f.ident
 	switch f.node.Kind() {
-	case cambium.SchemaNodeKindLeaf, cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindLeaf, cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
 			return ref + " == nil"
 		}
@@ -810,7 +810,7 @@ func fieldPresentExpr(owner string, f fieldInfo) string {
 		return "true"
 	case cambium.SchemaNodeKindLeafList, cambium.SchemaNodeKindList:
 		return validationLenExpr(owner, f) + " > 0"
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
 			return ref + " != nil"
 		}

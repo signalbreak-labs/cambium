@@ -9924,12 +9924,82 @@ func TestSchemaNodeKindAnyxml(t *testing.T) {
 	defer cleanup()
 
 	top := topNode(t, ctx)
-	// anyxml's nodetype (0x20) is a distinct value from anydata (0x60); an
-	// exact match on 0x60 misclassifies anyxml as unknown. Both surface as the
-	// public AnyData kind.
+	// anyxml and anydata are distinct YANG statements (RFC 7950 section 7.11
+	// anyxml, section 7.10 anydata) and map to distinct schema kinds; raw-data
+	// is anyxml.
+	// Regression guard: anyxml must NOT collapse back into SchemaNodeKindAnyData.
 	anyx := childByName(t, top.Children(), "raw-data")
-	if anyx.Kind() != cambium.SchemaNodeKindAnyData {
-		t.Fatalf("raw-data (anyxml) kind = %v, want AnyData", anyx.Kind())
+	if anyx.Kind() != cambium.SchemaNodeKindAnyXML {
+		t.Fatalf("raw-data (anyxml) kind = %v, want AnyXML", anyx.Kind())
+	}
+	if !anyx.IsAnyXML() || anyx.IsAnyData() {
+		t.Fatalf("raw-data predicates: IsAnyXML=%v IsAnyData=%v, want true,false", anyx.IsAnyXML(), anyx.IsAnyData())
+	}
+	if got := anyx.Kind().String(); got != "anyxml" {
+		t.Fatalf("raw-data kind string = %q, want anyxml", got)
+	}
+	if got := anyx.Statement().Keyword(); got != "anyxml" {
+		t.Fatalf("raw-data statement keyword = %q, want anyxml", got)
+	}
+}
+
+func TestSchemaNodeKindAnyDataAnyXMLDistinct(t *testing.T) {
+	dir := t.TempDir()
+	const name = "cambium-anydata-anyxml-kinds"
+	yang := `module cambium-anydata-anyxml-kinds {
+    namespace "urn:cambium:anydata-anyxml-kinds";
+    prefix caak;
+    yang-version 1.1;
+    container top {
+        anydata payload;
+        anyxml raw-data;
+    }
+}`
+	writeModuleFile(t, filepath.Join(dir, name+".yang"), []byte(yang))
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.LoadModule(name); err != nil {
+		t.Fatal(err)
+	}
+	mod, err := ctx.Schema(name)
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	top := childByName(t, mod.TopLevel(), "top")
+
+	payload := childByName(t, top.Children(), "payload")
+	if payload.Kind() != cambium.SchemaNodeKindAnyData {
+		t.Fatalf("payload kind = %v, want AnyData", payload.Kind())
+	}
+	if !payload.IsAnyData() || payload.IsAnyXML() {
+		t.Fatalf("payload predicates: IsAnyData=%v IsAnyXML=%v, want true,false", payload.IsAnyData(), payload.IsAnyXML())
+	}
+	if got := payload.Kind().String(); got != "anydata" {
+		t.Fatalf("payload kind string = %q, want anydata", got)
+	}
+	if got := payload.Statement().Keyword(); got != "anydata" {
+		t.Fatalf("payload statement keyword = %q, want anydata", got)
+	}
+
+	raw := childByName(t, top.Children(), "raw-data")
+	if raw.Kind() != cambium.SchemaNodeKindAnyXML {
+		t.Fatalf("raw-data kind = %v, want AnyXML", raw.Kind())
+	}
+	if !raw.IsAnyXML() || raw.IsAnyData() {
+		t.Fatalf("raw-data predicates: IsAnyXML=%v IsAnyData=%v, want true,false", raw.IsAnyXML(), raw.IsAnyData())
+	}
+	if got := raw.Kind().String(); got != "anyxml" {
+		t.Fatalf("raw-data kind string = %q, want anyxml", got)
+	}
+	if got := raw.Statement().Keyword(); got != "anyxml" {
+		t.Fatalf("raw-data statement keyword = %q, want anyxml", got)
 	}
 }
 

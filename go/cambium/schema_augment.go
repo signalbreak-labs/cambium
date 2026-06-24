@@ -133,7 +133,7 @@ func (m *moduleData) applyAugmentWhen(aug *yangparse.Statement, roots []*schemaN
 
 func dataTreeContextNode(n *schemaNodeData) bool {
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
 		return true
 	default:
 		return false

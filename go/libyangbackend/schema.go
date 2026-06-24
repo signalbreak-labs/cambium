@@ -39,7 +39,7 @@ const (
 	SchemaNodeKindChoice
 	// SchemaNodeKindCase is a case statement.
 	SchemaNodeKindCase
-	// SchemaNodeKindAnyData is an anydata/anyxml statement.
+	// SchemaNodeKindAnyData is an anydata statement.
 	SchemaNodeKindAnyData
 	// SchemaNodeKindRPC is an RPC statement.
 	SchemaNodeKindRPC
@@ -51,9 +51,49 @@ const (
 	SchemaNodeKindOutput
 	// SchemaNodeKindNotification is a notification statement.
 	SchemaNodeKindNotification
+	// SchemaNodeKindAnyXML is an anyxml statement, distinct from anydata
+	// (RFC 7950 section 7.11; anyxml is YANG 1.0, anydata section 7.10 is YANG 1.1).
+	SchemaNodeKindAnyXML
 	// SchemaNodeKindUnknown is anything not mapped above.
 	SchemaNodeKindUnknown
 )
+
+// String returns the canonical YANG keyword for the schema node kind
+// ("container", "leaf", "anydata", "anyxml", "rpc", ...), or "unknown".
+func (k SchemaNodeKind) String() string {
+	switch k {
+	case SchemaNodeKindModule:
+		return "module"
+	case SchemaNodeKindContainer:
+		return "container"
+	case SchemaNodeKindLeaf:
+		return "leaf"
+	case SchemaNodeKindLeafList:
+		return "leaf-list"
+	case SchemaNodeKindList:
+		return "list"
+	case SchemaNodeKindChoice:
+		return "choice"
+	case SchemaNodeKindCase:
+		return "case"
+	case SchemaNodeKindAnyData:
+		return "anydata"
+	case SchemaNodeKindRPC:
+		return "rpc"
+	case SchemaNodeKindAction:
+		return "action"
+	case SchemaNodeKindInput:
+		return "input"
+	case SchemaNodeKindOutput:
+		return "output"
+	case SchemaNodeKindNotification:
+		return "notification"
+	case SchemaNodeKindAnyXML:
+		return "anyxml"
+	default:
+		return "unknown"
+	}
+}
 
 // Config is read-write vs read-only.
 type Config int
@@ -695,6 +735,8 @@ func kindFromRaw(kind string) SchemaNodeKind {
 		return SchemaNodeKindCase
 	case "anydata":
 		return SchemaNodeKindAnyData
+	case "anyxml":
+		return SchemaNodeKindAnyXML
 	case "rpc":
 		return SchemaNodeKindRPC
 	case "action":
@@ -1214,6 +1256,16 @@ func (n SchemaNodeRef) IsCase() bool {
 	return n.Kind() == SchemaNodeKindCase
 }
 
+// IsAnyData reports whether the node is an anydata statement.
+func (n SchemaNodeRef) IsAnyData() bool {
+	return n.Kind() == SchemaNodeKindAnyData
+}
+
+// IsAnyXML reports whether the node is an anyxml statement.
+func (n SchemaNodeRef) IsAnyXML() bool {
+	return n.Kind() == SchemaNodeKindAnyXML
+}
+
 // IsRPC reports whether the node is an RPC statement.
 func (n SchemaNodeRef) IsRPC() bool {
 	return n.Kind() == SchemaNodeKindRPC
@@ -1348,7 +1400,7 @@ func (n SchemaNodeRef) DataChildren(flattenChoices bool) SchemaChildren {
 func isDataChildKind(kind SchemaNodeKind) bool {
 	switch kind {
 	case SchemaNodeKindContainer, SchemaNodeKindList, SchemaNodeKindLeaf,
-		SchemaNodeKindLeafList, SchemaNodeKindAnyData,
+		SchemaNodeKindLeafList, SchemaNodeKindAnyData, SchemaNodeKindAnyXML,
 		SchemaNodeKindChoice, SchemaNodeKindCase:
 		return true
 	}
