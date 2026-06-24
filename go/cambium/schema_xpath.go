@@ -127,6 +127,9 @@ func xpathFunctionsHaveKnownArity(expr string) bool {
 		for j < len(expr) && isYANGSpace(expr[j]) {
 			j++
 		}
+		if isXPathWordOperator(name) {
+			continue
+		}
 		if j >= len(expr) || expr[j] != '(' {
 			continue
 		}

@@ -12823,6 +12823,49 @@ func TestXPathStandardFunctionsAccepted(t *testing.T) {
 	}
 }
 
+func TestXPathReMatchCompoundMustAccepted(t *testing.T) {
+	const source = `module cambium-xpath-rematch-compound-must {
+    yang-version 1.1;
+    namespace "urn:cambium:xpath-rematch-compound-must";
+    prefix cxrcm;
+
+    container top {
+        leaf format-type {
+            type enumeration {
+                enum uuid;
+                enum slug;
+                enum free;
+            }
+        }
+        leaf formatted {
+            must "(../format-type = 'uuid' and re-match(., '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) or (../format-type = 'slug' and re-match(., '^[a-z0-9-]+$')) or (../format-type = 'free')";
+            type string;
+        }
+    }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	mod, err := ctx.Schema("cambium-xpath-rematch-compound-must")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	formatted := schemaNodeAt(t, mod, "/cxrcm:top/formatted")
+	musts := formatted.Musts()
+	if got, want := len(musts), 1; got != want {
+		t.Fatalf("musts = %d, want %d", got, want)
+	}
+}
+
 func TestListUniqueConstraints(t *testing.T) {
 	ctx, cleanup := introspectionContext(t)
 	defer cleanup()
