@@ -1035,11 +1035,6 @@ func moduleRevision(stmt *yangparse.Statement) string {
 	return revision
 }
 
-func moduleRevisionValidated(stmt *yangparse.Statement) (string, error) {
-	revision, _, err := moduleRevisionValidatedMode(stmt, ValidationStrict)
-	return revision, err
-}
-
 func moduleRevisionValidatedMode(stmt *yangparse.Statement, mode ValidationMode) (string, []Diagnostic, error) {
 	revision := ""
 	seen := make(map[string]*yangparse.Statement)
@@ -1054,7 +1049,6 @@ func moduleRevisionValidatedMode(stmt *yangparse.Statement, mode ValidationMode)
 		if previous := seen[r.Argument]; previous != nil {
 			if mode != ValidationVendorCompatible {
 				return "", nil, diagnosticErrorf(
-					DiagnosticSemanticSchemaError,
 					r,
 					[]*yangparse.Statement{previous},
 					"duplicate revision %q at %s",

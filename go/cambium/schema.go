@@ -1988,7 +1988,6 @@ func (m *moduleData) addIdentityDefinition(st *yangparse.Statement) error {
 	for _, b := range direct(st, "base") {
 		if prev := seenBases[b.Argument]; prev != nil {
 			return diagnosticErrorf(
-				DiagnosticSemanticSchemaError,
 				b,
 				[]*yangparse.Statement{prev},
 				"identity %q has duplicate base %q at %s; previous base at %s",
@@ -2008,7 +2007,6 @@ func (m *moduleData) addIdentityDefinition(st *yangparse.Statement) error {
 
 func duplicateDefinitionError(kind, name string, prev, current *yangparse.Statement) error {
 	return diagnosticErrorf(
-		DiagnosticSemanticSchemaError,
 		current,
 		[]*yangparse.Statement{prev},
 		"duplicate %s %q at %s; previous definition at %s",
@@ -2021,7 +2019,6 @@ func duplicateDefinitionError(kind, name string, prev, current *yangparse.Statem
 
 func definitionCollisionError(kind, name, reason string, prev, current *yangparse.Statement) error {
 	return diagnosticErrorf(
-		DiagnosticSemanticSchemaError,
 		current,
 		[]*yangparse.Statement{prev},
 		"duplicate %s %q at %s: %s at %s",
