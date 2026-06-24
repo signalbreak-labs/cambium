@@ -66,3 +66,19 @@ func TestReferencedPrefixesSkipsQuotesAxesAndDuplicates(t *testing.T) {
 		}
 	}
 }
+
+func TestXPathReMatchCompoundExpressionIsStructurallyValid(t *testing.T) {
+	expr := "(../format-type = 'uuid' and re-match(., '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) or (../format-type = 'slug' and re-match(., '^[a-z0-9-]+$')) or (../format-type = 'free')"
+	if !xpathAxesAreKnown(expr) {
+		t.Fatal("xpathAxesAreKnown = false, want true")
+	}
+	if !xpathFunctionsHaveKnownArity(expr) {
+		t.Fatal("xpathFunctionsHaveKnownArity = false, want true")
+	}
+	if !xpathBinaryOperatorsHaveOperands(expr) {
+		t.Fatal("xpathBinaryOperatorsHaveOperands = false, want true")
+	}
+	if !structurallyValidXPathExpression(expr) {
+		t.Fatalf("structurallyValidXPathExpression(%q) = false, want true", expr)
+	}
+}
