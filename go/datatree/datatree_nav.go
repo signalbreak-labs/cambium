@@ -43,6 +43,22 @@ func (nd Node) IsContainer() bool { return nd.n.kind == kindContainer }
 // IsList reports whether the node is a list.
 func (nd Node) IsList() bool { return nd.n.kind == kindList }
 
+// IsAnyData reports whether the node is anydata.
+func (nd Node) IsAnyData() bool { return nd.n.kind == kindAnyData }
+
+// IsAnyXML reports whether the node is anyxml.
+func (nd Node) IsAnyXML() bool { return nd.n.kind == kindAnyXML }
+
+// AnyValue returns an anydata/anyxml node's opaque content as its raw encoded
+// bytes in the format it was parsed (for JSON_IETF, the compact JSON value),
+// and false if the node is neither anydata nor anyxml.
+func (nd Node) AnyValue() (string, bool) {
+	if nd.n.kind != kindAnyData && nd.n.kind != kindAnyXML {
+		return "", false
+	}
+	return string(nd.n.anyRaw), true
+}
+
 // LeafValue returns a leaf's value as its raw encoded token (for the JSON_IETF
 // source this is the JSON text, e.g. `"hi"`, `7`, or `true`), and false if the
 // node is not a leaf.

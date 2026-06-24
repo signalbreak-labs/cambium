@@ -195,6 +195,10 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 			}
 			n.entries = append(n.entries, keysFirst(sn, kids))
 		}
+	case sn.IsAnyData(), sn.IsAnyXML():
+		return nil, fmt.Errorf("datatree: anydata/anyxml %q in XML input is not supported "+
+			"(the pure-Go XML reader cannot losslessly capture opaque content; use JSON_IETF "+
+			"or the libyang backend)", sn.Name())
 	default:
 		return nil, fmt.Errorf("datatree: unsupported node kind for %q in this slice", sn.Name())
 	}
@@ -325,12 +329,14 @@ func jsonStringToken(s string) json.RawMessage {
 func (t *Tree) serializeXML() ([]byte, error) {
 	var b bytes.Buffer
 	for _, n := range t.roots {
-		writeXMLNode(&b, n, "")
+		if err := writeXMLNode(&b, n, ""); err != nil {
+			return nil, err
+		}
 	}
 	return b.Bytes(), nil
 }
 
-func writeXMLNode(b *bytes.Buffer, n *node, parentNS string) {
+func writeXMLNode(b *bytes.Buffer, n *node, parentNS string) error {
 	switch n.kind {
 	case kindLeaf:
 		writeXMLLeaf(b, n, parentNS, xmlTextFromToken(n.value))
@@ -341,18 +347,33 @@ func writeXMLNode(b *bytes.Buffer, n *node, parentNS string) {
 	case kindContainer:
 		writeXMLOpen(b, n, parentNS)
 		for _, c := range n.children {
-			writeXMLNode(b, c, n.namespace)
+			if err := writeXMLNode(b, c, n.namespace); err != nil {
+				return err
+			}
 		}
 		writeXMLClose(b, n)
 	case kindList:
 		for _, entry := range n.entries {
 			writeXMLOpen(b, n, parentNS)
 			for _, c := range entry {
-				writeXMLNode(b, c, n.namespace)
+				if err := writeXMLNode(b, c, n.namespace); err != nil {
+					return err
+				}
 			}
 			writeXMLClose(b, n)
 		}
+	case kindAnyData, kindAnyXML:
+		// anydata/anyxml parsed from JSON_IETF cannot be re-serialized as XML
+		// (opaque content has no faithful cross-format conversion). The XML-format
+		// branch is future-proofing for when opaque XML capture is supported.
+		if n.anyFormat != FormatXML {
+			return fmt.Errorf("datatree: %q: cross-format anydata/anyxml serialization unsupported (opaque content re-serializes only in its source format)", n.name)
+		}
+		writeXMLOpen(b, n, parentNS)
+		b.Write(n.anyRaw)
+		writeXMLClose(b, n)
 	}
+	return nil
 }
 
 func writeXMLLeaf(b *bytes.Buffer, n *node, parentNS, text string) {

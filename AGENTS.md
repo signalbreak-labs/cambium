@@ -54,8 +54,10 @@ Three tiers, split by what they need to build and run:
   (mandatory, cardinality, uniqueness, leafref existence, `must`/`when` over a core
   XPath subset) and applies defaults, all cgo-free. In the default purity closure
   (`scripts/check-go-default-pure.sh`). **API + internal value representation are
-  unstable** and its scope is narrower than the backend (no `anydata`/`anyxml`, no
-  RPC/action/notification data, partial XPath). Not yet a stable public surface.
+  unstable** and its scope is narrower than the backend (`anydata`/`anyxml` round-trip
+  as opaque content in JSON_IETF only - compact JSON, never schema-validated, and not
+  cross-format-convertible; no opaque XML; no RPC/action/notification data; partial
+  XPath). Not yet a stable public surface.
 - **Backend/data tier — optional, requires cgo** (`go/libyangbackend`,
   `go/internal/libyang`): generic `DataTree` parse/validate/serialize/diff/merge/LYB
   over libyang — the complete, RFC-7950 data engine. Must stay **outside** the
