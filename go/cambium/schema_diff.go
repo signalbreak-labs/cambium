@@ -522,6 +522,8 @@ func schemaNodeKindName(kind SchemaNodeKind) string {
 		return "case"
 	case SchemaNodeKindAnyData:
 		return "anydata"
+	case SchemaNodeKindAnyXML:
+		return "anyxml"
 	case SchemaNodeKindRPC:
 		return "rpc"
 	case SchemaNodeKindAction:

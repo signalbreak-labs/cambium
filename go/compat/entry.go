@@ -447,9 +447,9 @@ func (n Number) Int() (int64, error) {
 	case n.Negative && n.Value == minInt64Abs:
 		return -1 << 63, nil
 	case n.Negative && n.Value <= maxInt64:
-		return -int64(n.Value), nil
+		return -int64(n.Value), nil //nolint:gosec // n.Value is bounded by maxInt64 above.
 	case !n.Negative && n.Value <= maxInt64:
-		return int64(n.Value), nil
+		return int64(n.Value), nil //nolint:gosec // n.Value is bounded by maxInt64 above.
 	default:
 		return 0, fmt.Errorf("signed integer overflow")
 	}
@@ -1025,6 +1025,8 @@ func schemaNodeKindKeyword(kind cambium.SchemaNodeKind) string {
 		return "case"
 	case cambium.SchemaNodeKindAnyData:
 		return "anydata"
+	case cambium.SchemaNodeKindAnyXML:
+		return "anyxml"
 	case cambium.SchemaNodeKindRPC:
 		return "rpc"
 	case cambium.SchemaNodeKindAction:
@@ -2263,6 +2265,8 @@ func kindForNode(node cambium.SchemaNodeRef) EntryKind {
 		return CaseEntry
 	case cambium.SchemaNodeKindAnyData:
 		return AnyDataEntry
+	case cambium.SchemaNodeKindAnyXML:
+		return AnyXMLEntry
 	case cambium.SchemaNodeKindInput:
 		return InputEntry
 	case cambium.SchemaNodeKindOutput:
@@ -2428,14 +2432,14 @@ func symbolicRangeNumber(raw string, kind rangeBoundKind, base cambium.BaseType,
 		case kind == rangeBoundLength:
 			return Number{}, true
 		case base == cambium.BaseTypeDecimal64 && fractionDigits >= 1 && fractionDigits <= int(MaxFractionDigits):
-			return Number{Value: uint64(AbsMinInt64), FractionDigits: uint8(fractionDigits), Negative: true}, true
+			return Number{Value: uint64(AbsMinInt64), FractionDigits: uint8(fractionDigits), Negative: true}, true //nolint:gosec // fractionDigits is bounded by MaxFractionDigits above.
 		}
 	case "max":
 		switch {
 		case kind == rangeBoundLength:
 			return Number{Value: math.MaxUint64}, true
 		case base == cambium.BaseTypeDecimal64 && fractionDigits >= 1 && fractionDigits <= int(MaxFractionDigits):
-			return Number{Value: uint64(MaxInt64), FractionDigits: uint8(fractionDigits)}, true
+			return Number{Value: uint64(MaxInt64), FractionDigits: uint8(fractionDigits)}, true //nolint:gosec // fractionDigits is bounded by MaxFractionDigits above.
 		}
 	}
 	return Number{}, false
@@ -2466,7 +2470,7 @@ func decimalNumberFromString(unsigned string, negative bool, fractionDigits int)
 	if err != nil {
 		return Number{}
 	}
-	return Number{Value: value, FractionDigits: uint8(fd), Negative: negative}
+	return Number{Value: value, FractionDigits: uint8(fd), Negative: negative} //nolint:gosec // fd is bounded to [0, 18] above.
 }
 
 func typeKindForBase(base cambium.BaseType) TypeKind {

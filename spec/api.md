@@ -930,12 +930,20 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 
   Kind predicates, read-only convenience, and namespace:
   - `SchemaNodeRef.IsLeaf()`, `IsLeafList()`, `IsContainer()`, `IsList()`,
-    `IsChoice()`, and `IsCase()` report the node kind.
+    `IsChoice()`, `IsCase()`, `IsAnyData()`, and `IsAnyXML()` report the node
+    kind. `anydata` (YANG 1.1, RFC 7950 §7.10) and `anyxml` (YANG 1.0, RFC 7950
+    §7.11) are distinct statements and are reported as distinct kinds — never
+    collapsed into one.
   - `SchemaNodeRef.IsRPC()`, `IsAction()`, and `IsNotification()` report
     operation node kinds.
   - `SchemaNodeRef.IsDir()` reports whether the node can contain children in the
     goyang `Entry` model: container, list, choice, case, rpc, action, input,
     output, and notification.
+  - `SchemaNodeRef.Statement()` returns a read-only handle to the YANG statement
+    that defined the node, exposing the verbatim statement keyword (e.g.
+    `anydata` vs `anyxml`, including any extension prefix), argument, and
+    substatements for raw-syntax inspection. Synthetic nodes such as the module
+    root report an invalid handle.
   - `SchemaNodeRef.ReadOnly()` is a convenience for `Config() == ConfigRo`.
   - `SchemaNodeRef.RepresentsConfigurationData()` reports whether the node is
     configuration data for validation/codegen purposes: it must be effective

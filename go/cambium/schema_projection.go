@@ -150,7 +150,7 @@ func (n SchemaNodeRef) DataAncestors() []SchemaNodeRef {
 // IsDataNode reports whether this schema node can appear in a data payload.
 func (n SchemaNodeRef) IsDataNode() bool {
 	switch n.Kind() {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
 		return true
 	default:
 		return false

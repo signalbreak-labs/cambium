@@ -89,9 +89,9 @@ func (n Number) Int() (int64, error) {
 	case n.Negative && n.Value == minInt64Abs:
 		return -1 << 63, nil
 	case n.Negative && n.Value <= maxInt64:
-		return -int64(n.Value), nil
+		return -int64(n.Value), nil //nolint:gosec // n.Value is bounded by maxInt64 above.
 	case !n.Negative && n.Value <= maxInt64:
-		return int64(n.Value), nil
+		return int64(n.Value), nil //nolint:gosec // n.Value is bounded by maxInt64 above.
 	default:
 		return 0, fmt.Errorf("signed integer overflow")
 	}
@@ -350,7 +350,7 @@ func decimalValueFromString(s string, fracDigRequired uint8) (Number, error) {
 	var mag uint64
 	if negative {
 		// Negate in the unsigned domain so math.MinInt64 does not overflow.
-		mag = uint64(-(v + 1)) + 1
+		mag = uint64(-(v + 1)) + 1 //nolint:gosec // v is negative, so -(v + 1) is non-negative and in range.
 	} else {
 		mag = uint64(v)
 	}

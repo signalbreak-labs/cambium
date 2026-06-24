@@ -462,7 +462,7 @@ func (g *goEmitter) emitJSONParseField(owner, key string, f fieldInfo, byNode ma
 		} else {
 			fmt.Fprintf(out, "\t\t%s.%s = items\n", owner, f.ident)
 		}
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		out.WriteString("\t\tb, err := cambiumJSONMarshalIndent(raw)\n")
 		out.WriteString("\t\tif err != nil { return err }\n")
 		out.WriteString("\t\tv := NewAnyData(\"\", b)\n")
@@ -504,7 +504,7 @@ func requiresJSONField(node cambium.SchemaNodeRef) bool {
 	switch node.Kind() {
 	case cambium.SchemaNodeKindLeaf:
 		return requiresJSONLeafField(node)
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		return node.IsMandatory() && !node.IsChoiceDescendant() && len(node.Whens()) == 0
 	case cambium.SchemaNodeKindContainer:
 		return !node.IsPresenceContainer() && len(node.Whens()) == 0 && hasRequiredJSONDescendant(node)
@@ -533,7 +533,7 @@ func hasRequiredJSONDescendant(node cambium.SchemaNodeRef) bool {
 			if requiresJSONLeafField(child) {
 				return true
 			}
-		case cambium.SchemaNodeKindAnyData:
+		case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 			if child.IsMandatory() && !child.IsChoiceDescendant() {
 				return true
 			}

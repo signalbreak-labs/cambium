@@ -15,7 +15,11 @@ import (
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
 )
 
-// SchemaNodeKind classifies a YANG schema node.
+// SchemaNodeKind classifies a YANG schema node. It is the single canonical
+// schema-kind taxonomy for every tier and binding: the cgo backend aliases this
+// type rather than redefining it (see docs/adr/0001-unify-schemanodekind.md).
+// The discriminant order is a language-neutral cross-binding contract: append
+// new kinds before SchemaNodeKindUnknown; never renumber existing values.
 type SchemaNodeKind int
 
 const (
@@ -33,7 +37,7 @@ const (
 	SchemaNodeKindChoice
 	// SchemaNodeKindCase the case kind.
 	SchemaNodeKindCase
-	// SchemaNodeKindAnyData the anydata/anyxml kind.
+	// SchemaNodeKindAnyData the anydata kind.
 	SchemaNodeKindAnyData
 	// SchemaNodeKindRPC the rpc kind.
 	SchemaNodeKindRPC
@@ -45,9 +49,49 @@ const (
 	SchemaNodeKindOutput
 	// SchemaNodeKindNotification the notification kind.
 	SchemaNodeKindNotification
+	// SchemaNodeKindAnyXML the anyxml kind, a distinct statement from anydata
+	// (RFC 7950 section 7.11; anyxml is YANG 1.0, anydata section 7.10 is YANG 1.1).
+	SchemaNodeKindAnyXML
 	// SchemaNodeKindUnknown any kind not mapped above.
 	SchemaNodeKindUnknown
 )
+
+// String returns the canonical YANG keyword for the schema node kind
+// ("container", "leaf", "anydata", "anyxml", "rpc", ...), or "unknown".
+func (k SchemaNodeKind) String() string {
+	switch k {
+	case SchemaNodeKindModule:
+		return "module"
+	case SchemaNodeKindContainer:
+		return "container"
+	case SchemaNodeKindLeaf:
+		return "leaf"
+	case SchemaNodeKindLeafList:
+		return "leaf-list"
+	case SchemaNodeKindList:
+		return "list"
+	case SchemaNodeKindChoice:
+		return "choice"
+	case SchemaNodeKindCase:
+		return "case"
+	case SchemaNodeKindAnyData:
+		return "anydata"
+	case SchemaNodeKindRPC:
+		return "rpc"
+	case SchemaNodeKindAction:
+		return "action"
+	case SchemaNodeKindInput:
+		return "input"
+	case SchemaNodeKindOutput:
+		return "output"
+	case SchemaNodeKindNotification:
+		return "notification"
+	case SchemaNodeKindAnyXML:
+		return "anyxml"
+	default:
+		return "unknown"
+	}
+}
 
 // SchemaPathErrorKind classifies a failed schema path lookup.
 type SchemaPathErrorKind string
@@ -2332,7 +2376,7 @@ func mandatoryConfigNode(n *schemaNodeData) *schemaNodeData {
 		return nil
 	}
 	switch n.kind {
-	case SchemaNodeKindLeaf, SchemaNodeKindChoice, SchemaNodeKindAnyData:
+	case SchemaNodeKindLeaf, SchemaNodeKindChoice, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
 		if n.mandatory {
 			return n
 		}
@@ -3648,6 +3692,17 @@ func (n SchemaNodeRef) Kind() SchemaNodeKind {
 	return n.node.kind
 }
 
+// Statement returns a read-only handle to the YANG statement that defined the
+// node, for raw-syntax inspection (the verbatim keyword, argument, and
+// substatements). Synthetic nodes such as the module root have no backing
+// statement and return an invalid Statement (IsValid reports false).
+func (n SchemaNodeRef) Statement() Statement {
+	if n.node == nil {
+		return Statement{}
+	}
+	return Statement{stmt: n.node.stmt}
+}
+
 // Module returns the module that defines the node.
 func (n SchemaNodeRef) Module() Module {
 	if n.node == nil {
@@ -3747,6 +3802,12 @@ func (n SchemaNodeRef) IsAction() bool { return n.Kind() == SchemaNodeKindAction
 
 // IsNotification reports whether the node is a notification.
 func (n SchemaNodeRef) IsNotification() bool { return n.Kind() == SchemaNodeKindNotification }
+
+// IsAnyData reports whether the node is anydata.
+func (n SchemaNodeRef) IsAnyData() bool { return n.Kind() == SchemaNodeKindAnyData }
+
+// IsAnyXML reports whether the node is anyxml.
+func (n SchemaNodeRef) IsAnyXML() bool { return n.Kind() == SchemaNodeKindAnyXML }
 
 // RepresentsConfigurationData reports whether the node carries configuration data.
 func (n SchemaNodeRef) RepresentsConfigurationData() bool {
@@ -4606,7 +4667,7 @@ func (n *schemaNodeData) validateDataNodeParent() {
 
 func (n *schemaNodeData) isDataDefinitionNode() bool {
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindAnyData:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
 		return true
 	default:
 		return false
@@ -4647,7 +4708,7 @@ func (n *schemaNodeData) mustPropertyAllowed(prop *yangparse.Statement) bool {
 		return false
 	}
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData, SchemaNodeKindInput, SchemaNodeKindOutput, SchemaNodeKindNotification:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindAnyData, SchemaNodeKindAnyXML, SchemaNodeKindInput, SchemaNodeKindOutput, SchemaNodeKindNotification:
 		return true
 	default:
 		n.recordSchemaError(fmt.Errorf("must at %s is only valid on container, leaf, leaf-list, list, anydata, anyxml, input, output, or notification nodes", prop.Location()))
@@ -4660,7 +4721,7 @@ func (n *schemaNodeData) whenPropertyAllowed(prop *yangparse.Statement) bool {
 		return false
 	}
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindAnyData:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
 		return true
 	default:
 		n.recordSchemaError(fmt.Errorf("when at %s is only valid on data, choice, or case nodes", prop.Location()))
@@ -4689,7 +4750,7 @@ func (n *schemaNodeData) applyStatusProperty(prop *yangparse.Statement) {
 
 func (n *schemaNodeData) statusPropertyAllowed(prop *yangparse.Statement) bool {
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindAnyData, SchemaNodeKindRPC, SchemaNodeKindAction, SchemaNodeKindNotification:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindAnyData, SchemaNodeKindAnyXML, SchemaNodeKindRPC, SchemaNodeKindAction, SchemaNodeKindNotification:
 		return true
 	default:
 		n.recordSchemaError(fmt.Errorf("status at %s is only valid on data, choice, case, rpc, action, or notification nodes", prop.Location()))
@@ -4702,7 +4763,7 @@ func (n *schemaNodeData) textMetadataPropertyAllowed(prop *yangparse.Statement) 
 		return false
 	}
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindAnyData, SchemaNodeKindRPC, SchemaNodeKindAction, SchemaNodeKindNotification:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindCase, SchemaNodeKindAnyData, SchemaNodeKindAnyXML, SchemaNodeKindRPC, SchemaNodeKindAction, SchemaNodeKindNotification:
 		return true
 	default:
 		n.recordSchemaError(fmt.Errorf("%s at %s is only valid on data, choice, case, rpc, action, or notification nodes", prop.Keyword, prop.Location()))
@@ -4794,7 +4855,7 @@ func (n *schemaNodeData) refreshConfigFromParent(parentConfig Config) {
 
 func (n *schemaNodeData) configPropertyAllowed(prop *yangparse.Statement) bool {
 	switch n.kind {
-	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindAnyData:
+	case SchemaNodeKindContainer, SchemaNodeKindLeaf, SchemaNodeKindLeafList, SchemaNodeKindList, SchemaNodeKindChoice, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
 		return true
 	default:
 		n.recordSchemaError(fmt.Errorf("config at %s is only valid on data nodes", prop.Location()))
@@ -4806,7 +4867,7 @@ func (n *schemaNodeData) applyMandatoryProperty(prop *yangparse.Statement) {
 	if n == nil || prop == nil {
 		return
 	}
-	if n.kind != SchemaNodeKindLeaf && n.kind != SchemaNodeKindChoice && n.kind != SchemaNodeKindAnyData {
+	if n.kind != SchemaNodeKindLeaf && n.kind != SchemaNodeKindChoice && n.kind != SchemaNodeKindAnyData && n.kind != SchemaNodeKindAnyXML {
 		n.recordSchemaError(fmt.Errorf("mandatory at %s is only valid on leaf, choice, anydata, or anyxml nodes", prop.Location()))
 		return
 	}
@@ -6206,8 +6267,10 @@ func kindForKeyword(keyword string) SchemaNodeKind {
 		return SchemaNodeKindChoice
 	case "case":
 		return SchemaNodeKindCase
-	case "anydata", "anyxml":
+	case "anydata":
 		return SchemaNodeKindAnyData
+	case "anyxml":
+		return SchemaNodeKindAnyXML
 	case "rpc":
 		return SchemaNodeKindRPC
 	case "action":

@@ -1,0 +1,14 @@
+{
+  "module": "schema-anydata-anyxml-keyword",
+  "children": {
+    "/schema-anydata-anyxml-keyword/root": ["payload", "raw-data"]
+  },
+  "kinds": {
+    "/schema-anydata-anyxml-keyword/root/payload": "anydata",
+    "/schema-anydata-anyxml-keyword/root/raw-data": "anyxml"
+  },
+  "keywords": {
+    "/schema-anydata-anyxml-keyword/root/payload": "anydata",
+    "/schema-anydata-anyxml-keyword/root/raw-data": "anyxml"
+  }
+}

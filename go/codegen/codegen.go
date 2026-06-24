@@ -968,7 +968,7 @@ func (g *goEmitter) emitHasContent(name string, fields []fieldInfo, out *strings
 			} else {
 				conds = append(conds, fmt.Sprintf("len(n.%s) > 0", f.ident))
 			}
-		case cambium.SchemaNodeKindAnyData:
+		case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 			if f.optional {
 				conds = append(conds, fmt.Sprintf("n.%s != nil", f.ident))
 			} else {
@@ -1091,7 +1091,7 @@ func (g *goEmitter) emitTrimHasContentChecks(fields []fieldInfo, out *strings.Bu
 			} else {
 				fmt.Fprintf(out, "\t\tif len(n.%s) > 0 { return true }\n", f.ident)
 			}
-		case cambium.SchemaNodeKindAnyData:
+		case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 			if f.optional {
 				fmt.Fprintf(out, "\t\tif n.%s != nil { return true }\n", f.ident)
 			} else {
@@ -1606,7 +1606,7 @@ func (g *goEmitter) fieldType(prefix string, node cambium.SchemaNodeRef, fieldId
 		}
 		shape.goType = base
 		return base, optional, shape
-	case cambium.SchemaNodeKindAnyData:
+	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		g.emittedAnyData = true
 		optional = !node.IsMandatory() || node.IsChoiceDescendant() || len(node.Whens()) > 0
 		if optional {
@@ -1802,7 +1802,7 @@ func isEmittedKind(k cambium.SchemaNodeKind) bool {
 	switch k {
 	case cambium.SchemaNodeKindLeaf, cambium.SchemaNodeKindLeafList,
 		cambium.SchemaNodeKindContainer, cambium.SchemaNodeKindList,
-		cambium.SchemaNodeKindAnyData:
+		cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		return true
 	}
 	return false
@@ -1820,6 +1820,8 @@ func kindName(k cambium.SchemaNodeKind) string {
 		return "list"
 	case cambium.SchemaNodeKindAnyData:
 		return "anydata"
+	case cambium.SchemaNodeKindAnyXML:
+		return "anyxml"
 	default:
 		return "node"
 	}

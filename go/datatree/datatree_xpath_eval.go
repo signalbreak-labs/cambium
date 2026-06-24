@@ -62,6 +62,10 @@ func buildXNodes(schema []cambium.SchemaNodeRef, data []*node, parent *xnode) []
 				xn.kids = buildXNodes(childRefs(sn.DataChildren(true)), entry, xn)
 				out = append(out, xn)
 			}
+		case sn.IsAnyData(), sn.IsAnyXML():
+			// Opaque: visible to XPath for existence and for when/must on the node
+			// itself, but exposes no string value and no descendant axis.
+			out = append(out, &xnode{name: sn.Name(), ns: sn.Namespace(), schema: sn, hasSchema: true, parent: parent})
 		}
 	}
 	return out

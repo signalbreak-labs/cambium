@@ -968,10 +968,12 @@ func schemaKindName(nodetype uint16) string {
 		return "choice"
 	case lysCase:
 		return "case"
-	case lysAnyXml, lysAnyData:
-		// anyxml (0x20) and anydata (0x60) are distinct nodetype values; both
-		// surface as the public AnyData kind. An exact-match on 0x60 alone
-		// misclassifies anyxml as unknown.
+	case lysAnyXml:
+		// anyxml (0x20) and anydata (0x60) are distinct libyang nodetypes and
+		// surface as distinct public kinds (RFC 7950 section 7.11 anyxml,
+		// section 7.10 anydata).
+		return "anyxml"
+	case lysAnyData:
 		return "anydata"
 	case lysRPC:
 		return "rpc"

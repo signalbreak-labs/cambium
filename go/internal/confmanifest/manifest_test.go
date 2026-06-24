@@ -45,8 +45,8 @@ func TestLoadSharedManifest(t *testing.T) {
 		}
 	}
 
-	if schemaIR != 12 {
-		t.Errorf("schema-ir cases = %d, want 12", schemaIR)
+	if schemaIR != 13 {
+		t.Errorf("schema-ir cases = %d, want 13", schemaIR)
 	}
 	if backend == 0 {
 		t.Error("no backend-data cases found")

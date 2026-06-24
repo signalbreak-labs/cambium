@@ -16,7 +16,9 @@
 // JSON_IETF (RFC 7951) and XML round-trip containers, leaves, leaf-lists, and
 // lists. Leaf values are held as JSON tokens, with type-aware validation and XML
 // text conversion layered on that representation. choice nodes are flattened
-// (RFC 7950 §7.9); anydata/anyxml and operations are not yet handled.
+// (RFC 7950 section 7.9). anydata/anyxml round-trip as opaque content in JSON_IETF:
+// the inner value is preserved as compact JSON and never schema-validated; opaque XML
+// content and operations are not yet handled.
 package datatree
 
 import (
@@ -53,6 +55,8 @@ const (
 	kindLeafList
 	kindContainer
 	kindList
+	kindAnyData
+	kindAnyXML
 )
 
 // node is one data node. Children/entries are stored in the order they will be
@@ -67,6 +71,13 @@ type node struct {
 	values   []json.RawMessage // kindLeafList: ordered values
 	children []*node           // kindContainer: ordered children
 	entries  [][]*node         // kindList: each entry is its ordered child nodes
+
+	// anydata/anyxml opaque payload: the inner content captured in the format it
+	// was parsed (compact JSON value bytes for FormatJSONIETF). The
+	// datatree round-trips opaque content only in its source format; serializing
+	// to a different format is unsupported and returns an error.
+	anyRaw    []byte
+	anyFormat Format
 }
 
 type nodeKey struct {
@@ -233,6 +244,22 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			}
 			n.entries = append(n.entries, keysFirst(sn, kids))
 		}
+	case sn.IsAnyData():
+		n.kind = kindAnyData
+		v, err := compactJSON(raw)
+		if err != nil {
+			return nil, fmt.Errorf("datatree: anydata %q: %w", sn.Name(), err)
+		}
+		n.anyRaw = []byte(v)
+		n.anyFormat = FormatJSONIETF
+	case sn.IsAnyXML():
+		n.kind = kindAnyXML
+		v, err := compactJSON(raw)
+		if err != nil {
+			return nil, fmt.Errorf("datatree: anyxml %q: %w", sn.Name(), err)
+		}
+		n.anyRaw = []byte(v)
+		n.anyFormat = FormatJSONIETF
 	default:
 		return nil, fmt.Errorf("datatree: unsupported node kind for %q in this slice", sn.Name())
 	}
@@ -337,6 +364,11 @@ func writeValue(b *bytes.Buffer, n *node) error {
 			}
 		}
 		b.WriteByte(']')
+	case kindAnyData, kindAnyXML:
+		if n.anyFormat != FormatJSONIETF {
+			return fmt.Errorf("datatree: %q: cross-format anydata/anyxml serialization unsupported (opaque content re-serializes only in its source format)", n.name)
+		}
+		b.Write(n.anyRaw)
 	}
 	return nil
 }

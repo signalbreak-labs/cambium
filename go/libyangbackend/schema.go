@@ -17,42 +17,53 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/signalbreak-labs/cambium/go/cambium"
 	"github.com/signalbreak-labs/cambium/go/internal/libyang"
 )
 
-// SchemaNodeKind classifies a compiled YANG schema node.
-// The discriminant order matches rust/cambium-core/src/schema.rs.
-type SchemaNodeKind int
+// SchemaNodeKind classifies a compiled YANG schema node. It is a type alias for
+// the canonical cambium.SchemaNodeKind in the pure-Go core: the schema-kind
+// taxonomy is a language-neutral contract that must not drift between the core
+// and this backend adapter. The constants and the String() method are inherited
+// from the core; this tier re-exports the constants so existing
+// libyangbackend.SchemaNodeKind* references keep resolving. The discriminant
+// order is the canonical cross-binding order defined beside the core type.
+// See docs/adr/0001-unify-schemanodekind.md.
+type SchemaNodeKind = cambium.SchemaNodeKind
 
 const (
 	// SchemaNodeKindModule is the synthetic root wrapping a module's top-level nodes.
-	SchemaNodeKindModule SchemaNodeKind = iota
+	SchemaNodeKindModule = cambium.SchemaNodeKindModule
 	// SchemaNodeKindContainer is a container statement.
-	SchemaNodeKindContainer
+	SchemaNodeKindContainer = cambium.SchemaNodeKindContainer
 	// SchemaNodeKindLeaf is a leaf statement.
-	SchemaNodeKindLeaf
+	SchemaNodeKindLeaf = cambium.SchemaNodeKindLeaf
 	// SchemaNodeKindLeafList is a leaf-list statement.
-	SchemaNodeKindLeafList
+	SchemaNodeKindLeafList = cambium.SchemaNodeKindLeafList
 	// SchemaNodeKindList is a list statement.
-	SchemaNodeKindList
+	SchemaNodeKindList = cambium.SchemaNodeKindList
 	// SchemaNodeKindChoice is a choice statement.
-	SchemaNodeKindChoice
+	SchemaNodeKindChoice = cambium.SchemaNodeKindChoice
 	// SchemaNodeKindCase is a case statement.
-	SchemaNodeKindCase
-	// SchemaNodeKindAnyData is an anydata/anyxml statement.
-	SchemaNodeKindAnyData
+	SchemaNodeKindCase = cambium.SchemaNodeKindCase
+	// SchemaNodeKindAnyData is an anydata statement.
+	SchemaNodeKindAnyData = cambium.SchemaNodeKindAnyData
 	// SchemaNodeKindRPC is an RPC statement.
-	SchemaNodeKindRPC
+	SchemaNodeKindRPC = cambium.SchemaNodeKindRPC
 	// SchemaNodeKindAction is an action statement.
-	SchemaNodeKindAction
+	SchemaNodeKindAction = cambium.SchemaNodeKindAction
 	// SchemaNodeKindInput is RPC/action input.
-	SchemaNodeKindInput
+	SchemaNodeKindInput = cambium.SchemaNodeKindInput
 	// SchemaNodeKindOutput is RPC/action output.
-	SchemaNodeKindOutput
+	SchemaNodeKindOutput = cambium.SchemaNodeKindOutput
 	// SchemaNodeKindNotification is a notification statement.
-	SchemaNodeKindNotification
+	SchemaNodeKindNotification = cambium.SchemaNodeKindNotification
+	// SchemaNodeKindAnyXML is an anyxml statement, distinct from anydata
+	// (RFC 7950 section 7.11; anyxml is YANG 1.0, anydata section 7.10 is
+	// YANG 1.1).
+	SchemaNodeKindAnyXML = cambium.SchemaNodeKindAnyXML
 	// SchemaNodeKindUnknown is anything not mapped above.
-	SchemaNodeKindUnknown
+	SchemaNodeKindUnknown = cambium.SchemaNodeKindUnknown
 )
 
 // Config is read-write vs read-only.
@@ -695,6 +706,8 @@ func kindFromRaw(kind string) SchemaNodeKind {
 		return SchemaNodeKindCase
 	case "anydata":
 		return SchemaNodeKindAnyData
+	case "anyxml":
+		return SchemaNodeKindAnyXML
 	case "rpc":
 		return SchemaNodeKindRPC
 	case "action":
@@ -1214,6 +1227,16 @@ func (n SchemaNodeRef) IsCase() bool {
 	return n.Kind() == SchemaNodeKindCase
 }
 
+// IsAnyData reports whether the node is an anydata statement.
+func (n SchemaNodeRef) IsAnyData() bool {
+	return n.Kind() == SchemaNodeKindAnyData
+}
+
+// IsAnyXML reports whether the node is an anyxml statement.
+func (n SchemaNodeRef) IsAnyXML() bool {
+	return n.Kind() == SchemaNodeKindAnyXML
+}
+
 // IsRPC reports whether the node is an RPC statement.
 func (n SchemaNodeRef) IsRPC() bool {
 	return n.Kind() == SchemaNodeKindRPC
@@ -1348,7 +1371,7 @@ func (n SchemaNodeRef) DataChildren(flattenChoices bool) SchemaChildren {
 func isDataChildKind(kind SchemaNodeKind) bool {
 	switch kind {
 	case SchemaNodeKindContainer, SchemaNodeKindList, SchemaNodeKindLeaf,
-		SchemaNodeKindLeafList, SchemaNodeKindAnyData,
+		SchemaNodeKindLeafList, SchemaNodeKindAnyData, SchemaNodeKindAnyXML,
 		SchemaNodeKindChoice, SchemaNodeKindCase:
 		return true
 	}
