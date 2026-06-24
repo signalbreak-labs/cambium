@@ -231,7 +231,7 @@ func (m *moduleData) resolveIdentity(id *identityData) {
 		if i < len(baseStmts) {
 			baseStmt = baseStmts[i]
 		}
-		baseMod := source.resolveSourceQNameModule(q)
+		baseMod := source.resolveSourceQNameModuleFrom(q, baseStmt)
 		if baseMod == nil {
 			source.recordSchemaError(fmt.Errorf("unknown identity base %q for identity %q", q, id.name))
 			return
@@ -430,7 +430,7 @@ func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.
 		if len(direct(st, "require-instance")) > 0 && m.yangVersionForStatement(st) != "1.1" {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, fmt.Errorf("leafref type require-instance statement requires yang-version 1.1 at %s", st.Location())
 		}
-		ti.resolved = ResolvedLeafRef{path: paths[0].Argument, requireInstance: require, sourceModule: m}
+		ti.resolved = ResolvedLeafRef{path: paths[0].Argument, requireInstance: require, sourceModule: m, sourceStmt: paths[0]}
 	case BaseTypeUnion:
 		var members []TypeInfo
 		memberTypes := direct(st, "type")
@@ -480,7 +480,7 @@ func isKnownTypeRestrictionKeyword(keyword string) bool {
 }
 
 func (m *moduleData) lookupTypedefModuleFrom(qname string, from *yangparse.Statement) (*moduleData, *yangparse.Statement) {
-	mod := m.resolveSourceQNameModule(qname)
+	mod := m.resolveSourceQNameModuleFrom(qname, from)
 	if mod == nil {
 		return nil, nil
 	}
@@ -553,9 +553,9 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	}
 	var target *schemaNodeData
 	if strings.HasPrefix(lr.path, "/") {
-		_, target = source.ctx.findNodeBySourceSchemaPath(source, lr.path)
+		_, target = source.ctx.findNodeBySourceSchemaPathFrom(source, lr.path, lr.sourceStmt)
 	} else {
-		target = findRelativeSchemaPathWithSeen(n, source, lr.path, seen)
+		target = findRelativeSchemaPathWithSeen(n, source, lr.path, lr.sourceStmt, seen)
 	}
 	if target == nil || target.typeInfo == nil {
 		return

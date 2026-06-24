@@ -17,7 +17,7 @@ type Deviation struct {
 }
 
 func (m *moduleData) applyUsesAugment(aug *yangparse.Statement, roots []*schemaNodeData, owner *moduleData, groupingStack map[*yangparse.Statement]bool, groupOrigin string) bool {
-	target := findRelativeSchemaNode(m, roots, strings.Split(aug.Argument, "/"))
+	target := findRelativeSchemaNode(m, roots, strings.Split(aug.Argument, "/"), aug)
 	if target == nil {
 		return false
 	}
@@ -63,7 +63,7 @@ func (m *moduleData) applyAugments() {
 			m.recordSchemaError(err)
 			continue
 		}
-		targetMod, target := m.ctx.findNodeBySourceSchemaPath(m, aug.Argument)
+		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, aug.Argument, aug)
 		if target == nil || targetMod == nil {
 			m.recordSchemaError(fmt.Errorf("augment %q target not found at %s", aug.Argument, aug.Location()))
 			continue
@@ -208,7 +208,7 @@ func (m *moduleData) collectDeviations() {
 			continue
 		}
 		m.ctx.markImplemented(m)
-		targetMod, target := m.ctx.findNodeBySourceSchemaPath(m, dev.Argument)
+		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, dev.Argument, dev)
 		if targetMod == nil || target == nil {
 			m.recordSchemaError(fmt.Errorf("deviation %q target not found at %s", dev.Argument, dev.Location()))
 			continue

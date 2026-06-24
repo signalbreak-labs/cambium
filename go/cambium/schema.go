@@ -486,6 +486,7 @@ type ResolvedLeafRef struct {
 	requireInstance bool
 	path            string
 	sourceModule    *moduleData
+	sourceStmt      *yangparse.Statement
 }
 
 // Target returns the resolved target node and whether the leafref resolved.
@@ -1051,19 +1052,20 @@ type moduleData struct {
 	requested   bool
 	submodules  []*submoduleData
 
-	imports          []Import
-	importByPfx      map[string]*moduleData
-	typedefs         map[string]*yangparse.Statement
-	groupings        map[string]*yangparse.Statement
-	typedefDefOrder  []*yangparse.Statement
-	groupingDefOrder []*yangparse.Statement
-	typedefsByScope  map[*yangparse.Statement]map[string]*yangparse.Statement
-	groupingsByScope map[*yangparse.Statement]map[string]*yangparse.Statement
-	statementParents map[*yangparse.Statement]*yangparse.Statement
-	extDefs          map[string]*yangparse.Statement
-	extDefOrder      []*yangparse.Statement
-	features         []*featureData
-	featureMap       map[string]*featureData
+	imports           []Import
+	importByPfx       map[string]*moduleData
+	sourceImportByPfx map[*yangparse.Statement]map[string]*moduleData
+	typedefs          map[string]*yangparse.Statement
+	groupings         map[string]*yangparse.Statement
+	typedefDefOrder   []*yangparse.Statement
+	groupingDefOrder  []*yangparse.Statement
+	typedefsByScope   map[*yangparse.Statement]map[string]*yangparse.Statement
+	groupingsByScope  map[*yangparse.Statement]map[string]*yangparse.Statement
+	statementParents  map[*yangparse.Statement]*yangparse.Statement
+	extDefs           map[string]*yangparse.Statement
+	extDefOrder       []*yangparse.Statement
+	features          []*featureData
+	featureMap        map[string]*featureData
 
 	root        *schemaNodeData
 	top         []*schemaNodeData
@@ -1209,14 +1211,54 @@ func (m *moduleData) sourceTopStatements() []*yangparse.Statement {
 	return out
 }
 
-func (m *moduleData) sourceImports() []*yangparse.Statement {
-	var imports []*yangparse.Statement
-	for _, st := range m.sourceTopStatements() {
-		if st.Keyword == "import" {
-			imports = append(imports, st)
-		}
+type importScope struct {
+	root            *yangparse.Statement
+	label           string
+	localPrefix     string
+	localPrefixKind string
+	imports         []*yangparse.Statement
+}
+
+type importPrefixSeen struct {
+	name string
+	stmt *yangparse.Statement
+}
+
+func (m *moduleData) importScopes() []importScope {
+	if m == nil || m.stmt == nil {
+		return nil
 	}
-	return imports
+	out := []importScope{{
+		root:            m.stmt,
+		label:           "module " + strconv.Quote(m.name),
+		localPrefix:     m.prefix,
+		localPrefixKind: "module",
+		imports:         direct(m.stmt, "import"),
+	}}
+	for _, sub := range m.submodules {
+		if sub.stmt == nil {
+			continue
+		}
+		out = append(out, importScope{
+			root:            sub.stmt,
+			label:           "submodule " + strconv.Quote(sub.stmt.Argument),
+			localPrefix:     submoduleBelongsToPrefix(sub.stmt),
+			localPrefixKind: "belongs-to",
+			imports:         direct(sub.stmt, "import"),
+		})
+	}
+	return out
+}
+
+func submoduleBelongsToPrefix(st *yangparse.Statement) string {
+	if st == nil || st.Keyword != "submodule" {
+		return ""
+	}
+	belongs := first(st, "belongs-to")
+	if belongs == nil {
+		return ""
+	}
+	return childArg(belongs, "prefix")
 }
 
 func (m *moduleData) resetIR() {
@@ -1377,6 +1419,13 @@ func (m *moduleData) yangVersionForStatement(st *yangparse.Statement) string {
 	root := m.sourceRootForStatement(st)
 	if root == nil {
 		root = m.stmt
+	}
+	return sourceRootYangVersion(root)
+}
+
+func sourceRootYangVersion(root *yangparse.Statement) string {
+	if root == nil {
+		return "1"
 	}
 	version := childArg(root, "yang-version")
 	if version == "" {
@@ -2254,7 +2303,7 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 			m.recordSchemaError(err)
 			continue
 		}
-		target := findRelativeSchemaNode(m, children, strings.Split(refine.Argument, "/"))
+		target := findRelativeSchemaNode(m, children, strings.Split(refine.Argument, "/"), refine)
 		if target == nil {
 			m.recordSchemaError(fmt.Errorf("refine %q target not found at %s", refine.Argument, refine.Location()))
 			continue
@@ -2299,7 +2348,7 @@ func (m *moduleData) applyUsesWhen(uses *yangparse.Statement, roots []*schemaNod
 	propagateWhenToDataDescendants(roots, when.withSourceModule(m).withExcludedSubtrees(roots), 1)
 }
 
-func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []string) *schemaNodeData {
+func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []string, fromStmt *yangparse.Statement) *schemaNodeData {
 	if len(path) == 0 {
 		return nil
 	}
@@ -2312,7 +2361,7 @@ func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []
 		if source == nil {
 			return nil
 		}
-		wantModule = source.resolveSourceQNameModule(head)
+		wantModule = source.resolveSourceQNameModuleFrom(head, fromStmt)
 		if wantModule == nil {
 			return nil
 		}
@@ -2328,13 +2377,13 @@ func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []
 		if len(path) == 1 {
 			return root
 		}
-		return findRelativeSchemaNode(source, root.children, path[1:])
+		return findRelativeSchemaNode(source, root.children, path[1:], fromStmt)
 	}
 	return nil
 }
 
 func (m *moduleData) findGroupingFrom(qname string, from *yangparse.Statement) (*moduleData, *yangparse.Statement) {
-	mod := m.resolveSourceQNameModule(qname)
+	mod := m.resolveSourceQNameModuleFrom(qname, from)
 	if mod == nil {
 		return nil, nil
 	}
@@ -2945,7 +2994,7 @@ func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolv
 		idModule = source
 	}
 	if idModule != nil && !idModule.implemented {
-		if source.ctx != nil && source.ctx.refImplemented && source.implemented && source.resolveSourceQNameModule(value) == idModule {
+		if source.ctx != nil && source.ctx.refImplemented && source.implemented && source.resolveSourceQNameModuleFrom(value, n.stmt) == idModule {
 			source.ctx.markImplemented(idModule)
 		}
 		if !idModule.implemented {
@@ -3173,6 +3222,44 @@ func (m *moduleData) resolveSourceQNameModule(qname string) *moduleData {
 	return m.importByPfx[pfx]
 }
 
+func (m *moduleData) resolveSourceQNameModuleFrom(qname string, from *yangparse.Statement) *moduleData {
+	pfx, _, has := strings.Cut(qname, ":")
+	if !has {
+		return m
+	}
+	if from == nil {
+		return m.resolveSourceQNameModule(qname)
+	}
+	root := m.sourceRootForStatement(from)
+	if root == nil {
+		root = m.stmt
+	}
+	if pfx == m.sourceRootPrefix(root) {
+		return m
+	}
+	if imports := m.sourceImportByPfx[root]; imports != nil {
+		return imports[pfx]
+	}
+	return m.importByPfx[pfx]
+}
+
+func (m *moduleData) sourceRootPrefix(root *yangparse.Statement) string {
+	if root == nil {
+		return m.prefix
+	}
+	switch root.Keyword {
+	case "module":
+		if prefix := childArg(root, "prefix"); prefix != "" {
+			return prefix
+		}
+	case "submodule":
+		if prefix := submoduleBelongsToPrefix(root); prefix != "" {
+			return prefix
+		}
+	}
+	return m.prefix
+}
+
 func moduleMatchesQNamePrefix(mod *moduleData, qname string) bool {
 	pfx, _, has := strings.Cut(qname, ":")
 	if !has || mod == nil {
@@ -3189,12 +3276,12 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 	return pfx == mod.prefix
 }
 
-func (c *Context) findNodeBySourceSchemaPath(source *moduleData, path string) (*moduleData, *schemaNodeData) {
-	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true)
+func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData) {
+	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true, fromStmt)
 	return mod, node
 }
 
-func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool) (mod *moduleData, node *schemaNodeData, segment string, from *schemaNodeData) {
+func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool, fromStmt *yangparse.Statement) (mod *moduleData, node *schemaNodeData, segment string, from *schemaNodeData) {
 	parts := splitPath(path)
 	if len(parts) == 0 {
 		return nil, nil, path, nil
@@ -3202,7 +3289,7 @@ func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, st
 	first := pathStepQName(parts[0])
 	mod = source.resolveQNameModule(first)
 	if strictSource {
-		mod = source.resolveSourceQNameModule(first)
+		mod = source.resolveSourceQNameModuleFrom(first, fromStmt)
 	} else if mod == nil {
 		mod = c.moduleByPublicQName(first)
 	}
@@ -3226,7 +3313,7 @@ func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, st
 				if hasPrefix(qname) {
 					pm := source.resolveQNameModule(qname)
 					if strictSource {
-						pm = source.resolveSourceQNameModule(qname)
+						pm = source.resolveSourceQNameModuleFrom(qname, fromStmt)
 					}
 					if pm == nil {
 						matches := moduleMatchesQNamePrefix(child.module, qname)
@@ -3543,7 +3630,7 @@ func (m Module) FindPath(path string) (SchemaNodeRef, error) {
 			From:    schemaNodeDataPath(m.mod.root),
 		})
 	}
-	_, n, segment, from := m.mod.ctx.findNodeBySchemaPathDetail(m.mod, path, false)
+	_, n, segment, from := m.mod.ctx.findNodeBySchemaPathDetail(m.mod, path, false, nil)
 	if n == nil {
 		return SchemaNodeRef{}, wrap("schema tree", &SchemaPathError{
 			Kind:    SchemaPathErrorNotFound,
@@ -5196,7 +5283,7 @@ func requireInstanceOverride(st *yangparse.Statement) (value, present bool, err 
 	return value, true, nil
 }
 
-func findRelativeSchemaPathWithSeen(start *schemaNodeData, source *moduleData, path string, seen map[*schemaNodeData]bool) *schemaNodeData {
+func findRelativeSchemaPathWithSeen(start *schemaNodeData, source *moduleData, path string, fromStmt *yangparse.Statement, seen map[*schemaNodeData]bool) *schemaNodeData {
 	if start == nil || source == nil {
 		return nil
 	}
@@ -5214,7 +5301,7 @@ func findRelativeSchemaPathWithSeen(start *schemaNodeData, source *moduleData, p
 			continue
 		}
 		if arg, ok := derefArgument(part); ok {
-			refNode := findRelativeSchemaPathWithSeen(cur, source, arg, seen)
+			refNode := findRelativeSchemaPathWithSeen(cur, source, arg, fromStmt, seen)
 			target := leafRefTargetNode(refNode, seen)
 			if target == nil {
 				return nil
@@ -5226,7 +5313,7 @@ func findRelativeSchemaPathWithSeen(start *schemaNodeData, source *moduleData, p
 		name := localName(qname)
 		var wantModule *moduleData
 		if hasPrefix(qname) {
-			wantModule = source.resolveSourceQNameModule(qname)
+			wantModule = source.resolveSourceQNameModuleFrom(qname, fromStmt)
 			if wantModule == nil {
 				return nil
 			}
@@ -5281,7 +5368,7 @@ func leafRefTargetNode(n *schemaNodeData, seen map[*schemaNodeData]bool) *schema
 }
 
 func (m *moduleData) identityForQNameFrom(qname string, from *yangparse.Statement) *identityData {
-	mod := m.resolveSourceQNameModule(qname)
+	mod := m.resolveSourceQNameModuleFrom(qname, from)
 	if mod == nil {
 		return nil
 	}
@@ -5336,8 +5423,13 @@ func identityDerivedFromAny(id *identityData, bases []Identity, seen map[*identi
 	if source == nil {
 		return false
 	}
-	for _, baseName := range id.baseNames {
-		baseMod := source.resolveSourceQNameModule(baseName)
+	baseStmts := direct(id.stmt, "base")
+	for i, baseName := range id.baseNames {
+		var baseStmt *yangparse.Statement
+		if i < len(baseStmts) {
+			baseStmt = baseStmts[i]
+		}
+		baseMod := source.resolveSourceQNameModuleFrom(baseName, baseStmt)
 		if baseMod == nil {
 			continue
 		}
@@ -6050,7 +6142,7 @@ func (m *moduleData) extensionInstance(child *yangparse.Statement, recordError b
 	if !ok {
 		return Extension{}, false
 	}
-	mod := m.extensionModuleForPrefix(pfx)
+	mod := m.extensionModuleForPrefixFrom(pfx, child)
 	var def *yangparse.Statement
 	if mod != nil {
 		def = mod.extDefs[local]
@@ -6085,7 +6177,7 @@ func (m *moduleData) validateExtensionInstances() error {
 			if !ok {
 				return
 			}
-			mod := m.extensionModuleForPrefix(pfx)
+			mod := m.extensionModuleForPrefixFrom(pfx, st)
 			def := (*yangparse.Statement)(nil)
 			if mod != nil {
 				def = mod.extDefs[local]
@@ -6123,11 +6215,8 @@ func validateExtensionInstanceArgument(instance, def *yangparse.Statement) error
 	}
 }
 
-func (m *moduleData) extensionModuleForPrefix(prefix string) *moduleData {
-	if prefix == m.prefix {
-		return m
-	}
-	return m.importByPfx[prefix]
+func (m *moduleData) extensionModuleForPrefixFrom(prefix string, from *yangparse.Statement) *moduleData {
+	return m.resolveSourceQNameModuleFrom(prefix+":_", from)
 }
 
 func mustFromValidated(st *yangparse.Statement) (MustConstraint, error) {
@@ -6449,7 +6538,7 @@ func (m *moduleData) validateFeatureRefSeen(qname string, from *yangparse.Statem
 	if m == nil {
 		return false
 	}
-	mod := m.resolveSourceQNameModule(qname)
+	mod := m.resolveSourceQNameModuleFrom(qname, from)
 	if mod == nil {
 		return false
 	}
@@ -6484,7 +6573,7 @@ func (m *moduleData) featureEnabledSeen(qname string, from *yangparse.Statement,
 	if m == nil || m.ctx == nil {
 		return false, false
 	}
-	mod := m.resolveSourceQNameModule(qname)
+	mod := m.resolveSourceQNameModuleFrom(qname, from)
 	if mod == nil {
 		return false, false
 	}
@@ -6628,7 +6717,7 @@ func (m *moduleData) validateLeafRefPathPrefixes(pathStmt *yangparse.Statement) 
 	}
 	path := pathStmt.Argument
 	for _, prefix := range referencedPrefixes(path) {
-		if m.resolveSourceQNameModule(prefix+":_") == nil {
+		if m.resolveSourceQNameModuleFrom(prefix+":_", pathStmt) == nil {
 			return fmt.Errorf("unknown prefix %q in leafref path %q at %s", prefix, path, pathStmt.Location())
 		}
 	}

@@ -15,7 +15,7 @@ func (m *moduleData) validateXPathExpressionPrefixes(kind string, st *yangparse.
 		return nil
 	}
 	for _, prefix := range referencedPrefixes(st.Argument) {
-		if m.resolveSourceQNameModule(prefix+":_") == nil {
+		if m.resolveSourceQNameModuleFrom(prefix+":_", st) == nil {
 			return fmt.Errorf("unknown prefix %q in %s expression %q at %s", prefix, kind, st.Argument, st.Location())
 		}
 	}

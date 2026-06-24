@@ -255,17 +255,18 @@ type contextSnapshot struct {
 }
 
 type moduleDataSnapshot struct {
-	mod         *moduleData
-	namespace   string
-	prefix      string
-	revision    string
-	file        string
-	stmt        *yangparse.Statement
-	implemented bool
-	submodules  []*submoduleData
-	imports     []Import
-	importByPfx map[string]*moduleData
-	requested   bool
+	mod               *moduleData
+	namespace         string
+	prefix            string
+	revision          string
+	file              string
+	stmt              *yangparse.Statement
+	implemented       bool
+	submodules        []*submoduleData
+	imports           []Import
+	importByPfx       map[string]*moduleData
+	sourceImportByPfx map[*yangparse.Statement]map[string]*moduleData
+	requested         bool
 }
 
 // NewContext creates an empty pure-Go schema context.
@@ -318,17 +319,18 @@ func (c *Context) snapshot() contextSnapshot {
 			continue
 		}
 		snap.modulesState = append(snap.modulesState, moduleDataSnapshot{
-			mod:         mod,
-			namespace:   mod.namespace,
-			prefix:      mod.prefix,
-			revision:    mod.revision,
-			file:        mod.file,
-			stmt:        mod.stmt,
-			implemented: mod.implemented,
-			submodules:  append([]*submoduleData(nil), mod.submodules...),
-			imports:     append([]Import(nil), mod.imports...),
-			importByPfx: cloneModuleMap(mod.importByPfx),
-			requested:   mod.requested,
+			mod:               mod,
+			namespace:         mod.namespace,
+			prefix:            mod.prefix,
+			revision:          mod.revision,
+			file:              mod.file,
+			stmt:              mod.stmt,
+			implemented:       mod.implemented,
+			submodules:        append([]*submoduleData(nil), mod.submodules...),
+			imports:           append([]Import(nil), mod.imports...),
+			importByPfx:       cloneModuleMap(mod.importByPfx),
+			sourceImportByPfx: cloneSourceImportMap(mod.sourceImportByPfx),
+			requested:         mod.requested,
 		})
 	}
 	return snap
@@ -357,6 +359,7 @@ func (c *Context) restore(snap contextSnapshot) {
 		mod.submodules = state.submodules
 		mod.imports = state.imports
 		mod.importByPfx = state.importByPfx
+		mod.sourceImportByPfx = state.sourceImportByPfx
 		mod.requested = state.requested
 	}
 }
@@ -368,6 +371,17 @@ func cloneModuleMap(in map[string]*moduleData) map[string]*moduleData {
 	out := make(map[string]*moduleData, len(in))
 	for key, value := range in {
 		out[key] = value
+	}
+	return out
+}
+
+func cloneSourceImportMap(in map[*yangparse.Statement]map[string]*moduleData) map[*yangparse.Statement]map[string]*moduleData {
+	if in == nil {
+		return nil
+	}
+	out := make(map[*yangparse.Statement]map[string]*moduleData, len(in))
+	for source, imports := range in {
+		out[source] = cloneModuleMap(imports)
 	}
 	return out
 }
@@ -883,11 +897,12 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	mod := c.modulesByKey[key]
 	if mod == nil {
 		mod = &moduleData{
-			ctx:         c,
-			name:        name,
-			file:        sourceName,
-			stmt:        stmt,
-			importByPfx: make(map[string]*moduleData),
+			ctx:               c,
+			name:              name,
+			file:              sourceName,
+			stmt:              stmt,
+			importByPfx:       make(map[string]*moduleData),
+			sourceImportByPfx: make(map[*yangparse.Statement]map[string]*moduleData),
 		}
 		c.modulesByKey[key] = mod
 		c.loadOrder = append(c.loadOrder, mod)
@@ -1239,9 +1254,10 @@ func (c *Context) loadSubmodule(path string, stmt *yangparse.Statement, parent *
 	}
 	if parent == nil {
 		parent = &moduleData{
-			ctx:         c,
-			name:        info.parentName,
-			importByPfx: make(map[string]*moduleData),
+			ctx:               c,
+			name:              info.parentName,
+			importByPfx:       make(map[string]*moduleData),
+			sourceImportByPfx: make(map[*yangparse.Statement]map[string]*moduleData),
 		}
 		c.modules[info.parentName] = parent
 		c.modulesByKey[moduleKey(info.parentName, "")] = parent
@@ -1409,81 +1425,90 @@ func (c *Context) loadIncludedSubmodulePath(path string, parent *moduleData) err
 
 func (c *Context) loadImports(mod *moduleData) error {
 	mod.imports = mod.imports[:0]
-	seenPrefixes := make(map[string]string)
-	for _, impStmt := range mod.sourceImports() {
-		allowXMLPrefix := mod.yangVersionForStatement(impStmt) == "1.1"
-		if err := validateYangIdentifierArg("import", impStmt.Argument, impStmt, allowXMLPrefix); err != nil {
-			return err
-		}
-		if err := validateDependencyStatementChildren(impStmt); err != nil {
-			return err
-		}
-		prefixStmt, err := singletonChild(impStmt, "prefix")
-		if err != nil {
-			return err
-		}
-		pfx := ""
-		if prefixStmt != nil {
-			pfx = prefixStmt.Argument
-		}
-		if pfx == "" {
-			return fmt.Errorf("import %q in module %q has no prefix", impStmt.Argument, mod.name)
-		}
-		if err := validateYangIdentifierArg("prefix", pfx, prefixStmt, allowXMLPrefix); err != nil {
-			return err
-		}
-		if pfx == mod.prefix {
-			return fmt.Errorf("import prefix %q in module %q collides with module prefix", pfx, mod.name)
-		}
-		if pfx == mod.name {
-			return fmt.Errorf("import prefix %q in module %q collides with module name", pfx, mod.name)
-		}
-		if prev := seenPrefixes[pfx]; prev != "" {
-			return fmt.Errorf("duplicate import prefix %q in module %q for imports %q and %q", pfx, mod.name, prev, impStmt.Argument)
-		}
-		seenPrefixes[pfx] = impStmt.Argument
-		targetRevision, err := statementRevisionDate(impStmt)
-		if err != nil {
-			return err
-		}
-		if impStmt.Argument == mod.name {
-			return fmt.Errorf("module %q imports itself at %s", mod.name, impStmt.Location())
-		}
-		mod.imports = append(mod.imports, Import{
-			Prefix:      pfx,
-			Name:        impStmt.Argument,
-			Revision:    targetRevision,
-			description: childArg(impStmt, "description"),
-			reference:   childArg(impStmt, "reference"),
-		})
-		targetName := impStmt.Argument
-		target := c.modulesByKey[moduleKey(targetName, targetRevision)]
-		if target == nil && targetRevision == "" {
-			target = c.modules[targetName]
-		}
-		if target == nil || target.stmt == nil || targetRevision != "" && target.revision != targetRevision {
-			path, err := c.findModulePathRevision(targetName, targetRevision)
+	mod.importByPfx = make(map[string]*moduleData)
+	mod.sourceImportByPfx = make(map[*yangparse.Statement]map[string]*moduleData)
+	for _, scope := range mod.importScopes() {
+		seenPrefixes := make(map[string]importPrefixSeen)
+		scopeImports := make(map[string]*moduleData)
+		mod.sourceImportByPfx[scope.root] = scopeImports
+		for _, impStmt := range scope.imports {
+			allowXMLPrefix := sourceRootYangVersion(scope.root) == "1.1"
+			if err := validateYangIdentifierArg("import", impStmt.Argument, impStmt, allowXMLPrefix); err != nil {
+				return err
+			}
+			if err := validateDependencyStatementChildren(impStmt); err != nil {
+				return err
+			}
+			prefixStmt, err := singletonChild(impStmt, "prefix")
 			if err != nil {
 				return err
 			}
-			ok, err := moduleFileDeclaresModule(path, targetName)
+			pfx := ""
+			if prefixStmt != nil {
+				pfx = prefixStmt.Argument
+			}
+			if pfx == "" {
+				return fmt.Errorf("import %q in %s has no prefix", impStmt.Argument, scope.label)
+			}
+			if err := validateYangIdentifierArg("prefix", pfx, prefixStmt, allowXMLPrefix); err != nil {
+				return err
+			}
+			if pfx == scope.localPrefix {
+				return fmt.Errorf("import prefix %q in %s collides with %s prefix", pfx, scope.label, scope.localPrefixKind)
+			}
+			if pfx == mod.name {
+				return fmt.Errorf("import prefix %q in %s collides with module name", pfx, scope.label)
+			}
+			if prev := seenPrefixes[pfx]; prev.name != "" {
+				return fmt.Errorf("duplicate import prefix %q in %s for imports %q at %s and %q at %s", pfx, scope.label, prev.name, prev.stmt.Location(), impStmt.Argument, impStmt.Location())
+			}
+			seenPrefixes[pfx] = importPrefixSeen{name: impStmt.Argument, stmt: impStmt}
+			targetRevision, err := statementRevisionDate(impStmt)
 			if err != nil {
 				return err
 			}
-			if !ok {
-				return fmt.Errorf("YANG file %q does not declare module %q", path, targetName)
+			if impStmt.Argument == mod.name {
+				return fmt.Errorf("module %q imports itself at %s", mod.name, impStmt.Location())
 			}
-			var loadErr error
-			target, loadErr = c.loadModulePath(path, c.allImplemented, false)
-			if loadErr != nil {
-				return loadErr
+			mod.imports = append(mod.imports, Import{
+				Prefix:      pfx,
+				Name:        impStmt.Argument,
+				Revision:    targetRevision,
+				description: childArg(impStmt, "description"),
+				reference:   childArg(impStmt, "reference"),
+			})
+			targetName := impStmt.Argument
+			target := c.modulesByKey[moduleKey(targetName, targetRevision)]
+			if target == nil && targetRevision == "" {
+				target = c.modules[targetName]
+			}
+			if target == nil || target.stmt == nil || targetRevision != "" && target.revision != targetRevision {
+				path, err := c.findModulePathRevision(targetName, targetRevision)
+				if err != nil {
+					return err
+				}
+				ok, err := moduleFileDeclaresModule(path, targetName)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return fmt.Errorf("YANG file %q does not declare module %q", path, targetName)
+				}
+				var loadErr error
+				target, loadErr = c.loadModulePath(path, c.allImplemented, false)
+				if loadErr != nil {
+					return loadErr
+				}
+			}
+			if c.allImplemented && target != nil && !target.implemented {
+				c.markImplemented(target)
+				c.dirty = true
+			}
+			scopeImports[pfx] = target
+			if _, ok := mod.importByPfx[pfx]; !ok {
+				mod.importByPfx[pfx] = target
 			}
 		}
-		if c.allImplemented && target != nil && !target.implemented {
-			c.markImplemented(target)
-			c.dirty = true
-		}
-		mod.importByPfx[pfx] = target
 	}
 	return nil
 }

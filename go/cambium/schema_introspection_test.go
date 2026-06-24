@@ -6555,6 +6555,426 @@ func TestInvalidImportPrefixesReturnContextRuleCode(t *testing.T) {
 	})
 }
 
+func TestSubmoduleImportPrefixesAreLexicallyScoped(t *testing.T) {
+	t.Run("parent and submodule may reuse same import prefix", func(t *testing.T) {
+		dir := schemaIntrospectionModuleDir(t)
+		writeModuleFile(t, filepath.Join(dir, "cisco-semver.yang"), []byte(`module cisco-semver {
+    namespace "urn:cisco:semver";
+    prefix semver;
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-cisco-parent.yang"), []byte(`module cambium-import-scope-cisco-parent {
+    namespace "urn:cambium:import-scope-cisco-parent";
+    prefix ciscop;
+    import cisco-semver { prefix semver; }
+    include cambium-import-scope-cisco-part;
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-cisco-part.yang"), []byte(`submodule cambium-import-scope-cisco-part {
+    belongs-to cambium-import-scope-cisco-parent {
+        prefix ciscop;
+    }
+    import cisco-semver { prefix semver; }
+    leaf from-part { type string; }
+}`))
+		ctx, err := cambium.NewContext()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Close()
+		if err := ctx.SetSearchPath(dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctx.LoadModule("cambium-import-scope-cisco-parent"); err != nil {
+			t.Fatalf("LoadModule: %v", err)
+		}
+		if _, err := ctx.Schema("cambium-import-scope-cisco-parent"); err != nil {
+			t.Fatalf("Schema: %v", err)
+		}
+	})
+
+	t.Run("duplicate prefix inside one submodule is rejected", func(t *testing.T) {
+		dir := schemaIntrospectionModuleDir(t)
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-dup-a.yang"), []byte(`module cambium-import-scope-dup-a {
+    namespace "urn:cambium:import-scope-dup-a";
+    prefix cisda;
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-dup-b.yang"), []byte(`module cambium-import-scope-dup-b {
+    namespace "urn:cambium:import-scope-dup-b";
+    prefix cisdb;
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-dup-parent.yang"), []byte(`module cambium-import-scope-dup-parent {
+    namespace "urn:cambium:import-scope-dup-parent";
+    prefix cisdp;
+    include cambium-import-scope-dup-part;
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-dup-part.yang"), []byte(`submodule cambium-import-scope-dup-part {
+    belongs-to cambium-import-scope-dup-parent {
+        prefix cisdp;
+    }
+    import cambium-import-scope-dup-a { prefix dup; }
+    import cambium-import-scope-dup-b { prefix dup; }
+}`))
+		ctx, err := cambium.NewContext()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Close()
+		if err := ctx.SetSearchPath(dir); err != nil {
+			t.Fatal(err)
+		}
+		err = ctx.LoadModule("cambium-import-scope-dup-parent")
+		if err == nil {
+			t.Fatal("LoadModule accepted duplicate import prefix inside one submodule")
+		}
+		var ce *cambium.Error
+		if !errors.As(err, &ce) || ce.RuleCode() != cambium.RuleCodeContext {
+			t.Fatalf("LoadModule error = %v, want RuleCodeContext", err)
+		}
+		if !strings.Contains(err.Error(), `duplicate import prefix "dup" in submodule "cambium-import-scope-dup-part"`) {
+			t.Fatalf("LoadModule error = %q, want submodule duplicate-prefix message", err.Error())
+		}
+	})
+
+	t.Run("submodule prefix shadows parent import for local type references", func(t *testing.T) {
+		dir := schemaIntrospectionModuleDir(t)
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-a.yang"), []byte(`module cambium-import-scope-a {
+    namespace "urn:cambium:import-scope-a";
+    prefix cisa;
+    typedef selected {
+        type string;
+    }
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-b.yang"), []byte(`module cambium-import-scope-b {
+    namespace "urn:cambium:import-scope-b";
+    prefix cisb;
+    typedef selected {
+        type uint32;
+    }
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-shadow-parent.yang"), []byte(`module cambium-import-scope-shadow-parent {
+    namespace "urn:cambium:import-scope-shadow-parent";
+    prefix cissp;
+    import cambium-import-scope-a { prefix p; }
+    include cambium-import-scope-shadow-part;
+
+    leaf parent-selected {
+        type p:selected;
+    }
+}`))
+		writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-shadow-part.yang"), []byte(`submodule cambium-import-scope-shadow-part {
+    belongs-to cambium-import-scope-shadow-parent {
+        prefix cissp;
+    }
+    import cambium-import-scope-b { prefix p; }
+
+    leaf submodule-selected {
+        type p:selected;
+    }
+}`))
+		ctx, err := cambium.NewContext()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ctx.Close()
+		if err := ctx.SetSearchPath(dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := ctx.LoadModule("cambium-import-scope-shadow-parent"); err != nil {
+			t.Fatalf("LoadModule: %v", err)
+		}
+		mod, err := ctx.Schema("cambium-import-scope-shadow-parent")
+		if err != nil {
+			t.Fatalf("Schema: %v", err)
+		}
+		parent := schemaNodeAt(t, mod, "/cissp:parent-selected")
+		parentType, ok := parent.LeafType()
+		if !ok {
+			t.Fatal("parent-selected should have a leaf type")
+		}
+		if got, want := parentType.Base(), cambium.BaseTypeString; got != want {
+			t.Fatalf("parent-selected base = %s, want %s", got, want)
+		}
+		submodule := schemaNodeAt(t, mod, "/cissp:submodule-selected")
+		submoduleType, ok := submodule.LeafType()
+		if !ok {
+			t.Fatal("submodule-selected should have a leaf type")
+		}
+		if got, want := submoduleType.Base(), cambium.BaseTypeUint32; got != want {
+			t.Fatalf("submodule-selected base = %s, want %s", got, want)
+		}
+	})
+}
+
+func TestSubmoduleLexicalPrefixScopeAppliesToSchemaReferences(t *testing.T) {
+	dir := schemaIntrospectionModuleDir(t)
+	writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-reference-a.yang"), []byte(`module cambium-import-scope-reference-a {
+    yang-version 1.1;
+    namespace "urn:cambium:import-scope-reference-a";
+    prefix cisra;
+
+    feature gate;
+    extension marker;
+    typedef selected {
+        type string;
+    }
+    identity base;
+    container top {
+        leaf value {
+            type string;
+        }
+    }
+}`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-reference-b.yang"), []byte(`module cambium-import-scope-reference-b {
+    yang-version 1.1;
+    namespace "urn:cambium:import-scope-reference-b";
+    prefix cisrb;
+
+    feature gate;
+    extension marker {
+        argument label;
+    }
+    typedef selected {
+        type uint32;
+    }
+    identity base;
+    container top {
+        leaf value {
+            type uint32;
+        }
+    }
+}`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-reference-parent.yang"), []byte(`module cambium-import-scope-reference-parent {
+    yang-version 1.1;
+    namespace "urn:cambium:import-scope-reference-parent";
+    prefix cisrp;
+
+    import cambium-import-scope-reference-a { prefix p; }
+    include cambium-import-scope-reference-part;
+
+    p:marker;
+
+    identity parent-derived {
+        base p:base;
+    }
+
+    leaf parent-gated {
+        if-feature p:gate;
+        type string;
+    }
+    leaf parent-selected {
+        type p:selected;
+    }
+    leaf parent-idref {
+        type identityref {
+            base p:base;
+        }
+    }
+}`))
+	writeModuleFile(t, filepath.Join(dir, "cambium-import-scope-reference-part.yang"), []byte(`submodule cambium-import-scope-reference-part {
+    yang-version 1.1;
+    belongs-to cambium-import-scope-reference-parent {
+        prefix cisrp;
+    }
+
+    import cambium-import-scope-reference-b { prefix p; }
+    import cambium-import-scope-reference-b { prefix q; }
+
+    p:marker "submodule";
+
+    identity submodule-derived {
+        base p:base;
+    }
+
+    leaf submodule-gated {
+        if-feature p:gate;
+        type string;
+    }
+    leaf submodule-selected {
+        type p:selected;
+    }
+    leaf submodule-idref {
+        type identityref {
+            base p:base;
+        }
+    }
+    leaf submodule-leafref {
+        type leafref {
+            path "/p:top/p:value";
+            require-instance false;
+        }
+    }
+    leaf submodule-must {
+        must "../q:top or not(../q:top)";
+        type string;
+    }
+    container submodule-when {
+        when "/q:top";
+        leaf value {
+            type string;
+        }
+    }
+    augment "/p:top" {
+        leaf augmented-from-submodule {
+            type string;
+        }
+    }
+    deviation "/p:top/p:value" {
+        deviate replace {
+            config false;
+        }
+    }
+}`))
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.SetFeatures("cambium-import-scope-reference-b", []string{"gate"}); err != nil {
+		t.Fatalf("SetFeatures: %v", err)
+	}
+	if err := ctx.LoadModule("cambium-import-scope-reference-parent"); err != nil {
+		t.Fatalf("LoadModule: %v", err)
+	}
+
+	parentMod, err := ctx.Schema("cambium-import-scope-reference-parent")
+	if err != nil {
+		t.Fatalf("Schema parent: %v", err)
+	}
+	aMod, err := ctx.Schema("cambium-import-scope-reference-a")
+	if err != nil {
+		t.Fatalf("Schema A: %v", err)
+	}
+	bMod, err := ctx.Schema("cambium-import-scope-reference-b")
+	if err != nil {
+		t.Fatalf("Schema B: %v", err)
+	}
+
+	assertLeafBase := func(path string, want cambium.BaseType) {
+		t.Helper()
+		node := schemaNodeAt(t, parentMod, path)
+		info, ok := node.LeafType()
+		if !ok {
+			t.Fatalf("%s should have a leaf type", path)
+		}
+		if got := info.Base(); got != want {
+			t.Fatalf("%s base = %s, want %s", path, got, want)
+		}
+	}
+	assertLeafBase("/cisrp:parent-selected", cambium.BaseTypeString)
+	assertLeafBase("/cisrp:submodule-selected", cambium.BaseTypeUint32)
+
+	if _, err := parentMod.FindPath("/cisrp:parent-gated"); err == nil {
+		t.Fatal("parent-gated should be excluded because parent p:gate resolves to disabled module A feature")
+	}
+	if _, err := parentMod.FindPath("/cisrp:submodule-gated"); err != nil {
+		t.Fatalf("submodule-gated should be included because submodule p:gate resolves to enabled module B feature: %v", err)
+	}
+
+	identityBaseModule := func(name string) string {
+		t.Helper()
+		for id := range parentMod.Identities() {
+			if id.Name() != name {
+				continue
+			}
+			bases := id.Bases()
+			if len(bases) != 1 {
+				t.Fatalf("%s bases = %d, want 1", name, len(bases))
+			}
+			return bases[0].Module().Name()
+		}
+		t.Fatalf("identity %s not found", name)
+		return ""
+	}
+	if got, want := identityBaseModule("parent-derived"), "cambium-import-scope-reference-a"; got != want {
+		t.Fatalf("parent-derived base module = %q, want %q", got, want)
+	}
+	if got, want := identityBaseModule("submodule-derived"), "cambium-import-scope-reference-b"; got != want {
+		t.Fatalf("submodule-derived base module = %q, want %q", got, want)
+	}
+
+	assertIdentityRefBase := func(path, want string) {
+		t.Helper()
+		node := schemaNodeAt(t, parentMod, path)
+		info, ok := node.LeafType()
+		if !ok {
+			t.Fatalf("%s should have a leaf type", path)
+		}
+		idref, ok := info.Resolved().(cambium.ResolvedIdentityRef)
+		if !ok {
+			t.Fatalf("%s resolved type = %T, want ResolvedIdentityRef", path, info.Resolved())
+		}
+		bases := idref.Bases()
+		if len(bases) != 1 {
+			t.Fatalf("%s identityref bases = %d, want 1", path, len(bases))
+		}
+		if got := bases[0].Module().Name(); got != want {
+			t.Fatalf("%s identityref base module = %q, want %q", path, got, want)
+		}
+	}
+	assertIdentityRefBase("/cisrp:parent-idref", "cambium-import-scope-reference-a")
+	assertIdentityRefBase("/cisrp:submodule-idref", "cambium-import-scope-reference-b")
+
+	leafrefNode := schemaNodeAt(t, parentMod, "/cisrp:submodule-leafref")
+	leafrefInfo, ok := leafrefNode.LeafType()
+	if !ok {
+		t.Fatal("submodule-leafref should have a leaf type")
+	}
+	leafref, ok := leafrefInfo.Resolved().(cambium.ResolvedLeafRef)
+	if !ok {
+		t.Fatalf("submodule-leafref resolved type = %T, want ResolvedLeafRef", leafrefInfo.Resolved())
+	}
+	target, ok := leafref.Target()
+	if !ok {
+		t.Fatal("submodule-leafref target was not resolved")
+	}
+	if got, want := target.Module().Name(), "cambium-import-scope-reference-b"; got != want {
+		t.Fatalf("submodule-leafref target module = %q, want %q", got, want)
+	}
+
+	if musts := schemaNodeAt(t, parentMod, "/cisrp:submodule-must").Musts(); len(musts) != 1 {
+		t.Fatalf("submodule-must musts = %d, want 1", len(musts))
+	}
+	if whens := schemaNodeAt(t, parentMod, "/cisrp:submodule-when").Whens(); len(whens) != 1 {
+		t.Fatalf("submodule-when whens = %d, want 1", len(whens))
+	}
+
+	exts := parentMod.Extensions()
+	extByModule := make(map[string]int)
+	for _, ext := range exts {
+		if ext.Name() == "marker" {
+			extByModule[ext.ModuleName()]++
+		}
+	}
+	if got := extByModule["cambium-import-scope-reference-a"]; got != 1 {
+		t.Fatalf("module A top-level marker extensions = %d, want 1 (all: %#v)", got, exts)
+	}
+	if got := extByModule["cambium-import-scope-reference-b"]; got != 1 {
+		t.Fatalf("module B top-level marker extensions = %d, want 1 (all: %#v)", got, exts)
+	}
+
+	if _, err := aMod.FindPath("/cisra:top/cisrp:augmented-from-submodule"); err == nil {
+		t.Fatal("augment from submodule should not land on module A")
+	}
+	augmented, err := bMod.FindPath("/cisrb:top/cisrp:augmented-from-submodule")
+	if err != nil {
+		t.Fatalf("augment from submodule should land on module B: %v", err)
+	}
+	if got, want := augmented.Module().Name(), "cambium-import-scope-reference-parent"; got != want {
+		t.Fatalf("augmented child module = %q, want %q", got, want)
+	}
+	aValue := schemaNodeAt(t, aMod, "/cisra:top/cisra:value")
+	if got, want := aValue.Config(), cambium.ConfigRw; got != want {
+		t.Fatalf("module A value Config() = %v, want %v", got, want)
+	}
+	bValue := schemaNodeAt(t, bMod, "/cisrb:top/cisrb:value")
+	if got, want := bValue.Config(), cambium.ConfigRo; got != want {
+		t.Fatalf("module B value Config() = %v, want %v", got, want)
+	}
+}
+
 func TestImportNonTransitiveRuleCode(t *testing.T) {
 	dir := filepath.Join(conformanceRoot(t), "fixtures", "linkage-import-non-transitive", "module")
 
