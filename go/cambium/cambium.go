@@ -9,6 +9,7 @@
 package cambium
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -973,7 +974,7 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 		c.modulesByKey[key] = mod
 		c.loadOrder = append(c.loadOrder, mod)
 	} else {
-		if mod.stmt != nil && duplicateModuleSource(mod.file, sourceName) {
+		if mod.stmt != nil && !equivalentModuleSource(mod.file, sourceName) {
 			return nil, duplicateModuleIdentityError(name, revision)
 		}
 		mod.file = sourceName
@@ -998,14 +999,42 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	return mod, nil
 }
 
-func duplicateModuleSource(existing, current string) bool {
+func equivalentModuleSource(existing, current string) bool {
 	if existing == "" || current == "" {
-		return true
+		return false
 	}
 	if existing == memoryModuleSource || current == memoryModuleSource {
+		return false
+	}
+	if existing == current {
 		return true
 	}
-	return existing != current
+	if sameResolvedSourcePath(existing, current) {
+		return true
+	}
+	return sameSourceContent(existing, current)
+}
+
+func sameResolvedSourcePath(a, b string) bool {
+	aAbs, aErr := filepath.Abs(a)
+	bAbs, bErr := filepath.Abs(b)
+	if aErr != nil || bErr != nil {
+		return false
+	}
+	aReal, aErr := filepath.EvalSymlinks(aAbs)
+	bReal, bErr := filepath.EvalSymlinks(bAbs)
+	if aErr == nil && bErr == nil && aReal == bReal {
+		return true
+	}
+	aInfo, aErr := os.Stat(aAbs)
+	bInfo, bErr := os.Stat(bAbs)
+	return aErr == nil && bErr == nil && os.SameFile(aInfo, bInfo)
+}
+
+func sameSourceContent(a, b string) bool {
+	aRaw, aErr := os.ReadFile(a)
+	bRaw, bErr := os.ReadFile(b)
+	return aErr == nil && bErr == nil && bytes.Equal(aRaw, bRaw)
 }
 
 func duplicateModuleIdentityError(name, revision string) error {

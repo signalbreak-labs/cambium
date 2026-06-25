@@ -4,6 +4,7 @@
 package cambium_test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -226,6 +227,112 @@ func TestVendorYANGVendorCompatibleExplicitTransitiveLoadIsIdempotent(t *testing
 	report := ctx.LoadReport()
 	if len(report.RequestedModules) != 2 {
 		t.Fatalf("requested modules = %d, want 2 (%#v)", len(report.RequestedModules), report.RequestedModules)
+	}
+}
+
+func TestVendorYANGEquivalentBareSymlinkAndRevisionedLoadIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	shared := `module shared-types {
+    namespace "urn:test:shared-types";
+    prefix st;
+
+    revision 2024-01-01;
+
+    typedef name {
+        type string;
+    }
+}`
+	user := `module imports-shared {
+    namespace "urn:test:imports-shared";
+    prefix is;
+
+    import shared-types {
+        prefix st;
+    }
+
+    revision 2024-01-02;
+
+    leaf name {
+        type st:name;
+    }
+}`
+	sharedRevisionedPath := filepath.Join(dir, "shared-types@2024-01-01.yang")
+	writeModuleFile(t, sharedRevisionedPath, []byte(shared))
+	writeModuleFile(t, filepath.Join(dir, "imports-shared@2024-01-02.yang"), []byte(user))
+	if err := os.Symlink("shared-types@2024-01-01.yang", filepath.Join(dir, "shared-types.yang")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{AllImplemented: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatalf("SetValidationMode: %v", err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatalf("SearchPath: %v", err)
+	}
+	if err := builder.LoadModuleFromPath(filepath.Join(dir, "imports-shared@2024-01-02.yang")); err != nil {
+		t.Fatalf("LoadModuleFromPath imports-shared: %v", err)
+	}
+	if err := builder.LoadModuleFromPath(sharedRevisionedPath); err != nil {
+		t.Fatalf("LoadModuleFromPath shared-types: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	t.Cleanup(func() { ctx.Close() })
+
+	if !moduleRequested(ctx.LoadReport().RequestedModules, "shared-types") {
+		t.Fatalf("requested modules = %#v, want shared-types requested", ctx.LoadReport().RequestedModules)
+	}
+}
+
+func TestVendorYANGConflictingSameRevisionSourcesStillFail(t *testing.T) {
+	dir := t.TempDir()
+	first := `module conflicting-source {
+    namespace "urn:test:conflicting-source";
+    prefix cs;
+
+    revision 2024-01-01;
+
+    leaf first {
+        type string;
+    }
+}`
+	second := `module conflicting-source {
+    namespace "urn:test:conflicting-source";
+    prefix cs;
+
+    revision 2024-01-01;
+
+    leaf second {
+        type string;
+    }
+}`
+	firstPath := filepath.Join(dir, "conflicting-source.yang")
+	secondPath := filepath.Join(dir, "conflicting-source@2024-01-01.yang")
+	writeModuleFile(t, firstPath, []byte(first))
+	writeModuleFile(t, secondPath, []byte(second))
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatalf("SetValidationMode: %v", err)
+	}
+	if err := builder.LoadModuleFromPath(firstPath); err != nil {
+		t.Fatalf("LoadModuleFromPath first: %v", err)
+	}
+	err = builder.LoadModuleFromPath(secondPath)
+	if err == nil {
+		t.Fatal("LoadModuleFromPath accepted conflicting same module revision source")
+	}
+	if !strings.Contains(err.Error(), `module "conflicting-source" revision "2024-01-01" already loaded`) {
+		t.Fatalf("LoadModuleFromPath error = %v, want duplicate module identity", err)
 	}
 }
 
