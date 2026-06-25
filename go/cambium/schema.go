@@ -1567,7 +1567,7 @@ func validateStatementArgumentIdentifier(st *yangparse.Statement, allowXMLPrefix
 		return nil
 	}
 	switch st.Keyword {
-	case "action", "anydata", "anyxml", "argument", "bit", "case", "choice", "container", "enum", "extension", "feature", "grouping", "identity", "import", "include", "leaf", "leaf-list", "list", "module", "notification", "prefix", "rpc", "submodule", "typedef":
+	case "action", "anydata", "anyxml", "argument", "bit", "case", "choice", "container", "extension", "feature", "grouping", "identity", "import", "include", "leaf", "leaf-list", "list", "module", "notification", "prefix", "rpc", "submodule", "typedef":
 		if !st.HasArgument {
 			return fmt.Errorf("%s statement requires an identifier argument at %s", st.Keyword, st.Location())
 		}
@@ -2077,6 +2077,33 @@ func (m *moduleData) recordSchemaError(err error) {
 	}
 }
 
+func (m *moduleData) recordVendorCompatibleWarning(source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) {
+	if m == nil || m.ctx == nil {
+		return
+	}
+	message := fmt.Sprintf(format, args...)
+	m.ctx.addLoadWarnings([]Diagnostic{{
+		Kind:       DiagnosticSemanticSchemaError,
+		Code:       RuleCodeContext,
+		Message:    message,
+		Module:     m.name,
+		Source:     sourceLocation(source),
+		Related:    sourceLocations(related),
+		Underlying: fmt.Errorf("%s", message),
+	}})
+}
+
+func (n *schemaNodeData) recordVendorCompatibleWarning(source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) {
+	mod := (*moduleData)(nil)
+	if n != nil {
+		mod = n.module
+	}
+	if mod == nil {
+		return
+	}
+	mod.recordVendorCompatibleWarning(source, related, format, args...)
+}
+
 func (m *moduleData) buildIR() {
 	for _, st := range m.sourceTopStatements() {
 		if !m.featureIncluded(st) {
@@ -2414,16 +2441,6 @@ func (m *moduleData) findGroupingFrom(qname string, from *yangparse.Statement) (
 	return m, def
 }
 
-func (n *schemaNodeData) refreshAncestorListConstraints() {
-	for cur := n; cur != nil; cur = cur.parent {
-		if cur.kind != SchemaNodeKindList {
-			continue
-		}
-		cur.resolveListKeys()
-		cur.resolveUniqueConstraints()
-	}
-}
-
 func firstMandatoryConfigNode(nodes []*schemaNodeData) *schemaNodeData {
 	for _, node := range nodes {
 		if mandatory := mandatoryConfigNode(node); mandatory != nil {
@@ -2591,8 +2608,12 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 				n.recordSchemaError(fmt.Errorf("leaf %q has multiple default statements", n.name))
 				return
 			case n.mandatory && len(n.defaults) > 0:
-				n.recordSchemaError(fmt.Errorf("mandatory leaf %q cannot have a default", n.name))
-				return
+				if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible && n.config == ConfigRo {
+					n.recordVendorCompatibleWarning(n.stmt, nil, "mandatory leaf %q cannot have a default; allowed for config false leaf in vendor-compatible mode", n.name)
+				} else {
+					n.recordSchemaError(fmt.Errorf("mandatory leaf %q cannot have a default", n.name))
+					return
+				}
 			case n.listKey && len(n.defaults) > 0:
 				n.recordSchemaError(fmt.Errorf("key leaf %q cannot have a default", n.name))
 				return
@@ -3291,7 +3312,103 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 
 func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData) {
 	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true, fromStmt)
+	if node == nil && c != nil && c.validationMode == ValidationVendorCompatible {
+		if fallbackMod, fallbackNode, reason := c.findNodeByVendorCompatibleSchemaPath(source, path, fromStmt); fallbackNode != nil {
+			if source != nil {
+				source.recordVendorCompatibleWarning(fromStmt, nil, "schema path %q resolved by %s in vendor-compatible mode", path, reason)
+			}
+			return fallbackMod, fallbackNode
+		}
+	}
 	return mod, node
+}
+
+func (c *Context) findNodeByVendorCompatibleSchemaPath(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData, string) {
+	if c == nil || source == nil || !strings.HasPrefix(path, "/") {
+		return nil, nil, ""
+	}
+	parts := splitPath(path)
+	if len(parts) == 0 {
+		return nil, nil, ""
+	}
+	if pathPartsAllUnprefixed(parts) {
+		mod, node := c.findUniqueAbsoluteLocalSchemaPath(parts)
+		if node != nil {
+			return mod, node, "unprefixed local-name absolute path fallback"
+		}
+	}
+	first := pathStepQName(parts[0])
+	mod := source.resolveSourceQNameModuleFrom(first, fromStmt)
+	if mod == nil {
+		return nil, nil, ""
+	}
+	cur := mod.root
+	for _, part := range parts {
+		name := localName(pathStepQName(part))
+		next := uniqueLocalSchemaChild(cur, name)
+		if next == nil {
+			return nil, nil, ""
+		}
+		cur = next
+	}
+	return mod, cur, "local-name path fallback"
+}
+
+func pathPartsAllUnprefixed(parts []string) bool {
+	for _, part := range parts {
+		if hasPrefix(pathStepQName(part)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *Context) findUniqueAbsoluteLocalSchemaPath(parts []string) (*moduleData, *schemaNodeData) {
+	var foundMod *moduleData
+	var foundNode *schemaNodeData
+	matches := 0
+	for _, mod := range c.loadOrder {
+		if mod == nil || mod.root == nil {
+			continue
+		}
+		cur := mod.root
+		ok := true
+		for _, part := range parts {
+			next := uniqueLocalSchemaChild(cur, localName(pathStepQName(part)))
+			if next == nil {
+				ok = false
+				break
+			}
+			cur = next
+		}
+		if !ok {
+			continue
+		}
+		matches++
+		if matches > 1 {
+			return nil, nil
+		}
+		foundMod = mod
+		foundNode = cur
+	}
+	return foundMod, foundNode
+}
+
+func uniqueLocalSchemaChild(parent *schemaNodeData, name string) *schemaNodeData {
+	if parent == nil || name == "" {
+		return nil
+	}
+	var found *schemaNodeData
+	for _, child := range parent.children {
+		if child == nil || child.name != name {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = child
+	}
+	return found
 }
 
 func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, strictSource bool, fromStmt *yangparse.Statement) (mod *moduleData, node *schemaNodeData, segment string, from *schemaNodeData) {

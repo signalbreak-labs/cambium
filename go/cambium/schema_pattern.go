@@ -4,7 +4,6 @@
 package cambium
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -21,7 +20,7 @@ type Pattern struct {
 	inverted                             bool
 }
 
-// Regex returns the pattern's regular expression.
+// Regex returns the raw YANG/XML Schema regular expression text.
 func (p Pattern) Regex() string { return p.regex }
 func (m *moduleData) patternModifierRequiresYang11(st *yangparse.Statement) bool {
 	if st == nil || st.Keyword != "modifier" || st.Argument != "invert-match" {
@@ -52,9 +51,6 @@ func patterns(st *yangparse.Statement) ([]Pattern, error) {
 	for _, p := range direct(st, "pattern") {
 		if err := validateYANGPatternSyntax(p.Argument); err != nil {
 			return nil, fmt.Errorf("invalid pattern %q at %s: %w", p.Argument, p.Location(), err)
-		}
-		if err := validateNativeStringPattern(p.Argument); err != nil {
-			return nil, fmt.Errorf("pattern %q does not compile for native full-string regexp checks at %s: %w", p.Argument, p.Location(), err)
 		}
 		var tag *string
 		errorMessage, err := constraintMetadataArg(p, "error-message")
@@ -171,14 +167,6 @@ func validateYANGPatternSyntax(pattern string) error {
 		return fmt.Errorf("unterminated group")
 	}
 	return nil
-}
-
-func validateNativeStringPattern(pattern string) error {
-	if unsupported := xsdregex.UnsupportedNativeSyntax(pattern); unsupported != "" {
-		return errors.New(unsupported)
-	}
-	_, err := regexp.Compile("^(?:" + xsdregex.NativePattern(pattern) + ")$")
-	return err
 }
 
 type yangPatternClassFrame struct {

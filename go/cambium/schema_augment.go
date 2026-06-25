@@ -51,7 +51,6 @@ func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statem
 	n.applyPresenceProperty(n.singletonProperty(refine, "presence"))
 	n.applyCardinalityStatements(refine, true)
 	n.musts = append(n.musts, n.mustsFrom(source, refine)...)
-	n.refreshAncestorListConstraints()
 }
 
 func (m *moduleData) applyAugments() {
@@ -65,6 +64,10 @@ func (m *moduleData) applyAugments() {
 		}
 		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, aug.Argument, aug)
 		if target == nil || targetMod == nil {
+			if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
+				m.recordVendorCompatibleWarning(aug, nil, "augment %q target not found at %s; skipped in vendor-compatible mode", aug.Argument, aug.Location())
+				continue
+			}
 			m.recordSchemaError(fmt.Errorf("augment %q target not found at %s", aug.Argument, aug.Location()))
 			continue
 		}
@@ -75,12 +78,20 @@ func (m *moduleData) applyAugments() {
 		if targetMod != m {
 			if mandatory := firstMandatoryConfigNode(children); mandatory != nil {
 				if m.yangVersionForStatement(aug) != "1.1" {
-					m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
-					continue
+					if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
+						m.recordVendorCompatibleWarning(mandatory.stmt, []*yangparse.Statement{aug}, "augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s; allowed in vendor-compatible mode", aug.Argument, mandatory.name, mandatory.stmt.Location())
+					} else {
+						m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
+						continue
+					}
 				}
 				if len(direct(aug, "when")) == 0 {
-					m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module without a when statement at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
-					continue
+					if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
+						m.recordVendorCompatibleWarning(mandatory.stmt, []*yangparse.Statement{aug}, "augment %q adds mandatory config node %q to another module without a when statement at %s; allowed in vendor-compatible mode", aug.Argument, mandatory.name, mandatory.stmt.Location())
+					} else {
+						m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module without a when statement at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
+						continue
+					}
 				}
 			}
 		}

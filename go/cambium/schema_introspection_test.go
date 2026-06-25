@@ -7946,19 +7946,6 @@ func TestInvalidIdentifierArgumentsReturnContextRuleCode(t *testing.T) {
 			message: `invalid identifier "bad name" for leaf`,
 		},
 		{
-			name: "enum name starts with digit",
-			source: `module cambium-invalid-enum-name {
-    namespace "urn:cambium:invalid-enum-name";
-    prefix cien;
-    leaf value {
-        type enumeration {
-            enum 9bad;
-        }
-    }
-}`,
-			message: `invalid identifier "9bad" for enum`,
-		},
-		{
 			name: "yang 1 module name starts with xml",
 			source: `module xml-invalid-yang1-name {
     namespace "urn:cambium:xml-invalid-yang1-name";

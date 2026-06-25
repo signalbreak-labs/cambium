@@ -84,10 +84,13 @@ loads YANG from a source string, which is convenient in tests, and
 `LoadModuleFromPath` loads a single `.yang` file.
 
 Schema-source validation is strict by default. For vendor module sets that
-historically loaded with goyang but contain duplicate direct `revision` dates,
-call `builder.SetValidationMode(cambium.ValidationVendorCompatible)` before
-loading. Cambium still records those defects as `ctx.LoadReport().Warnings`; it
-does not silently discard duplicate revision statements.
+historically loaded with goyang but contain known source defects, call
+`builder.SetValidationMode(cambium.ValidationVendorCompatible)` before loading.
+Compatibility mode is explicit and warning-producing: duplicate or out-of-order
+revisions, direct submodule entrypoints resolved to their parent module, skipped
+feature-disabled augment targets, mandatory config augments, config false
+mandatory typedef defaults, and unambiguous local-name path fallbacks are
+reported in `ctx.LoadReport().Warnings` rather than silently discarded.
 
 `ContextFlags` controls loading behavior; the zero value is the common case. See
 godoc for the individual fields.

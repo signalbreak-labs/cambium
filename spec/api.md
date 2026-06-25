@@ -150,10 +150,16 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     same singleton metadata rule applies to import/include `description` and
     `reference` metadata.
   - `ValidationStrict` is the default schema-source validation mode. An explicit
-    `ValidationVendorCompatible` mode may downgrade duplicate direct
-    module/submodule `revision` dates to `LoadReport.Warnings` diagnostics for
-    real-world vendor YANG compatibility. The warning includes the
-    module/submodule name, duplicate revision date, the duplicate statement
+    `ValidationVendorCompatible` mode may downgrade selected real-world vendor
+    YANG defects to `LoadReport.Warnings` diagnostics while preserving strict
+    behavior by default. Covered compatibility relaxations include duplicate
+    direct module/submodule `revision` dates, out-of-order top-level
+    revisions, direct submodule entrypoints that can be resolved to their
+    parent module, unresolved augment targets during feature-discovery loads,
+    cross-module mandatory config augments, config false mandatory leaves that
+    inherit typedef defaults, and unambiguous local-name schema-path fallbacks
+    for vendor deviation/leafref paths. Duplicate revision warnings include
+    the module/submodule name, duplicate revision date, the duplicate statement
     source location, and the previous declaration as a related location when
     available. Other revision defects, including malformed dates and duplicate
     dependency `revision-date` statements, remain errors.
@@ -214,7 +220,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     search-directory dance is required. Valid submodules cannot be loaded
     directly through `LoadModuleFromPath` or `LoadModuleStr`; after ordinary
     submodule metadata validation they fail with `CAMBIUM_E0001` and must enter
-    the context through an including parent module. A failed path load must not
+    the context through an including parent module. In
+    `ValidationVendorCompatible`, a direct submodule path is treated as a load
+    request for its `belongs-to` parent module when the parent can be found by
+    the configured search paths; the parent module becomes the requested
+    implemented module and a warning records the submodule entrypoint. A failed
+    path load must not
     leave the file's directory in the context search path unless it was already
     configured.
   - Search paths ending in `...` recursively scan the parent directory using
@@ -650,8 +661,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 	    `ErrorMessage()`, `ErrorAppTag()`, `Description()`, and `Reference()`.
 	    String pattern `modifier`, when present, must be a singleton
 	    `invert-match` and requires `yang-version 1.1`; pattern expressions
-	    must compile for the native full-string regexp checks before entering
-	    schema IR/codegen. Pattern
+	    are YANG/XML Schema regular expressions. Cambium validates and preserves
+	    the raw XSD/YANG pattern text in schema IR/codegen; Go/native regexp
+	    compilation is not part of schema-load validity because XSD regex syntax
+	    and native regex engines differ. Pattern
 	    metadata children (`error-message`, `error-app-tag`, `description`,
 	    `reference`) are singleton statements. Direct known non-extension
 	    children of `pattern` are limited to those metadata statements plus

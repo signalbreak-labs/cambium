@@ -17,24 +17,82 @@ func validateTopLevelStatementPlacement(st *yangparse.Statement) error {
 	return fmt.Errorf("%s at %s is not valid at module or submodule top level", st.Keyword, st.Location())
 }
 
-func validateTopLevelStatementOrder(root *yangparse.Statement) error {
+func validateTopLevelStatementOrderMode(root *yangparse.Statement, mode ValidationMode) ([]Diagnostic, error) {
 	if root == nil || root.Keyword != "module" && root.Keyword != "submodule" {
-		return nil
+		return nil, nil
 	}
 	phase := topLevelOrderHeader
+	var warnings []Diagnostic
+	var previousRevision *yangparse.Statement
 	for _, st := range root.SubStatements() {
 		next, ok := topLevelOrderPhase(st.Keyword)
 		if !ok {
 			continue
 		}
 		if next < phase {
-			return fmt.Errorf("%s %q is out of order in %s %q at %s", st.Keyword, st.Argument, root.Keyword, root.Argument, st.Location())
+			return nil, fmt.Errorf("%s %q is out of order in %s %q at %s", st.Keyword, st.Argument, root.Keyword, root.Argument, st.Location())
 		}
 		if next > phase {
 			phase = next
 		}
+		if st.Keyword != "revision" {
+			continue
+		}
+		if previousRevision != nil &&
+			validRevisionDate(previousRevision.Argument) &&
+			validRevisionDate(st.Argument) &&
+			st.Argument > previousRevision.Argument {
+			if mode != ValidationVendorCompatible {
+				return nil, diagnosticErrorf(
+					st,
+					[]*yangparse.Statement{previousRevision},
+					"revision %q is out of order in %s %q at %s",
+					st.Argument,
+					root.Keyword,
+					root.Argument,
+					st.Location(),
+				)
+			}
+			warnings = append(warnings, outOfOrderRevisionWarning(root, previousRevision, st))
+		}
+		previousRevision = st
 	}
-	return nil
+	return warnings, nil
+}
+
+func outOfOrderRevisionWarning(owner, previous, current *yangparse.Statement) Diagnostic {
+	ownerKind := "module"
+	ownerName := ""
+	if owner != nil {
+		ownerKind = owner.Keyword
+		ownerName = owner.Argument
+	}
+	currentRevision := ""
+	previousRevision := ""
+	if current != nil {
+		currentRevision = current.Argument
+	}
+	if previous != nil {
+		previousRevision = previous.Argument
+	}
+	message := fmt.Sprintf(
+		"%s %q has out of order revision %q at %s; previous revision %q at %s",
+		ownerKind,
+		ownerName,
+		currentRevision,
+		locationText(current),
+		previousRevision,
+		locationText(previous),
+	)
+	return Diagnostic{
+		Kind:       DiagnosticSemanticSchemaError,
+		Code:       RuleCodeContext,
+		Message:    message,
+		Module:     ownerName,
+		Source:     sourceLocation(current),
+		Related:    sourceLocations([]*yangparse.Statement{previous}),
+		Underlying: fmt.Errorf("%s", message),
+	}
 }
 
 func (m *moduleData) collectScopedDefinitions(st *yangparse.Statement) error {
