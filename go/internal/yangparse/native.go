@@ -347,6 +347,8 @@ func (p *parser) scanDoubleQuoted() (string, error) {
 				cur.WriteByte('\t')
 			case '"':
 				cur.WriteByte('"')
+			case '\'':
+				cur.WriteByte('\'')
 			case '\\':
 				cur.WriteByte('\\')
 			default:

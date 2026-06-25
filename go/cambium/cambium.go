@@ -117,7 +117,7 @@ const (
 	// default and rejects duplicate direct revision dates.
 	ValidationStrict ValidationMode = iota
 	// ValidationVendorCompatible permits selected real-world vendor source
-	// defects and reports them as LoadReport warnings.
+	// defects and reports each relaxation as a LoadReport warning.
 	ValidationVendorCompatible
 )
 
@@ -900,6 +900,9 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	}
 	stmt := stmts[0]
 	if stmt.Keyword == "submodule" {
+		if c.validationMode == ValidationVendorCompatible {
+			return c.loadDirectSubmoduleSource(sourceName, stmt, implemented, requested)
+		}
 		return nil, c.rejectDirectSubmoduleSource(sourceName, stmt)
 	}
 	if stmt.Keyword != "module" {
@@ -913,7 +916,8 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	if err := validateNoStandardChildStatements(stmt); err != nil {
 		return nil, err
 	}
-	if err := validateTopLevelStatementOrder(stmt); err != nil {
+	orderWarnings, err := validateTopLevelStatementOrderMode(stmt, c.validationMode)
+	if err != nil {
 		return nil, err
 	}
 	if err := validateYangVersion(stmt); err != nil {
@@ -950,11 +954,11 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	if existing := c.namespaceOwner(namespace, name); existing != "" {
 		return nil, fmt.Errorf("namespace %q already belongs to module %q", namespace, existing)
 	}
-	revision, warnings, err := moduleRevisionValidatedMode(stmt, c.validationMode)
+	revision, revisionWarnings, err := moduleRevisionValidatedMode(stmt, c.validationMode)
 	if err != nil {
 		return nil, err
 	}
-	c.addLoadWarnings(warnings)
+	c.addLoadWarnings(append(orderWarnings, revisionWarnings...))
 	key := moduleKey(name, revision)
 	mod := c.modulesByKey[key]
 	if mod == nil {
@@ -1285,7 +1289,8 @@ func validateSubmoduleSource(path string, stmt *yangparse.Statement, parent *mod
 	if err := validateNoStandardChildStatements(stmt); err != nil {
 		return submoduleValidation{}, nil, err
 	}
-	if err := validateTopLevelStatementOrder(stmt); err != nil {
+	orderWarnings, err := validateTopLevelStatementOrderMode(stmt, mode)
+	if err != nil {
 		return submoduleValidation{}, nil, err
 	}
 	if err := validateYangVersion(stmt); err != nil {
@@ -1337,13 +1342,13 @@ func validateSubmoduleSource(path string, stmt *yangparse.Statement, parent *mod
 	if err := validateSubmoduleIncludeStatements(stmt, allowXMLPrefix); err != nil {
 		return submoduleValidation{}, nil, err
 	}
-	revision, warnings, err := moduleRevisionValidatedMode(stmt, mode)
+	revision, revisionWarnings, err := moduleRevisionValidatedMode(stmt, mode)
 	if err != nil {
 		return submoduleValidation{}, nil, err
 	}
 	info.parentName = parentName
 	info.revision = revision
-	return info, warnings, nil
+	return info, append(orderWarnings, revisionWarnings...), nil
 }
 
 func (c *Context) rejectDirectSubmoduleSource(path string, stmt *yangparse.Statement) error {
@@ -1352,6 +1357,28 @@ func (c *Context) rejectDirectSubmoduleSource(path string, stmt *yangparse.State
 		return err
 	}
 	return fmt.Errorf("%s: direct submodule %q load is not allowed; load parent module %q", path, info.name, info.parentName)
+}
+
+func (c *Context) loadDirectSubmoduleSource(path string, stmt *yangparse.Statement, implemented, requested bool) (*moduleData, error) {
+	info, warnings, err := validateSubmoduleSource(path, stmt, nil, c.validationMode)
+	if err != nil {
+		return nil, err
+	}
+	c.addLoadWarnings(warnings)
+	parentPath, err := c.findModulePathRevision(info.parentName, "")
+	if err != nil {
+		return nil, fmt.Errorf("%s: direct submodule %q belongs to parent module %q but parent module was not found: %w", path, info.name, info.parentName, err)
+	}
+	message := fmt.Sprintf("%s: direct submodule %q load resolved to parent module %q in vendor-compatible mode", path, info.name, info.parentName)
+	c.addLoadWarnings([]Diagnostic{{
+		Kind:       DiagnosticSemanticSchemaError,
+		Code:       RuleCodeContext,
+		Message:    message,
+		Module:     info.parentName,
+		Source:     sourceLocation(stmt),
+		Underlying: fmt.Errorf("%s", message),
+	}})
+	return c.loadModulePath(parentPath, implemented, requested)
 }
 
 func (c *Context) loadSubmodule(path string, stmt *yangparse.Statement, parent *moduleData) (*moduleData, error) {

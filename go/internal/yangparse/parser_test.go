@@ -83,6 +83,29 @@ func TestParseRejectsOversizedInput(t *testing.T) {
 	}
 }
 
+func TestParseDoubleQuotedEscapedApostrophe(t *testing.T) {
+	source := `module escaped-apostrophe {
+  namespace "urn:test:escaped-apostrophe";
+  prefix ea;
+
+  description "Vendor text can\'t always avoid this escape.";
+
+  container top;
+}
+`
+	stmts, err := Parse(source, "escaped-apostrophe.yang")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	desc := find(stmts, "description")
+	if desc == nil {
+		t.Fatal("description not found")
+	}
+	if got, want := desc.Argument, "Vendor text can't always avoid this escape."; got != want {
+		t.Fatalf("description = %q, want %q", got, want)
+	}
+}
+
 func TestParseRejectsInvalidUTF8(t *testing.T) {
 	source := `module bad-utf8 {
   namespace "urn:bad-utf8";
