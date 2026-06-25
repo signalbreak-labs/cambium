@@ -108,6 +108,23 @@ type ContextFlags struct {
 	DisableSearchdirCwd bool
 }
 
+// ValidationMode controls how strictly schema source defects are handled during
+// context loading.
+type ValidationMode uint8
+
+const (
+	// ValidationStrict enforces RFC-compatible source validation. It is the
+	// default and rejects duplicate direct revision dates.
+	ValidationStrict ValidationMode = iota
+	// ValidationVendorCompatible permits selected real-world vendor source
+	// defects and reports them as LoadReport warnings.
+	ValidationVendorCompatible
+)
+
+func validValidationMode(mode ValidationMode) bool {
+	return mode == ValidationStrict || mode == ValidationVendorCompatible
+}
+
 // ContextBuilder is the mutable phase for constructing a frozen Context.
 type ContextBuilder struct {
 	ctx   *Context
@@ -164,6 +181,19 @@ func (b *ContextBuilder) SetFeatures(module string, features []string) error {
 		return err
 	}
 	return b.ctx.SetFeatures(module, features)
+}
+
+// SetValidationMode selects strict RFC validation or explicit vendor-compatible
+// loading for this builder. The default is ValidationStrict.
+func (b *ContextBuilder) SetValidationMode(mode ValidationMode) error {
+	if err := b.ensureMutable(); err != nil {
+		return err
+	}
+	if !validValidationMode(mode) {
+		return wrap("context builder", fmt.Errorf("invalid validation mode %d", mode))
+	}
+	b.ctx.validationMode = mode
+	return nil
 }
 
 // LoadModule loads an implemented module, optionally pinned to revision, and
@@ -237,6 +267,8 @@ type Context struct {
 	allImplemented  bool
 	refImplemented  bool
 	searchCwd       bool
+	validationMode  ValidationMode
+	loadWarnings    []Diagnostic
 	dirty           bool
 	frozen          bool
 	closed          bool
@@ -250,6 +282,8 @@ type contextSnapshot struct {
 	modulesByNSKey  map[string]*moduleData
 	loadOrder       []*moduleData
 	enabledFeatures map[string]map[string]struct{}
+	validationMode  ValidationMode
+	loadWarnings    []Diagnostic
 	dirty           bool
 	modulesState    []moduleDataSnapshot
 }
@@ -300,6 +334,7 @@ func (c *Context) Close() {
 	c.modulesByNSKey = nil
 	c.loadOrder = nil
 	c.enabledFeatures = nil
+	c.loadWarnings = nil
 	c.dirty = false
 }
 
@@ -312,6 +347,8 @@ func (c *Context) snapshot() contextSnapshot {
 		modulesByNSKey:  cloneModuleMap(c.modulesByNSKey),
 		loadOrder:       append([]*moduleData(nil), c.loadOrder...),
 		enabledFeatures: cloneFeatureMap(c.enabledFeatures),
+		validationMode:  c.validationMode,
+		loadWarnings:    append([]Diagnostic(nil), c.loadWarnings...),
 		dirty:           c.dirty,
 	}
 	for _, mod := range c.loadOrder {
@@ -344,6 +381,8 @@ func (c *Context) restore(snap contextSnapshot) {
 	c.modulesByNSKey = snap.modulesByNSKey
 	c.loadOrder = snap.loadOrder
 	c.enabledFeatures = snap.enabledFeatures
+	c.validationMode = snap.validationMode
+	c.loadWarnings = snap.loadWarnings
 	c.dirty = snap.dirty
 	for _, state := range snap.modulesState {
 		mod := state.mod
@@ -362,6 +401,13 @@ func (c *Context) restore(snap contextSnapshot) {
 		mod.sourceImportByPfx = state.sourceImportByPfx
 		mod.requested = state.requested
 	}
+}
+
+func (c *Context) addLoadWarnings(warnings []Diagnostic) {
+	if len(warnings) == 0 {
+		return
+	}
+	c.loadWarnings = append(c.loadWarnings, warnings...)
 }
 
 func cloneModuleMap(in map[string]*moduleData) map[string]*moduleData {
@@ -535,7 +581,7 @@ func (c *Context) loadModuleByName(name string, revision *string, implemented, r
 
 func (c *Context) findModulePathRevision(name, revision string) (string, error) {
 	for _, dir := range c.moduleSearchDirs() {
-		path, ok, err := findModuleInSearchDir(dir, name, revision)
+		path, ok, err := findModuleInSearchDir(dir, name, revision, c.validationMode)
 		if err != nil {
 			return "", err
 		}
@@ -549,21 +595,21 @@ func (c *Context) findModulePathRevision(name, revision string) (string, error) 
 	return "", fmt.Errorf("module %q not found in search path", name)
 }
 
-func findModuleInSearchDir(dir, name, revision string) (file string, found bool, err error) {
+func findModuleInSearchDir(dir, name, revision string, mode ValidationMode) (file string, found bool, err error) {
 	clean := filepath.Clean(dir)
 	if filepath.Base(clean) == "..." {
-		return findModuleRecursive(moduleSourceDirectory(clean), name, revision)
+		return findModuleRecursive(moduleSourceDirectory(clean), name, revision, mode)
 	}
-	return findModuleDirect(clean, name, revision)
+	return findModuleDirect(clean, name, revision, mode)
 }
 
-func findModuleDirect(dir, name, revision string) (file string, found bool, err error) {
+func findModuleDirect(dir, name, revision string, mode ValidationMode) (file string, found bool, err error) {
 	if revision != "" {
 		revisioned := filepath.Join(dir, name+"@"+revision+".yang")
 		if ok, err := fileExists(revisioned); err != nil {
 			return "", false, err
 		} else if ok {
-			if moduleFileMatchesRevision(revisioned, name, revision) {
+			if moduleFileMatchesRevision(revisioned, name, revision, mode) {
 				return revisioned, true, nil
 			}
 			return "", false, fmt.Errorf("YANG file %q does not declare filename revision %q", revisioned, revision)
@@ -571,7 +617,7 @@ func findModuleDirect(dir, name, revision string) (file string, found bool, err 
 		candidate := filepath.Join(dir, name+".yang")
 		if ok, err := fileExists(candidate); err != nil {
 			return "", false, err
-		} else if ok && moduleFileMatchesRevision(candidate, name, revision) {
+		} else if ok && moduleFileMatchesRevision(candidate, name, revision, mode) {
 			return candidate, true, nil
 		}
 		return "", false, nil
@@ -600,7 +646,7 @@ func findModuleDirect(dir, name, revision string) (file string, found bool, err 
 		if !ok {
 			continue
 		}
-		if moduleFileMatchesRevision(match, name, revision) {
+		if moduleFileMatchesRevision(match, name, revision, mode) {
 			valid = append(valid, match)
 			continue
 		}
@@ -612,7 +658,7 @@ func findModuleDirect(dir, name, revision string) (file string, found bool, err 
 	return "", false, nil
 }
 
-func findModuleRecursive(dir, name, revision string) (file string, found bool, err error) {
+func findModuleRecursive(dir, name, revision string, mode ValidationMode) (file string, found bool, err error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -634,12 +680,12 @@ func findModuleRecursive(dir, name, revision string) (file string, found bool, e
 			}
 			switch entryName {
 			case revisionedFile:
-				if moduleFileMatchesRevision(path, name, revision) {
+				if moduleFileMatchesRevision(path, name, revision, mode) {
 					return path, true, nil
 				}
 				return "", false, fmt.Errorf("YANG file %q does not declare filename revision %q", path, revision)
 			case moduleFile:
-				if moduleFileMatchesRevision(path, name, revision) {
+				if moduleFileMatchesRevision(path, name, revision, mode) {
 					fallback = path
 				}
 			}
@@ -648,7 +694,7 @@ func findModuleRecursive(dir, name, revision string) (file string, found bool, e
 			return fallback, true, nil
 		}
 		for _, dirPath := range dirs {
-			subFile, ok, err := findModuleRecursive(dirPath, name, revision)
+			subFile, ok, err := findModuleRecursive(dirPath, name, revision, mode)
 			if err != nil || ok {
 				return subFile, ok, err
 			}
@@ -676,7 +722,7 @@ func findModuleRecursive(dir, name, revision string) (file string, found bool, e
 			return path, true, nil
 		}
 		if filenameRevision, ok := moduleFilenameRevision(entryName, name); ok {
-			if moduleFileMatchesRevision(path, name, filenameRevision) {
+			if moduleFileMatchesRevision(path, name, filenameRevision, mode) {
 				revisions = append(revisions, path)
 				continue
 			}
@@ -687,7 +733,7 @@ func findModuleRecursive(dir, name, revision string) (file string, found bool, e
 		return revisions[len(revisions)-1], true, nil
 	}
 	for _, dirPath := range dirs {
-		subFile, ok, err := findModuleRecursive(dirPath, name, revision)
+		subFile, ok, err := findModuleRecursive(dirPath, name, revision, mode)
 		if err != nil || ok {
 			return subFile, ok, err
 		}
@@ -761,7 +807,7 @@ func moduleFileDeclaresKeywordName(path, name, keyword string) (bool, error) {
 	return stmt.Argument == name, nil
 }
 
-func moduleFileMatchesRevision(path, name, revision string) bool {
+func moduleFileMatchesRevision(path, name, revision string, mode ValidationMode) bool {
 	raw, err := yangparse.ReadFile(path)
 	if err != nil {
 		return false
@@ -774,8 +820,23 @@ func moduleFileMatchesRevision(path, name, revision string) bool {
 	if (stmt.Keyword != "module" && stmt.Keyword != "submodule") || stmt.Argument != name {
 		return false
 	}
-	effectiveRevision, err := moduleRevisionValidated(stmt)
-	return err == nil && effectiveRevision == revision
+	effectiveRevision, _, err := moduleRevisionValidatedMode(stmt, mode)
+	if err != nil {
+		return false
+	}
+	if mode == ValidationVendorCompatible {
+		return moduleDeclaresRevision(stmt, revision)
+	}
+	return effectiveRevision == revision
+}
+
+func moduleDeclaresRevision(stmt *yangparse.Statement, revision string) bool {
+	for _, rev := range direct(stmt, "revision") {
+		if rev.Argument == revision {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Context) loadModulePath(path string, implemented, requested bool) (*moduleData, error) {
@@ -889,10 +950,11 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	if existing := c.namespaceOwner(namespace, name); existing != "" {
 		return nil, fmt.Errorf("namespace %q already belongs to module %q", namespace, existing)
 	}
-	revision, err := moduleRevisionValidated(stmt)
+	revision, warnings, err := moduleRevisionValidatedMode(stmt, c.validationMode)
 	if err != nil {
 		return nil, err
 	}
+	c.addLoadWarnings(warnings)
 	key := moduleKey(name, revision)
 	mod := c.modulesByKey[key]
 	if mod == nil {
@@ -973,25 +1035,73 @@ func moduleRevision(stmt *yangparse.Statement) string {
 	return revision
 }
 
-func moduleRevisionValidated(stmt *yangparse.Statement) (string, error) {
+func moduleRevisionValidatedMode(stmt *yangparse.Statement, mode ValidationMode) (string, []Diagnostic, error) {
 	revision := ""
-	seen := make(map[string]bool)
+	seen := make(map[string]*yangparse.Statement)
+	var warnings []Diagnostic
 	for _, r := range direct(stmt, "revision") {
 		if !validRevisionDate(r.Argument) {
-			return "", fmt.Errorf("invalid revision %q at %s", r.Argument, r.Location())
+			return "", nil, fmt.Errorf("invalid revision %q at %s", r.Argument, r.Location())
 		}
 		if err := validateRevisionMetadata(r); err != nil {
-			return "", err
+			return "", nil, err
 		}
-		if seen[r.Argument] {
-			return "", fmt.Errorf("duplicate revision %q at %s", r.Argument, r.Location())
+		if previous := seen[r.Argument]; previous != nil {
+			if mode != ValidationVendorCompatible {
+				return "", nil, diagnosticErrorf(
+					r,
+					[]*yangparse.Statement{previous},
+					"duplicate revision %q at %s",
+					r.Argument,
+					r.Location(),
+				)
+			}
+			warnings = append(warnings, duplicateRevisionWarning(stmt, previous, r))
+		} else {
+			seen[r.Argument] = r
 		}
-		seen[r.Argument] = true
 		if r.Argument > revision {
 			revision = r.Argument
 		}
 	}
-	return revision, nil
+	return revision, warnings, nil
+}
+
+func duplicateRevisionWarning(owner, previous, duplicate *yangparse.Statement) Diagnostic {
+	ownerKind := "module"
+	ownerName := ""
+	if owner != nil {
+		ownerKind = owner.Keyword
+		ownerName = owner.Argument
+	}
+	revision := ""
+	if duplicate != nil {
+		revision = duplicate.Argument
+	}
+	message := fmt.Sprintf(
+		"%s %q has duplicate revision %q at %s; previous declaration at %s",
+		ownerKind,
+		ownerName,
+		revision,
+		locationText(duplicate),
+		locationText(previous),
+	)
+	return Diagnostic{
+		Kind:       DiagnosticSemanticSchemaError,
+		Code:       RuleCodeContext,
+		Message:    message,
+		Module:     ownerName,
+		Source:     sourceLocation(duplicate),
+		Related:    sourceLocations([]*yangparse.Statement{previous}),
+		Underlying: fmt.Errorf("%s", message),
+	}
+}
+
+func locationText(stmt *yangparse.Statement) string {
+	if stmt == nil {
+		return "unknown"
+	}
+	return stmt.Location()
 }
 
 func validateRevisionMetadata(stmt *yangparse.Statement) error {
@@ -1165,79 +1275,79 @@ type submoduleValidation struct {
 	revision   string
 }
 
-func validateSubmoduleSource(path string, stmt *yangparse.Statement, parent *moduleData) (submoduleValidation, error) {
+func validateSubmoduleSource(path string, stmt *yangparse.Statement, parent *moduleData, mode ValidationMode) (submoduleValidation, []Diagnostic, error) {
 	info := submoduleValidation{name: stmt.Argument}
 	name := info.name
 	allowXMLPrefix := childArg(stmt, "yang-version") == "1.1"
 	if err := validateYangIdentifierArg("submodule", name, stmt, allowXMLPrefix); err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	if err := validateNoStandardChildStatements(stmt); err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	if err := validateTopLevelStatementOrder(stmt); err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	if err := validateYangVersion(stmt); err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	if err := validateModuleHeaderTextMetadata(stmt); err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	if namespace := first(stmt, "namespace"); namespace != nil {
-		return submoduleValidation{}, fmt.Errorf("namespace %q is not valid in submodule %q at %s", namespace.Argument, name, namespace.Location())
+		return submoduleValidation{}, nil, fmt.Errorf("namespace %q is not valid in submodule %q at %s", namespace.Argument, name, namespace.Location())
 	}
 	if prefix := first(stmt, "prefix"); prefix != nil {
-		return submoduleValidation{}, fmt.Errorf("prefix %q is not valid in submodule %q at %s", prefix.Argument, name, prefix.Location())
+		return submoduleValidation{}, nil, fmt.Errorf("prefix %q is not valid in submodule %q at %s", prefix.Argument, name, prefix.Location())
 	}
 	parentName := ""
 	belongs, err := singletonChild(stmt, "belongs-to")
 	if err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	if belongs != nil {
 		parentName = belongs.Argument
 		if err := validateYangIdentifierArg("belongs-to", parentName, belongs, allowXMLPrefix); err != nil {
-			return submoduleValidation{}, err
+			return submoduleValidation{}, nil, err
 		}
 		if err := validateBelongsToStatementChildren(belongs); err != nil {
-			return submoduleValidation{}, err
+			return submoduleValidation{}, nil, err
 		}
 		prefixStmt, err := singletonChild(belongs, "prefix")
 		if err != nil {
-			return submoduleValidation{}, err
+			return submoduleValidation{}, nil, err
 		}
 		prefix := ""
 		if prefixStmt != nil {
 			prefix = prefixStmt.Argument
 		}
 		if prefix == "" {
-			return submoduleValidation{}, fmt.Errorf("%s: submodule belongs-to %q has no prefix", path, parentName)
+			return submoduleValidation{}, nil, fmt.Errorf("%s: submodule belongs-to %q has no prefix", path, parentName)
 		}
 		if err := validateYangIdentifierArg("prefix", prefix, prefixStmt, allowXMLPrefix); err != nil {
-			return submoduleValidation{}, err
+			return submoduleValidation{}, nil, err
 		}
 	}
 	if parentName == "" {
-		return submoduleValidation{}, fmt.Errorf("%s: submodule has no belongs-to", path)
+		return submoduleValidation{}, nil, fmt.Errorf("%s: submodule has no belongs-to", path)
 	}
 	if parent != nil && parent.name != parentName {
-		return submoduleValidation{}, fmt.Errorf("%s: submodule belongs to %q, included by %q", path, parentName, parent.name)
+		return submoduleValidation{}, nil, fmt.Errorf("%s: submodule belongs to %q, included by %q", path, parentName, parent.name)
 	}
 	if err := validateSubmoduleIncludeStatements(stmt, allowXMLPrefix); err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
-	revision, err := moduleRevisionValidated(stmt)
+	revision, warnings, err := moduleRevisionValidatedMode(stmt, mode)
 	if err != nil {
-		return submoduleValidation{}, err
+		return submoduleValidation{}, nil, err
 	}
 	info.parentName = parentName
 	info.revision = revision
-	return info, nil
+	return info, warnings, nil
 }
 
 func (c *Context) rejectDirectSubmoduleSource(path string, stmt *yangparse.Statement) error {
-	info, err := validateSubmoduleSource(path, stmt, nil)
+	info, _, err := validateSubmoduleSource(path, stmt, nil, c.validationMode)
 	if err != nil {
 		return err
 	}
@@ -1245,10 +1355,11 @@ func (c *Context) rejectDirectSubmoduleSource(path string, stmt *yangparse.State
 }
 
 func (c *Context) loadSubmodule(path string, stmt *yangparse.Statement, parent *moduleData) (*moduleData, error) {
-	info, err := validateSubmoduleSource(path, stmt, parent)
+	info, warnings, err := validateSubmoduleSource(path, stmt, parent, c.validationMode)
 	if err != nil {
 		return nil, err
 	}
+	c.addLoadWarnings(warnings)
 	if parent == nil {
 		parent = c.modules[info.parentName]
 	}

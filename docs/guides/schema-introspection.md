@@ -83,6 +83,12 @@ allow-list (pass `nil` to leave features at their defaults). `LoadModuleStr`
 loads YANG from a source string, which is convenient in tests, and
 `LoadModuleFromPath` loads a single `.yang` file.
 
+Schema-source validation is strict by default. For vendor module sets that
+historically loaded with goyang but contain duplicate direct `revision` dates,
+call `builder.SetValidationMode(cambium.ValidationVendorCompatible)` before
+loading. Cambium still records those defects as `ctx.LoadReport().Warnings`; it
+does not silently discard duplicate revision statements.
+
 `ContextFlags` controls loading behavior; the zero value is the common case. See
 godoc for the individual fields.
 

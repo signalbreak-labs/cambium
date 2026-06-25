@@ -155,9 +155,9 @@ func applyDiagnosticCause(diag *Diagnostic, err error) {
 	diag.Underlying = diagnosticErr
 }
 
-func diagnosticErrorf(kind DiagnosticKind, source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) error {
+func diagnosticErrorf(source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) error {
 	return &DiagnosticError{
-		Kind:    kind,
+		Kind:    DiagnosticSemanticSchemaError,
 		Source:  sourceLocation(source),
 		Related: sourceLocations(related),
 		Err:     fmt.Errorf(format, args...),

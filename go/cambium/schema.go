@@ -1026,6 +1026,8 @@ func (i Include) Reference() (string, bool) { return optional(i.reference) }
 
 // Revision is a module revision statement plus optional metadata.
 type Revision struct {
+	module      *moduleData
+	stmt        *yangparse.Statement
 	date        string
 	description string
 	reference   string
@@ -1039,6 +1041,20 @@ func (r Revision) Description() (string, bool) { return optional(r.description) 
 
 // Reference returns the reference and whether one was present.
 func (r Revision) Reference() (string, bool) { return optional(r.reference) }
+
+// Extensions returns extension instances attached to the revision statement.
+func (r Revision) Extensions() []Extension {
+	if r.module == nil || r.stmt == nil {
+		return nil
+	}
+	return r.module.extensionInstances(r.stmt)
+}
+
+// MatchingExtensions returns revision extensions matching the defining module
+// and keyword name.
+func (r Revision) MatchingExtensions(module, name string) []Extension {
+	return matchingExtensions(r.Extensions(), module, name)
+}
 
 type moduleData struct {
 	ctx         *Context
@@ -1972,7 +1988,6 @@ func (m *moduleData) addIdentityDefinition(st *yangparse.Statement) error {
 	for _, b := range direct(st, "base") {
 		if prev := seenBases[b.Argument]; prev != nil {
 			return diagnosticErrorf(
-				DiagnosticSemanticSchemaError,
 				b,
 				[]*yangparse.Statement{prev},
 				"identity %q has duplicate base %q at %s; previous base at %s",
@@ -1992,7 +2007,6 @@ func (m *moduleData) addIdentityDefinition(st *yangparse.Statement) error {
 
 func duplicateDefinitionError(kind, name string, prev, current *yangparse.Statement) error {
 	return diagnosticErrorf(
-		DiagnosticSemanticSchemaError,
 		current,
 		[]*yangparse.Statement{prev},
 		"duplicate %s %q at %s; previous definition at %s",
@@ -2005,7 +2019,6 @@ func duplicateDefinitionError(kind, name string, prev, current *yangparse.Statem
 
 func definitionCollisionError(kind, name, reason string, prev, current *yangparse.Statement) error {
 	return diagnosticErrorf(
-		DiagnosticSemanticSchemaError,
 		current,
 		[]*yangparse.Statement{prev},
 		"duplicate %s %q at %s: %s at %s",
@@ -3402,6 +3415,8 @@ func (m Module) Revisions() []Revision {
 	out := make([]Revision, 0, len(revisions))
 	for _, rev := range revisions {
 		out = append(out, Revision{
+			module:      m.mod,
+			stmt:        rev,
 			date:        rev.Argument,
 			description: childArg(rev, "description"),
 			reference:   childArg(rev, "reference"),
