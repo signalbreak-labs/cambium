@@ -1626,14 +1626,27 @@ func (c *Context) loadImports(mod *moduleData) error {
 			if pfx == mod.name {
 				return fmt.Errorf("import prefix %q in %s collides with module name", pfx, scope.label)
 			}
-			if prev := seenPrefixes[pfx]; prev.name != "" {
-				return fmt.Errorf("duplicate import prefix %q in %s for imports %q at %s and %q at %s", pfx, scope.label, prev.name, prev.stmt.Location(), impStmt.Argument, impStmt.Location())
-			}
-			seenPrefixes[pfx] = importPrefixSeen{name: impStmt.Argument, stmt: impStmt}
 			targetRevision, err := statementRevisionDate(impStmt)
 			if err != nil {
 				return err
 			}
+			if prev := seenPrefixes[pfx]; prev.name != "" {
+				if c.validationMode == ValidationVendorCompatible && prev.name == impStmt.Argument && prev.revision == targetRevision {
+					mod.recordVendorCompatibleWarning(
+						impStmt,
+						[]*yangparse.Statement{prev.stmt},
+						"duplicate import prefix %q in %s for equivalent import %q revision %q at %s; ignored in vendor-compatible mode",
+						pfx,
+						scope.label,
+						impStmt.Argument,
+						targetRevision,
+						impStmt.Location(),
+					)
+					continue
+				}
+				return fmt.Errorf("duplicate import prefix %q in %s for imports %q at %s and %q at %s", pfx, scope.label, prev.name, prev.stmt.Location(), impStmt.Argument, impStmt.Location())
+			}
+			seenPrefixes[pfx] = importPrefixSeen{name: impStmt.Argument, revision: targetRevision, stmt: impStmt}
 			if impStmt.Argument == mod.name {
 				return fmt.Errorf("module %q imports itself at %s", mod.name, impStmt.Location())
 			}

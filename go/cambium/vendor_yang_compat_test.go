@@ -176,6 +176,245 @@ func TestVendorYANGVendorCompatibleLoadsOutOfOrderRevisionsWithWarning(t *testin
 	}
 }
 
+func TestVendorYANGStrictRejectsDuplicateEquivalentImports(t *testing.T) {
+	base := `module duplicate-import-base {
+    namespace "urn:duplicate-import-base";
+    prefix dib;
+
+    typedef identifier {
+        type string;
+    }
+}`
+	user := `module duplicate-import-user {
+    namespace "urn:duplicate-import-user";
+    prefix diu;
+
+    import duplicate-import-base {
+        prefix dib;
+    }
+    import duplicate-import-base {
+        prefix dib;
+    }
+
+    container root {
+        leaf id {
+            type dib:identifier;
+        }
+    }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(base); err != nil {
+		t.Fatalf("LoadModuleStr(base): %v", err)
+	}
+	err = builder.LoadModuleStr(user)
+	if err == nil {
+		t.Fatal("LoadModuleStr accepted duplicate equivalent imports in strict mode")
+	}
+	if !strings.Contains(err.Error(), `duplicate import prefix "dib"`) {
+		t.Fatalf("LoadModuleStr error = %v, want duplicate import prefix", err)
+	}
+}
+
+func TestVendorYANGVendorCompatibleAllowsDuplicateEquivalentImports(t *testing.T) {
+	base := `module duplicate-import-base {
+    namespace "urn:duplicate-import-base";
+    prefix dib;
+
+    typedef identifier {
+        type string;
+    }
+}`
+	user := `module duplicate-import-user {
+    namespace "urn:duplicate-import-user";
+    prefix diu;
+
+    import duplicate-import-base {
+        prefix dib;
+    }
+    import duplicate-import-base {
+        prefix dib;
+    }
+
+    container root {
+        leaf id {
+            type dib:identifier;
+        }
+    }
+}`
+	ctx := buildVendorYANGModules(t, cambium.ValidationVendorCompatible, base, user)
+	mod, err := ctx.Schema("duplicate-import-user")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	imports := mod.Imports()
+	if got, want := len(imports), 1; got != want {
+		t.Fatalf("Imports length = %d, want %d: %#v", got, want, imports)
+	}
+	if imports[0].Name != "duplicate-import-base" || imports[0].Prefix != "dib" || imports[0].Revision != "" {
+		t.Fatalf("Imports[0] = %#v, want duplicate-import-base/dib without revision", imports[0])
+	}
+	leaf, err := mod.FindPath("/diu:root/diu:id")
+	if err != nil {
+		t.Fatalf("FindPath: %v", err)
+	}
+	typ, ok := leaf.LeafType()
+	if !ok {
+		t.Fatal("LeafType missing")
+	}
+	if got, want := typ.Base(), cambium.BaseTypeString; got != want {
+		t.Fatalf("LeafType().Base() = %s, want %s", got, want)
+	}
+	if !diagnosticContains(ctx.LoadReport().Warnings, "duplicate-import-user", "duplicate import") {
+		t.Fatalf("warnings = %#v, want duplicate import warning", ctx.LoadReport().Warnings)
+	}
+}
+
+func TestVendorYANGVendorCompatibleAllowsDuplicateEquivalentRevisionedImports(t *testing.T) {
+	base := `module duplicate-import-revisioned-equivalent-base {
+    namespace "urn:duplicate-import-revisioned-equivalent-base";
+    prefix direb;
+
+    revision 2024-01-01;
+
+    typedef identifier {
+        type string;
+    }
+}`
+	user := `module duplicate-import-revisioned-equivalent-user {
+    namespace "urn:duplicate-import-revisioned-equivalent-user";
+    prefix direu;
+
+    import duplicate-import-revisioned-equivalent-base {
+        prefix direb;
+        revision-date 2024-01-01;
+    }
+    import duplicate-import-revisioned-equivalent-base {
+        prefix direb;
+        revision-date 2024-01-01;
+    }
+
+    leaf id {
+        type direb:identifier;
+    }
+}`
+	ctx := buildVendorYANGModules(t, cambium.ValidationVendorCompatible, base, user)
+	mod, err := ctx.Schema("duplicate-import-revisioned-equivalent-user")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	imports := mod.Imports()
+	if got, want := len(imports), 1; got != want {
+		t.Fatalf("Imports length = %d, want %d: %#v", got, want, imports)
+	}
+	if imports[0].Name != "duplicate-import-revisioned-equivalent-base" || imports[0].Prefix != "direb" || imports[0].Revision != "2024-01-01" {
+		t.Fatalf("Imports[0] = %#v, want duplicate-import-revisioned-equivalent-base/direb@2024-01-01", imports[0])
+	}
+	if _, err := mod.FindPath("/direu:id"); err != nil {
+		t.Fatalf("FindPath: %v", err)
+	}
+	if !diagnosticContains(ctx.LoadReport().Warnings, "duplicate-import-revisioned-equivalent-user", "duplicate import") {
+		t.Fatalf("warnings = %#v, want duplicate import warning", ctx.LoadReport().Warnings)
+	}
+}
+
+func TestVendorYANGVendorCompatibleRejectsDuplicateImportPrefixConflicts(t *testing.T) {
+	base2024 := `module duplicate-import-revisioned-base {
+    namespace "urn:duplicate-import-revisioned-base";
+    prefix dirb;
+
+    revision 2024-01-01;
+
+    typedef identifier {
+        type string;
+    }
+}`
+	base2025 := `module duplicate-import-revisioned-base {
+    namespace "urn:duplicate-import-revisioned-base";
+    prefix dirb;
+
+    revision 2025-01-01;
+
+    typedef identifier {
+        type string;
+    }
+}`
+	user := `module duplicate-import-conflict-user {
+    namespace "urn:duplicate-import-conflict-user";
+    prefix dicu;
+
+    import duplicate-import-revisioned-base {
+        prefix dirb;
+        revision-date 2024-01-01;
+    }
+    import duplicate-import-revisioned-base {
+        prefix dirb;
+        revision-date 2025-01-01;
+    }
+
+    container root;
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatalf("SetValidationMode: %v", err)
+	}
+	for _, source := range []string{base2024, base2025} {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr(base): %v", err)
+		}
+	}
+	err = builder.LoadModuleStr(user)
+	if err == nil {
+		t.Fatal("LoadModuleStr accepted duplicate import prefix with conflicting revisions")
+	}
+	if !strings.Contains(err.Error(), `duplicate import prefix "dirb"`) {
+		t.Fatalf("LoadModuleStr error = %v, want duplicate import prefix", err)
+	}
+
+	other := `module duplicate-import-other-base {
+    namespace "urn:duplicate-import-other-base";
+    prefix diob;
+}`
+	differentModuleUser := `module duplicate-import-different-user {
+    namespace "urn:duplicate-import-different-user";
+    prefix didu;
+
+    import duplicate-import-revisioned-base {
+        prefix shared;
+        revision-date 2024-01-01;
+    }
+    import duplicate-import-other-base {
+        prefix shared;
+    }
+
+    container root;
+}`
+	builder, err = cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatalf("SetValidationMode: %v", err)
+	}
+	for _, source := range []string{base2024, other} {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr(target): %v", err)
+		}
+	}
+	err = builder.LoadModuleStr(differentModuleUser)
+	if err == nil {
+		t.Fatal("LoadModuleStr accepted duplicate import prefix for different modules")
+	}
+	if !strings.Contains(err.Error(), `duplicate import prefix "shared"`) {
+		t.Fatalf("LoadModuleStr error = %v, want duplicate import prefix", err)
+	}
+}
+
 func TestVendorYANGStrictRejectsTopLevelExtensionBeforeRevision(t *testing.T) {
 	metadata := `module metadata-extension {
     namespace "urn:test:metadata-extension";

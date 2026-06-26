@@ -1238,8 +1238,9 @@ type importScope struct {
 }
 
 type importPrefixSeen struct {
-	name string
-	stmt *yangparse.Statement
+	name     string
+	revision string
+	stmt     *yangparse.Statement
 }
 
 func (m *moduleData) importScopes() []importScope {
