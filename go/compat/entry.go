@@ -2029,7 +2029,7 @@ func (e *Entry) InstantiatingModule() (string, error) {
 		return "", fmt.Errorf("entry %s had nil namespace", e.Name)
 	}
 	if e.schemaNode.Name() != "" {
-		name := e.schemaNode.Module().Name()
+		name := e.schemaNode.InstantiatingModule().Name()
 		if name == "" {
 			return "", fmt.Errorf("could not find module for entry %s", e.Name)
 		}
