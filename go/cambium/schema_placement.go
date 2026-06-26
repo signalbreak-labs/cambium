@@ -25,6 +25,9 @@ func validateTopLevelStatementOrderMode(root *yangparse.Statement, mode Validati
 	var warnings []Diagnostic
 	var previousRevision *yangparse.Statement
 	for _, st := range root.SubStatements() {
+		if mode == ValidationVendorCompatible && strings.Contains(st.Keyword, ":") {
+			continue
+		}
 		next, ok := topLevelOrderPhase(st.Keyword)
 		if !ok {
 			continue
