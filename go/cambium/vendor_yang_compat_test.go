@@ -176,6 +176,78 @@ func TestVendorYANGVendorCompatibleLoadsOutOfOrderRevisionsWithWarning(t *testin
 	}
 }
 
+func TestVendorYANGStrictRejectsTopLevelExtensionBeforeRevision(t *testing.T) {
+	metadata := `module metadata-extension {
+    namespace "urn:test:metadata-extension";
+    prefix me;
+
+    extension version {
+        argument value;
+    }
+}`
+	source := `module extension-before-revision {
+    namespace "urn:test:extension-before-revision";
+    prefix ebr;
+
+    import metadata-extension {
+        prefix me;
+    }
+
+    me:version "1.0.0";
+
+    revision 2025-01-01;
+    revision 2023-01-01;
+
+    container top;
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(metadata); err != nil {
+		t.Fatalf("LoadModuleStr metadata: %v", err)
+	}
+	if err := builder.LoadModuleStr(source); err == nil {
+		t.Fatal("LoadModuleStr accepted top-level extension before revision in strict mode")
+	} else if !strings.Contains(err.Error(), `revision "2025-01-01" is out of order`) {
+		t.Fatalf("LoadModuleStr error = %v, want revision placement error", err)
+	}
+}
+
+func TestVendorYANGVendorCompatibleAllowsTopLevelExtensionBeforeRevision(t *testing.T) {
+	metadata := `module metadata-extension {
+    namespace "urn:test:metadata-extension";
+    prefix me;
+
+    extension version {
+        argument value;
+    }
+}`
+	source := `module extension-before-revision {
+    namespace "urn:test:extension-before-revision";
+    prefix ebr;
+
+    import metadata-extension {
+        prefix me;
+    }
+
+    me:version "1.0.0";
+
+    revision 2025-01-01;
+    revision 2023-01-01;
+
+    container top;
+}`
+	ctx := buildVendorYANGModules(t, cambium.ValidationVendorCompatible, metadata, source)
+	mod, err := ctx.Schema("extension-before-revision")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	if got, ok := mod.Revision(); !ok || got != "2025-01-01" {
+		t.Fatalf("Revision = (%q,%v), want 2025-01-01,true", got, ok)
+	}
+}
+
 func TestVendorYANGVendorCompatibleExplicitTransitiveLoadIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	shared := `module shared-types {
