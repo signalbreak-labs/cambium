@@ -176,30 +176,51 @@ func (m *moduleData) resolveLeafRefs() {
 		if n.typeInfo == nil {
 			continue
 		}
-		lr, ok := n.typeInfo.resolved.(ResolvedLeafRef)
-		if !ok {
-			continue
-		}
 		typeMod := n.typeModule
 		if typeMod == nil {
 			typeMod = n.module
 		}
-		resolveLeafRef(n, typeMod, &lr)
-		if m.implemented && lr.target == nil {
-			n.recordSchemaError(fmt.Errorf("leafref %q path %q target not found", n.name, lr.path))
+		n.typeInfo.resolved = m.resolveLeafRefsInResolvedType(n, typeMod, n.typeInfo.resolved)
+	}
+}
+
+func (m *moduleData) resolveLeafRefsInResolvedType(n *schemaNodeData, fallbackSource *moduleData, resolved ResolvedType) ResolvedType {
+	switch r := resolved.(type) {
+	case ResolvedLeafRef:
+		source := r.sourceModule
+		if source == nil {
+			source = fallbackSource
 		}
-		if m.implemented && lr.target != nil && lr.target.node != nil {
-			m.ctx.markImplemented(lr.target.node.module)
+		resolveLeafRef(n, source, &r)
+		m.validateResolvedLeafRef(n, &r)
+		return r
+	case ResolvedUnion:
+		for i := range r.members {
+			r.members[i].resolved = m.resolveLeafRefsInResolvedType(n, fallbackSource, r.members[i].resolved)
 		}
-		if n.representsConfigurationData() && lr.requireInstance && lr.target != nil && lr.target.node != nil && lr.target.node.config == ConfigRo {
-			n.recordSchemaError(fmt.Errorf(
-				"leafref %q with require-instance true cannot target config false %s %q",
-				n.name,
-				nodeStatementKeyword(lr.target.node),
-				lr.target.node.name,
-			))
-		}
-		n.typeInfo.resolved = lr
+		return r
+	default:
+		return resolved
+	}
+}
+
+func (m *moduleData) validateResolvedLeafRef(n *schemaNodeData, lr *ResolvedLeafRef) {
+	if lr == nil {
+		return
+	}
+	if m.implemented && lr.target == nil {
+		n.recordSchemaError(fmt.Errorf("leafref %q path %q target not found", n.name, lr.path))
+	}
+	if m.implemented && lr.target != nil && lr.target.node != nil {
+		m.ctx.markImplemented(lr.target.node.module)
+	}
+	if n.representsConfigurationData() && lr.requireInstance && lr.target != nil && lr.target.node != nil && lr.target.node.config == ConfigRo {
+		n.recordSchemaError(fmt.Errorf(
+			"leafref %q with require-instance true cannot target config false %s %q",
+			n.name,
+			nodeStatementKeyword(lr.target.node),
+			lr.target.node.name,
+		))
 	}
 }
 
@@ -562,7 +583,7 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	}
 	ref := SchemaNodeRef{node: target}
 	lr.target = &ref
-	rt := *target.typeInfo
+	rt := cloneTypeInfo(*target.typeInfo)
 	lr.realtype = &rt
 }
 

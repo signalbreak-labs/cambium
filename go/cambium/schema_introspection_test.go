@@ -11124,6 +11124,34 @@ func resolvedTypeFor[T cambium.ResolvedType](t *testing.T, mod cambium.Module, p
 	return resolved
 }
 
+func resolvedMemberTypeFor[T cambium.ResolvedType](t *testing.T, info cambium.TypeInfo) T {
+	t.Helper()
+	resolved, ok := info.Resolved().(T)
+	if !ok {
+		t.Fatalf("member resolved type = %T", info.Resolved())
+	}
+	return resolved
+}
+
+func buildSchemaContextFromSources(t *testing.T, sources ...string) *cambium.Context {
+	t.Helper()
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatalf("NewContextBuilder: %v", err)
+	}
+	for _, source := range sources {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr: %v", err)
+		}
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	t.Cleanup(func() { ctx.Close() })
+	return ctx
+}
+
 func TestEnumBitValueMetadataAccessors(t *testing.T) {
 	source := `module cambium-enum-bit-metadata {
     namespace "urn:cambium:enum-bit-metadata";
@@ -11329,6 +11357,14 @@ func enumValuesForLog(values []cambium.EnumValue) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		out = append(out, fmt.Sprintf("%s=%d", value.Name(), value.Value()))
+	}
+	return out
+}
+
+func enumValueNames(values []cambium.EnumValue) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, value.Name())
 	}
 	return out
 }
@@ -11539,6 +11575,220 @@ func TestImportedTypedefUnionMembersResolveInDefiningModule(t *testing.T) {
 		if !ok || name != wantTypedefs[i] {
 			t.Fatalf("union[%d] typedef = %q,%v, want %q,true", i, name, ok, wantTypedefs[i])
 		}
+	}
+}
+
+func TestUnionLeafrefMemberResolvesTargetAndRealtype(t *testing.T) {
+	source := `module union-leafref-member {
+    yang-version 1.1;
+    namespace "urn:test:union-leafref-member";
+    prefix ulm;
+
+    container top {
+        leaf name {
+            type string;
+        }
+
+        leaf selector {
+            type union {
+                type uint16 {
+                    range "1..65535";
+                }
+                type enumeration {
+                    enum tcp;
+                    enum udp;
+                }
+                type string {
+                    pattern "eth[0-9]+";
+                }
+                type leafref {
+                    path "../name";
+                }
+            }
+        }
+    }
+}`
+	ctx := buildSchemaContextFromSources(t, source)
+	mod, err := ctx.Schema("union-leafref-member")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	union := resolvedTypeFor[cambium.ResolvedUnion](t, mod, "/ulm:top/selector")
+	members := union.Members()
+	if got, want := len(members), 4; got != want {
+		t.Fatalf("union members = %d, want %d", got, want)
+	}
+	if got, want := members[0].Base(), cambium.BaseTypeUint16; got != want {
+		t.Fatalf("union[0] base = %s, want %s", got, want)
+	}
+	uints := resolvedMemberTypeFor[cambium.ResolvedInt](t, members[0])
+	if gotMin, gotMax := uints.Range[0].Min(), uints.Range[0].Max(); gotMin != "1" || gotMax != "65535" {
+		t.Fatalf("union[0] range = %s..%s, want 1..65535", gotMin, gotMax)
+	}
+	if got, want := members[1].Base(), cambium.BaseTypeEnumeration; got != want {
+		t.Fatalf("union[1] base = %s, want %s", got, want)
+	}
+	enum := resolvedMemberTypeFor[cambium.ResolvedEnumeration](t, members[1])
+	if got := enumValueNames(enum.Values()); strings.Join(got, ",") != "tcp,udp" {
+		t.Fatalf("union[1] enum values = %v, want [tcp udp]", got)
+	}
+	if got, want := members[2].Base(), cambium.BaseTypeString; got != want {
+		t.Fatalf("union[2] base = %s, want %s", got, want)
+	}
+	str := resolvedMemberTypeFor[cambium.ResolvedString](t, members[2])
+	if got := patternStrings(str.Patterns); len(got) != 1 || got[0] != "eth[0-9]+" {
+		t.Fatalf("union[2] patterns = %v, want eth pattern", got)
+	}
+	if got, want := members[3].Base(), cambium.BaseTypeLeafRef; got != want {
+		t.Fatalf("union[3] base = %s, want %s", got, want)
+	}
+	lr := resolvedMemberTypeFor[cambium.ResolvedLeafRef](t, members[3])
+	if got, ok := lr.Path(); !ok || got != "../name" {
+		t.Fatalf("union[3] leafref path = (%q,%v), want ../name,true", got, ok)
+	}
+	if got := lr.SourceModule().Name(); got != "union-leafref-member" {
+		t.Fatalf("union[3] source module = %q, want union-leafref-member", got)
+	}
+	target, ok := lr.Target()
+	if !ok {
+		t.Fatal("union[3] leafref target unresolved")
+	}
+	if got, want := target.Path(), "/union-leafref-member/top/name"; got != want {
+		t.Fatalf("union[3] target = %q, want %q", got, want)
+	}
+	realtype, ok := lr.Realtype()
+	if !ok {
+		t.Fatal("union[3] leafref realtype unresolved")
+	}
+	if got, want := realtype.Base(), cambium.BaseTypeString; got != want {
+		t.Fatalf("union[3] realtype base = %s, want %s", got, want)
+	}
+}
+
+func TestImportedTypedefUnionLeafrefsResolveInMemberContext(t *testing.T) {
+	base := `module imported-union-leafref-base {
+    yang-version 1.1;
+    namespace "urn:test:imported-union-leafref-base";
+    prefix base;
+
+    container top {
+        leaf name {
+            type string;
+        }
+    }
+
+    typedef absolute-name-ref {
+        type leafref {
+            path "/base:top/base:name";
+        }
+    }
+
+    typedef selector-union {
+        type union {
+            type uint16;
+            type absolute-name-ref;
+        }
+    }
+}`
+	user := `module imported-union-leafref-user {
+    yang-version 1.1;
+    namespace "urn:test:imported-union-leafref-user";
+    prefix user;
+
+    import imported-union-leafref-base {
+        prefix base;
+    }
+
+    leaf selector {
+        type base:selector-union;
+    }
+}`
+	ctx := buildSchemaContextFromSources(t, base, user)
+	mod, err := ctx.Schema("imported-union-leafref-user")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	union := resolvedTypeFor[cambium.ResolvedUnion](t, mod, "/user:selector")
+	members := union.Members()
+	if got, want := len(members), 2; got != want {
+		t.Fatalf("union members = %d, want %d", got, want)
+	}
+	if got, want := members[0].Base(), cambium.BaseTypeUint16; got != want {
+		t.Fatalf("union[0] base = %s, want %s", got, want)
+	}
+	if got, want := members[1].Base(), cambium.BaseTypeLeafRef; got != want {
+		t.Fatalf("union[1] base = %s, want %s", got, want)
+	}
+	lr := resolvedMemberTypeFor[cambium.ResolvedLeafRef](t, members[1])
+	if got := lr.SourceModule().Name(); got != "imported-union-leafref-base" {
+		t.Fatalf("union[1] source module = %q, want imported-union-leafref-base", got)
+	}
+	target, ok := lr.Target()
+	if !ok {
+		t.Fatal("union[1] leafref target unresolved")
+	}
+	if got, want := target.Path(), "/imported-union-leafref-base/top/name"; got != want {
+		t.Fatalf("union[1] target = %q, want %q", got, want)
+	}
+	realtype, ok := lr.Realtype()
+	if !ok {
+		t.Fatal("union[1] realtype unresolved")
+	}
+	if got, want := realtype.Base(), cambium.BaseTypeString; got != want {
+		t.Fatalf("union[1] realtype base = %s, want %s", got, want)
+	}
+}
+
+func TestNestedUnionTypedefLeafrefMemberResolvesTarget(t *testing.T) {
+	source := `module nested-union-leafref-member {
+    yang-version 1.1;
+    namespace "urn:test:nested-union-leafref-member";
+    prefix nulm;
+
+    typedef local-name-ref {
+        type leafref {
+            path "../name";
+        }
+    }
+
+    container top {
+        leaf name {
+            type string;
+        }
+
+        leaf selector {
+            type union {
+                type union {
+                    type uint16;
+                    type local-name-ref;
+                }
+                type string;
+            }
+        }
+    }
+}`
+	ctx := buildSchemaContextFromSources(t, source)
+	mod, err := ctx.Schema("nested-union-leafref-member")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	outer := resolvedTypeFor[cambium.ResolvedUnion](t, mod, "/nulm:top/selector")
+	outerMembers := outer.Members()
+	if got, want := len(outerMembers), 2; got != want {
+		t.Fatalf("outer union members = %d, want %d", got, want)
+	}
+	inner := resolvedMemberTypeFor[cambium.ResolvedUnion](t, outerMembers[0])
+	innerMembers := inner.Members()
+	if got, want := len(innerMembers), 2; got != want {
+		t.Fatalf("inner union members = %d, want %d", got, want)
+	}
+	lr := resolvedMemberTypeFor[cambium.ResolvedLeafRef](t, innerMembers[1])
+	target, ok := lr.Target()
+	if !ok {
+		t.Fatal("nested union leafref target unresolved")
+	}
+	if got, want := target.Path(), "/nested-union-leafref-member/top/name"; got != want {
+		t.Fatalf("nested union target = %q, want %q", got, want)
 	}
 }
 
