@@ -1104,42 +1104,44 @@ type submoduleData struct {
 }
 
 type schemaNodeData struct {
-	name           string
-	kind           SchemaNodeKind
-	module         *moduleData
-	stmt           *yangparse.Statement
-	parent         *schemaNodeData
-	children       []*schemaNodeData
-	path           string
-	description    string
-	reference      string
-	ifFeatures     []string
-	ownIfFeatures  []string
-	status         Status
-	config         Config
-	configProp     *yangparse.Statement
-	mandatory      bool
-	presence       bool
-	orderedBy      OrderedBy
-	defaults       []DefaultValue
-	units          string
-	minElements    *uint32
-	maxElements    *uint32
-	maxElementsSet bool
-	typeInfo       *TypeInfo
-	typeStmt       *yangparse.Statement
-	typeModule     *moduleData
-	listKey        bool
-	keyNames       []string
-	keys           []*schemaNodeData
-	extensions     []Extension
-	musts          []MustConstraint
-	whens          []WhenConstraint
-	uniques        []UniqueConstraint
-	uniqueNames    [][]string
-	choiceDesc     bool
-	groupOrigin    string
-	devs           []Deviation
+	name                string
+	kind                SchemaNodeKind
+	module              *moduleData
+	sourceModule        *moduleData
+	instantiatingModule *moduleData
+	stmt                *yangparse.Statement
+	parent              *schemaNodeData
+	children            []*schemaNodeData
+	path                string
+	description         string
+	reference           string
+	ifFeatures          []string
+	ownIfFeatures       []string
+	status              Status
+	config              Config
+	configProp          *yangparse.Statement
+	mandatory           bool
+	presence            bool
+	orderedBy           OrderedBy
+	defaults            []DefaultValue
+	units               string
+	minElements         *uint32
+	maxElements         *uint32
+	maxElementsSet      bool
+	typeInfo            *TypeInfo
+	typeStmt            *yangparse.Statement
+	typeModule          *moduleData
+	listKey             bool
+	keyNames            []string
+	keys                []*schemaNodeData
+	extensions          []Extension
+	musts               []MustConstraint
+	whens               []WhenConstraint
+	uniques             []UniqueConstraint
+	uniqueNames         [][]string
+	choiceDesc          bool
+	groupOrigin         string
+	devs                []Deviation
 }
 
 type identityData struct {
@@ -1291,7 +1293,7 @@ func (m *moduleData) resetIR() {
 	m.featureMap = make(map[string]*featureData)
 	m.identityMap = make(map[string]*identityData)
 	m.identities = nil
-	m.root = &schemaNodeData{name: "", kind: SchemaNodeKindModule, module: m, config: ConfigRw, status: StatusCurrent}
+	m.root = &schemaNodeData{name: "", kind: SchemaNodeKindModule, module: m, sourceModule: m, instantiatingModule: m, config: ConfigRw, status: StatusCurrent}
 	m.top = nil
 	m.rpcs = nil
 	m.actions = nil
@@ -2145,20 +2147,22 @@ func (m *moduleData) buildNodeSeen(st *yangparse.Statement, parent *schemaNodeDa
 	}
 	ifFeatures := ifFeatureArgs(st)
 	n := &schemaNodeData{
-		name:          name,
-		kind:          kindForKeyword(st.Keyword),
-		module:        owner,
-		stmt:          st,
-		parent:        parent,
-		ifFeatures:    append([]string(nil), ifFeatures...),
-		ownIfFeatures: append([]string(nil), ifFeatures...),
-		status:        StatusCurrent,
-		config:        config,
-		orderedBy:     OrderedBySystem,
-		typeStmt:      first(st, "type"),
-		typeModule:    m,
-		choiceDesc:    choiceDesc || parent != nil && (parent.kind == SchemaNodeKindChoice || parent.kind == SchemaNodeKindCase || parent.choiceDesc),
-		groupOrigin:   groupOrigin,
+		name:                name,
+		kind:                kindForKeyword(st.Keyword),
+		module:              owner,
+		sourceModule:        m,
+		instantiatingModule: schemaNodeInstantiatingModule(parent, owner),
+		stmt:                st,
+		parent:              parent,
+		ifFeatures:          append([]string(nil), ifFeatures...),
+		ownIfFeatures:       append([]string(nil), ifFeatures...),
+		status:              StatusCurrent,
+		config:              config,
+		orderedBy:           OrderedBySystem,
+		typeStmt:            first(st, "type"),
+		typeModule:          m,
+		choiceDesc:          choiceDesc || parent != nil && (parent.kind == SchemaNodeKindChoice || parent.kind == SchemaNodeKindCase || parent.choiceDesc),
+		groupOrigin:         groupOrigin,
 	}
 	if description := n.singletonProperty(st, "description"); description != nil && n.textMetadataPropertyAllowed(description) {
 		n.description = description.Argument
@@ -2278,16 +2282,18 @@ func (m *moduleData) buildChoiceSeen(st *yangparse.Statement, parent *schemaNode
 		case isSchemaChildKeyword(child.Keyword):
 			ifFeatures := ifFeatureArgs(child)
 			implicit := &schemaNodeData{
-				name:          child.Argument,
-				kind:          SchemaNodeKindCase,
-				module:        owner,
-				parent:        n,
-				ifFeatures:    append([]string(nil), ifFeatures...),
-				ownIfFeatures: append([]string(nil), ifFeatures...),
-				status:        StatusCurrent,
-				config:        n.config,
-				orderedBy:     OrderedBySystem,
-				choiceDesc:    true,
+				name:                child.Argument,
+				kind:                SchemaNodeKindCase,
+				module:              owner,
+				sourceModule:        m,
+				instantiatingModule: schemaNodeInstantiatingModule(n, owner),
+				parent:              n,
+				ifFeatures:          append([]string(nil), ifFeatures...),
+				ownIfFeatures:       append([]string(nil), ifFeatures...),
+				status:              StatusCurrent,
+				config:              n.config,
+				orderedBy:           OrderedBySystem,
+				choiceDesc:          true,
 			}
 			implicit.children = []*schemaNodeData{m.buildNodeSeen(child, implicit, owner, true, groupOrigin, groupingStack)}
 			children = append(children, implicit)
@@ -2518,7 +2524,7 @@ func (m *moduleData) buildIndexes() {
 			} else {
 				c.path = n.path + "/" + c.name
 			}
-			if c.module == m {
+			if c.module == m || c.instantiatingModule == m {
 				m.nodesByPath[c.path] = c
 			}
 			walk(c)
@@ -3310,6 +3316,38 @@ func moduleMatchesSourceQNamePrefix(mod *moduleData, qname string) bool {
 	return pfx == mod.prefix
 }
 
+func schemaNodeModuleMatchesQNamePrefix(n *schemaNodeData, qname string, strictSource bool) bool {
+	if n == nil {
+		return false
+	}
+	if strictSource {
+		return moduleMatchesSourceQNamePrefix(n.module, qname)
+	}
+	return moduleMatchesQNamePrefix(n.module, qname)
+}
+
+func schemaNodeSourceModuleMatchesQNamePrefix(n *schemaNodeData, qname string, strictSource bool) bool {
+	if n == nil {
+		return false
+	}
+	mod := schemaNodeSourceModule(n, nil)
+	if strictSource {
+		return moduleMatchesSourceQNamePrefix(mod, qname)
+	}
+	return moduleMatchesQNamePrefix(mod, qname)
+}
+
+func schemaNodeInstantiatingModuleMatchesQNamePrefix(n *schemaNodeData, qname string, strictSource bool) bool {
+	if n == nil {
+		return false
+	}
+	mod := schemaNodeInstantiatingModule(n, nil)
+	if strictSource {
+		return moduleMatchesSourceQNamePrefix(mod, qname)
+	}
+	return moduleMatchesQNamePrefix(mod, qname)
+}
+
 func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData) {
 	mod, node, _, _ := c.findNodeBySchemaPathDetail(source, path, true, fromStmt)
 	if node == nil && c != nil && c.validationMode == ValidationVendorCompatible {
@@ -3438,6 +3476,7 @@ func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, st
 		qname := pathStepQName(part)
 		name := localName(qname)
 		var next *schemaNodeData
+		var instantiatingFallback *schemaNodeData
 		for _, child := range cur.children {
 			if child.name == name {
 				if hasPrefix(qname) {
@@ -3446,20 +3485,34 @@ func (c *Context) findNodeBySchemaPathDetail(source *moduleData, path string, st
 						pm = source.resolveSourceQNameModuleFrom(qname, fromStmt)
 					}
 					if pm == nil {
-						matches := moduleMatchesQNamePrefix(child.module, qname)
-						if strictSource {
-							matches = moduleMatchesSourceQNamePrefix(child.module, qname)
+						if schemaNodeModuleMatchesQNamePrefix(child, qname, strictSource) {
+							next = child
+							break
 						}
-						if !matches {
-							continue
+						if !strictSource && schemaNodeSourceModuleMatchesQNamePrefix(child, qname, strictSource) && instantiatingFallback == nil {
+							instantiatingFallback = child
 						}
-					} else if child.module != pm {
+						if !strictSource && schemaNodeInstantiatingModuleMatchesQNamePrefix(child, qname, strictSource) && instantiatingFallback == nil {
+							instantiatingFallback = child
+						}
+						continue
+					}
+					if child.module != pm {
+						if !strictSource && schemaNodeSourceModule(child, nil) == pm && instantiatingFallback == nil {
+							instantiatingFallback = child
+						}
+						if !strictSource && child.instantiatingModule == pm && instantiatingFallback == nil {
+							instantiatingFallback = child
+						}
 						continue
 					}
 				}
 				next = child
 				break
 			}
+		}
+		if next == nil {
+			next = instantiatingFallback
 		}
 		if next == nil {
 			return mod, nil, part, cur
@@ -3928,6 +3981,22 @@ func (n SchemaNodeRef) Module() Module {
 		return Module{}
 	}
 	return Module{mod: n.node.module}
+}
+
+// SourceModule returns the module containing the source statement for the node.
+func (n SchemaNodeRef) SourceModule() Module {
+	if n.node == nil {
+		return Module{}
+	}
+	return Module{mod: schemaNodeSourceModule(n.node, n.node.module)}
+}
+
+// InstantiatingModule returns the module whose schema tree instantiated the node.
+func (n SchemaNodeRef) InstantiatingModule() Module {
+	if n.node == nil {
+		return Module{}
+	}
+	return Module{mod: schemaNodeInstantiatingModule(n.node, n.node.module)}
 }
 
 // Location returns the source location of the node statement, or "unknown".
@@ -5230,6 +5299,32 @@ func (n *schemaNodeData) ownerModule() *moduleData {
 		}
 	}
 	return nil
+}
+
+func schemaNodeInstantiatingModule(n *schemaNodeData, fallback *moduleData) *moduleData {
+	if n == nil {
+		return fallback
+	}
+	if n.instantiatingModule != nil {
+		return n.instantiatingModule
+	}
+	if n.module != nil {
+		return n.module
+	}
+	return fallback
+}
+
+func schemaNodeSourceModule(n *schemaNodeData, fallback *moduleData) *moduleData {
+	if n == nil {
+		return fallback
+	}
+	if n.sourceModule != nil {
+		return n.sourceModule
+	}
+	if n.module != nil {
+		return n.module
+	}
+	return fallback
 }
 
 func (n *schemaNodeData) directChild(name string) *schemaNodeData {

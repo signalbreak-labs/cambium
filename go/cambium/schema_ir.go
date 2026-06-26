@@ -160,14 +160,14 @@ func schemaIRNode(ref SchemaNodeRef) SchemaIRNode {
 func schemaProvenance(ref SchemaNodeRef) SchemaProvenance {
 	prov := SchemaProvenance{
 		Source:              ref.SourceLocation(),
-		DefiningModule:      ref.Module().Name(),
-		InstantiatingModule: ref.Module().Name(),
+		DefiningModule:      ref.SourceModule().Name(),
+		InstantiatingModule: ref.InstantiatingModule().Name(),
 		Deviations:          ref.DeviationProvenance(),
 	}
 	if group, ok := ref.GroupingOrigin(); ok {
 		prov.Grouping = group
 	}
-	if ref.node != nil && ref.node.parent != nil && ref.node.parent.module != nil && ref.node.module != nil && ref.node.parent.module != ref.node.module {
+	if ref.node != nil && ref.node.groupOrigin == "" && ref.node.module != nil && ref.InstantiatingModule().Name() != "" && ref.node.module.name != ref.InstantiatingModule().Name() {
 		prov.AugmentingModule = ref.node.module.name
 	}
 	return prov
