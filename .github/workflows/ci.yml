@@ -117,10 +117,13 @@ jobs:
         env:
           CAMBIUM_CC: zig cc -target x86_64-linux-musl
         run: bash go/internal/libyang/build.sh
-      - name: Cross-build Go module for musl
+      - name: Execute static Go tests under musl (no -race)
+        # The glibc lane runs `go test -race ./...`. This lane proves the
+        # zig/musl static binaries execute; the script probes -race support but
+        # runs without -race to keep the musl signal focused on libc/linkage.
         env:
           CGO_ENABLED: 1
           CC: zig cc -target x86_64-linux-musl
           GOOS: linux
           GOARCH: amd64
-        run: cd go && go build -ldflags '-extldflags "-static"' ./...
+        run: scripts/test-go-musl-static.sh
