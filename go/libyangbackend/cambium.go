@@ -403,7 +403,7 @@ func (t *DataTree) UserOrderedListAt(path string) (*UserOrderedList, error) {
 	if err != nil {
 		return nil, wrap("user ordered list", err)
 	}
-	return &UserOrderedList{owner: t, raw: raw}, nil
+	return &UserOrderedList{owner: t, raw: raw, gen: t.raw.Generation()}, nil
 }
 
 // Close frees the underlying tree.
@@ -589,38 +589,93 @@ func (d *DataDiff) Close() {
 // It deliberately has NO order-agnostic mutator (no Set, no Upsert, no index
 // assignment): reordering a system-ordered node by mistake is impossible to
 // express, mirroring the Rust UserOrderedList type. It keeps its owning
-// DataTree alive.
+// DataTree alive. External mutations invalidate the handle; re-acquire with
+// UserOrderedListAt after RuleCodeStale.
 type UserOrderedList struct {
 	owner *DataTree
 	raw   *libyang.RawUserOrderedList
+	gen   uint64
+}
+
+// fresh rejects the handle if the tree was mutated by anything other than
+// this handle since it was created or last used successfully — the same
+// conservative staleness contract NodeRef uses. Re-acquire the handle via
+// UserOrderedListAt after external mutations.
+func (l *UserOrderedList) fresh(op string) error {
+	if l.owner == nil || l.owner.raw.Generation() != l.gen {
+		return &Error{Code: RuleCodeStale, Op: op, Err: fmt.Errorf("stale user-ordered list handle")}
+	}
+	return nil
 }
 
 // InsertFirst inserts entry as the first entry.
 func (l *UserOrderedList) InsertFirst(entry *DataTree) error {
-	return wrap("insert first", l.raw.InsertFirst(entry.raw))
+	if err := l.fresh("insert first"); err != nil {
+		return err
+	}
+	if err := wrap("insert first", l.raw.InsertFirst(entry.raw)); err != nil {
+		return err
+	}
+	l.gen = l.owner.raw.Generation()
+	return nil
 }
 
 // InsertLast inserts entry as the last entry.
 func (l *UserOrderedList) InsertLast(entry *DataTree) error {
-	return wrap("insert last", l.raw.InsertLast(entry.raw))
+	if err := l.fresh("insert last"); err != nil {
+		return err
+	}
+	if err := wrap("insert last", l.raw.InsertLast(entry.raw)); err != nil {
+		return err
+	}
+	l.gen = l.owner.raw.Generation()
+	return nil
 }
 
 // InsertBefore inserts entry before the entry at index.
 func (l *UserOrderedList) InsertBefore(index int, entry *DataTree) error {
-	return wrap("insert before", l.raw.InsertBefore(index, entry.raw))
+	if err := l.fresh("insert before"); err != nil {
+		return err
+	}
+	if err := wrap("insert before", l.raw.InsertBefore(index, entry.raw)); err != nil {
+		return err
+	}
+	l.gen = l.owner.raw.Generation()
+	return nil
 }
 
 // InsertAfter inserts entry after the entry at index.
 func (l *UserOrderedList) InsertAfter(index int, entry *DataTree) error {
-	return wrap("insert after", l.raw.InsertAfter(index, entry.raw))
+	if err := l.fresh("insert after"); err != nil {
+		return err
+	}
+	if err := wrap("insert after", l.raw.InsertAfter(index, entry.raw)); err != nil {
+		return err
+	}
+	l.gen = l.owner.raw.Generation()
+	return nil
 }
 
 // MoveBefore moves the entry at what before the entry at point.
 func (l *UserOrderedList) MoveBefore(what, point int) error {
-	return wrap("move before", l.raw.MoveBefore(what, point))
+	if err := l.fresh("move before"); err != nil {
+		return err
+	}
+	if err := wrap("move before", l.raw.MoveBefore(what, point)); err != nil {
+		return err
+	}
+	l.gen = l.owner.raw.Generation()
+	return nil
 }
 
 // MoveAfter moves the entry at what after the entry at point.
 func (l *UserOrderedList) MoveAfter(what, point int) error {
-	return wrap("move after", l.raw.MoveAfter(what, point))
+	if err := l.fresh("move after"); err != nil {
+		return err
+	}
+	if err := wrap("move after", l.raw.MoveAfter(what, point)); err != nil {
+		return err
+	}
+	l.gen = l.owner.raw.Generation()
+	return nil
 }

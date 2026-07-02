@@ -64,6 +64,100 @@ func TestUserOrderedListMove(t *testing.T) {
 	}
 }
 
+func TestUserOrderedListStaleAfterExternalMutation(t *testing.T) {
+	ctx, tree := loadOrderedUserTree(t)
+	defer ctx.Close()
+	defer tree.Close()
+
+	list, err := tree.UserOrderedListAt("/ordered-user-demo:config/entry[name='c']")
+	if err != nil {
+		t.Fatalf("UserOrderedListAt: %v", err)
+	}
+	if changed, err := tree.SetValue("/ordered-user-demo:config/entry[name='a']/value", "10"); err != nil {
+		t.Fatalf("SetValue: %v", err)
+	} else if !changed {
+		t.Fatal("SetValue did not report a change")
+	}
+
+	err = list.MoveBefore(2, 0)
+	if err == nil {
+		t.Fatal("MoveBefore on stale UserOrderedList should error")
+	}
+	var ce *cambium.Error
+	if !errors.As(err, &ce) || ce.RuleCode() != cambium.RuleCodeStale {
+		t.Fatalf("want RuleCodeStale (E0007), got %v", err)
+	}
+}
+
+func TestUserOrderedListOwnOpsStayFresh(t *testing.T) {
+	ctx, tree := loadOrderedUserTree(t)
+	defer ctx.Close()
+	defer tree.Close()
+
+	list, err := tree.UserOrderedListAt("/ordered-user-demo:config/entry[name='c']")
+	if err != nil {
+		t.Fatalf("UserOrderedListAt: %v", err)
+	}
+
+	entryD := detachedOrderedEntry(t, ctx, "d", "4")
+	defer entryD.Close()
+	if err := list.InsertLast(entryD); err != nil {
+		t.Fatalf("InsertLast: %v", err)
+	}
+	entryE := detachedOrderedEntry(t, ctx, "e", "5")
+	defer entryE.Close()
+	if err := list.InsertFirst(entryE); err != nil {
+		t.Fatalf("InsertFirst: %v", err)
+	}
+	if err := list.MoveBefore(4, 0); err != nil {
+		t.Fatalf("MoveBefore: %v", err)
+	}
+}
+
+func loadOrderedUserTree(t *testing.T) (*cambium.Context, *cambium.DataTree) {
+	t.Helper()
+	conf := findConformance(t)
+	moduleDir := filepath.Join(conf, "fixtures", "ordered-user", "module")
+	input, err := os.ReadFile(filepath.Join(conf, "fixtures", "ordered-user", "input.xml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, err := cambium.NewContext()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ctx.SetSearchPath(moduleDir); err != nil {
+		ctx.Close()
+		t.Fatal(err)
+	}
+	if err := ctx.LoadModule("ordered-user-demo"); err != nil {
+		ctx.Close()
+		t.Fatal(err)
+	}
+	tree, err := ctx.Parse(cambium.FormatXML, cambium.ParseModeDataOnly, input)
+	if err != nil {
+		ctx.Close()
+		t.Fatal(err)
+	}
+	return ctx, tree
+}
+
+func detachedOrderedEntry(t *testing.T, ctx *cambium.Context, name, value string) *cambium.DataTree {
+	t.Helper()
+	doc := []byte(`<config xmlns="urn:ordered-user-demo"><entry><name>` + name + `</name><value>` + value + `</value></entry></config>`)
+	tree, err := ctx.Parse(cambium.FormatXML, cambium.ParseModeDataOnly, doc)
+	if err != nil {
+		t.Fatalf("Parse detached entry %q: %v", name, err)
+	}
+	entry, err := tree.UnlinkPath("/ordered-user-demo:config/entry[name='" + name + "']")
+	tree.Close()
+	if err != nil {
+		t.Fatalf("UnlinkPath detached entry %q: %v", name, err)
+	}
+	return entry
+}
+
 // TestUserOrderedListHeterogeneousParent exercises the schema-name filter in
 // nth(): the user-ordered list's parent container also holds a foreign `marker`
 // leaf, which sorts ahead of the entries in the data tree. An unfiltered index
