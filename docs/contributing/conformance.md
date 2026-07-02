@@ -67,9 +67,9 @@ declaration order*, not a sorted order:
 `manifest.toml` is the single index of cases. Each `[[case]]` entry names the
 case, optionally declares its tier, lists the ordering invariants it exercises,
 points at its fixture inputs, and lists the expected outputs to compare against.
-As of this writing the manifest holds **205 cases**: **12** carry
-`tier = "schema-ir"` and the remaining **193** are backend/data cases (the
-default tier — they declare an `input`, and 192 of them are additionally marked
+As of this writing the manifest holds **208 cases**: **13** carry
+`tier = "schema-ir"` and the remaining **195** are backend/data cases (the
+default tier — they declare an `input`, and 193 of them are additionally marked
 `oracle = true`). These counts come from the live manifest; re-derive them with
 `grep -c '^\[\[case\]\]'`, `grep -c '^tier = "schema-ir"'`, and
 `grep -c '^input = '` rather than trusting a prose number that can drift.
@@ -126,6 +126,20 @@ cross-checked against an independent `yanglint` run when one is available (see
 `gnmi-json-ietf` expected outputs are backend-tier payload helper cases. They
 also set `gnmi-path`, and the runner emits one `go/gnmi` JSON_IETF update value
 for that path rather than decomposing an ordered subtree into scalar updates.
+`gnmi-path` is Cambium's absolute data path form, consumed by
+`go/conformance/runner.go` and `go/gnmi.JSONIETFAtomicUpdate`; it must be an
+unpredicated path. Predicates are rejected with `RuleCodeDataPath` so callers
+pass the list or leaf-list path for the atomic I6 update.
+
+Two backend/data manifest keys opt into additional lanes:
+
+- `datatree = true` means the case is in the experimental pure-Go `datatree`
+  supported subset and is run by `go run ./cmd/cambium datatree-diff`. Do not
+  set it merely because libyang can run the case; set it only when datatree can
+  parse, validate, and serialize the declared expected formats correctly.
+- `gnmi-path = "/module:top/list"` is required when `[case.expected]` contains
+  `gnmi-json-ietf`. It identifies the subtree whose JSON_IETF value is wrapped
+  into the gNMI-style update envelope.
 
 ## Cases are tagged by invariant
 
@@ -178,7 +192,12 @@ opt-in differential flag for the experimental datatree lane:
   `cmd/cambium datatree-diff` also parses and serializes them through the
   experimental pure-Go `datatree` package, then compares normalized XML/JSON
   output against the libyang backend. This is an explicit supported-subset gate,
-  not a claim that datatree is a complete conformance tier.
+  not a claim that datatree is a complete conformance tier. The normalization is
+  compact-only (`formatBytesForDifferential` in `go/conformance/runner.go`):
+  trailing ASCII whitespace is stripped, JSON is passed through `json.Compact`,
+  and XML whitespace-only text nodes are removed. Element order and JSON member
+  order are never sorted or normalized away; after compaction, order is still
+  byte-compared.
 
 The manifest's tier shape is enforced, not assumed. A pure-Go fitness test
 (`TestNoCGOConformanceManifestDeclaresSupportedTiers`, build-tagged `!cgo`)

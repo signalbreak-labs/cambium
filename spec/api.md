@@ -1143,7 +1143,37 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 | **I3** keys first | `list_keys()` in key-statement order; codegen field-order manifest puts keys first |
 | **I4** RPC/action I/O order | `input()`/`output()` walk ordered schema IR in declaration order |
 | **I5** JSON arrays carry order | Backend/data single-printer output; `select()`/`NodeSet` in document order; byte gate only for comparable backend tiers |
-| **I6** gNMI atomic | Backend/data `DataDiff.IsOrderedByUser()`; JSON_IETF keeps empty containers; user-ordered serialized as one subtree |
+| **I6** gNMI atomic | Backend-tier `go/gnmi.JSONIETFAtomicUpdate` emits one JSON_IETF subtree value; predicated paths are rejected so list/leaf-list order is not silently widened or decomposed |
+
+## Helper JSON Surfaces
+
+These JSON surfaces are intentionally small and target-neutral. They are part of
+the Go binding's current public contract, but only the fields named here are
+stable.
+
+### gNMI JSON_IETF Update
+
+`go/gnmi/json_ietf.go` defines `Update` with three JSON fields:
+
+- `path`: Cambium's absolute data path for the selected subtree, for example
+  `/example:top/rule`.
+- `encoding`: always the string `JSON_IETF`.
+- `value`: the selected JSON_IETF value as raw JSON.
+
+`JSONIETFAtomicUpdate` rejects path predicates with `RuleCodeDataPath`; callers
+must pass the list or leaf-list path itself when they need an atomic I6 update.
+Cambium does not define a gNMI client, RPC, transport, or protobuf envelope.
+
+### `cambium-ir`
+
+`go/cambium/schema_ir.go` defines the projection version string
+`cambium.schema-ir.v1`; `go/cmd/cambium-ir` emits that projection as JSON. For
+v1, the documented object layout is stable for `version`, `modules`, optional
+`errors`, module identity/import/include fields, ordered node path/name/kind
+fields, type/default/config/constraint fields, source location, and provenance.
+Future v1 output may add fields or enum/string values without changing existing
+meaning. Removing fields, renaming fields, or changing path/order semantics
+requires a new version string.
 
 ## Error contract
 

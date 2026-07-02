@@ -439,6 +439,23 @@ payload helper, which emits one atomic JSON_IETF value for the requested gNMI
 path and does not own client or transport behavior. The normative statements are
 in [ordering-invariants](../../spec/ordering-invariants.md).
 
+`go/gnmi.JSONIETFAtomicUpdate` returns the helper envelope implemented in
+`go/gnmi/json_ietf.go`:
+
+```json
+{
+  "path": "/module:top/list",
+  "encoding": "JSON_IETF",
+  "value": []
+}
+```
+
+`path` is Cambium's absolute data path form and must be unpredicated; pass the
+list or leaf-list path itself for ordered I6 updates. `encoding` is always the
+string `JSON_IETF`. `value` is the extracted JSON_IETF subtree value for that
+path, so an `ordered-by user` list remains one JSON array rather than scalar
+updates that would lose order.
+
 ## See also
 
 - [Overview](../overview.md) — the order-semantics problem, the design response, and the three tiers
