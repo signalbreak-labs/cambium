@@ -1,0 +1,35 @@
+name: osv-scan
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - ".gitmodules"
+      - "VERSIONS"
+      - "go/go.mod"
+  workflow_dispatch:
+
+concurrency:
+  group: osv-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  osv-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install OSV scanner
+        env:
+          OSV_SCANNER_VERSION: 2.3.8
+        run: |
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o osv-scanner
+          sudo install -m 0755 osv-scanner /usr/local/bin/osv-scanner
+          osv-scanner --version
+      - name: Run OSV scanner
+        run: osv-scanner --recursive .
