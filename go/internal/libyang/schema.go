@@ -1894,6 +1894,7 @@ func moduleInfo(mod *C.struct_lys_module) RawModuleInfo {
 // lysc_node.next/lysc_node_child pointers in C memory and only builds Go
 // values after the traversal is complete. This is the legacy v1 view.
 func (c *RawContext) SchemaTree(module string) (*RawSchemaNode, error) {
+	defer pinToOSThread()()
 	// Pin the finalizer-bearing context across the whole C-pointer walk; the
 	// schema memory we chase is owned by c.ctx and freed by its finalizer.
 	defer runtime.KeepAlive(c)
@@ -1927,6 +1928,7 @@ func (c *RawContext) SchemaTree(module string) (*RawSchemaNode, error) {
 // SchemaModule walks the compiled schema tree for the implemented module named
 // `module` and returns rich module metadata plus the synthetic schema root.
 func (c *RawContext) SchemaModule(module string) (RawModuleInfo, *RawSchemaNode, error) {
+	defer pinToOSThread()()
 	defer runtime.KeepAlive(c)
 	cname := C.CString(module)
 	defer C.free(unsafe.Pointer(cname))
@@ -1957,6 +1959,7 @@ func (c *RawContext) SchemaModule(module string) (RawModuleInfo, *RawSchemaNode,
 // Modules that define identities but no data nodes are included because
 // identityrefs in implemented modules can depend on them.
 func (c *RawContext) SchemaModules() ([]RawModule, error) {
+	defer pinToOSThread()()
 	defer runtime.KeepAlive(c)
 	var out []RawModule
 	var idx C.uint32_t
@@ -1989,6 +1992,7 @@ func (c *RawContext) SchemaModules() ([]RawModule, error) {
 // LoadModuleFromPath loads a YANG module from a file path into the context.
 // The file is parsed as YANG format.
 func (c *RawContext) LoadModuleFromPath(path string) error {
+	defer pinToOSThread()()
 	defer runtime.KeepAlive(c)
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
@@ -2002,6 +2006,7 @@ func (c *RawContext) LoadModuleFromPath(path string) error {
 // Modules returns metadata for every implemented module in the context. The
 // iteration is one coarse FFI walk of ly_ctx_get_module_iter.
 func (c *RawContext) Modules() []RawModuleInfo {
+	defer pinToOSThread()()
 	defer runtime.KeepAlive(c)
 	var out []RawModuleInfo
 	var idx C.uint32_t
