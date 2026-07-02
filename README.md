@@ -28,9 +28,9 @@ engine requires cgo.
 
 | Tier | Packages | cgo? | What you get |
 |---|---|---|---|
-| **Schema + codegen** (default) | `cambium`, `codegen`, `compat` | no | parse YANG → ordered schema IR; introspect it; generate typed Go structs that serialize/parse/validate themselves in declaration order |
+| **Schema + codegen** (default) | `cambium`, `codegen`, `compat`, `cmd/cambium-ir` | no | parse YANG → ordered schema IR; introspect it; generate typed Go structs that serialize/parse/validate themselves in declaration order; export the IR as versioned JSON (`cambium.schema-ir.v1`) |
 | **Pure-Go data tree** (experimental) | `datatree` | no | generic data tree: parse/serialize/validate JSON_IETF + XML, leafrefs, `must`/`when`, defaults — without libyang. **API not yet stable** ([scope](docs/guides/data-tree-pure-go.md)) |
-| **libyang data backend** (optional) | `libyangbackend` | yes | full RFC-7950 data engine: parse/validate/serialize/diff/merge/LYB over a vendored, statically linked libyang |
+| **libyang data backend** (optional) | `libyangbackend`, `gnmi` | yes | full RFC-7950 data engine: parse/validate/serialize/diff/merge/LYB over a vendored, statically linked libyang; gNMI-style atomic JSON_IETF payload values (invariant I6) |
 
 The first two tiers are in the cgo-free default import closure, verified
 mechanically by `scripts/check-go-default-pure.sh`. The libyang backend stays
@@ -109,7 +109,8 @@ Full docs live in [`docs/`](docs/README.md). Start with the
 - [Schema introspection](docs/guides/schema-introspection.md) — package `cambium`
 - [Codegen](docs/guides/codegen.md) — package `codegen`
 - [Pure-Go data tree](docs/guides/data-tree-pure-go.md) — package `datatree` (experimental)
-- [libyang backend](docs/guides/data-tree-libyang.md) — package `libyangbackend`
+- [libyang backend](docs/guides/data-tree-libyang.md) — packages `libyangbackend` and the `gnmi` payload helper
+- [Downstream schema consumers](docs/guides/downstream-schema-consumers.md) — the versioned SchemaIR export (`cmd/cambium-ir`)
 - [Migrating from goyang](docs/guides/goyang-migration.md) — package `compat`
 
 **Concepts**
@@ -127,9 +128,12 @@ API reference is the package godoc, browsable on
 The Schema-IR tier (schema + codegen) and the optional libyang backend are in
 place and the shared conformance corpus passes. The pure-Go `datatree` tier is
 under active development and **experimental** — its API and value representation
-will change. Current work and known gaps are tracked in
-[docs/contributing/roadmap.md](docs/contributing/roadmap.md). gNMI support remains
-future work.
+will change; its supported subset is gated against the libyang backend by a
+differential conformance lane. Current work and known gaps are tracked in
+[docs/contributing/roadmap.md](docs/contributing/roadmap.md). gNMI support is a
+deliberately small, payload-only helper (`go/gnmi`): it emits `ordered-by user`
+data as one atomic JSON_IETF update value (invariant I6) and stops short of any
+client, session, or transport ownership.
 
 ## Acknowledgements
 

@@ -107,9 +107,11 @@ supports. It does **not** yet handle:
 
 - Opaque `anydata`/`anyxml` in XML, or cross-format conversion of opaque content.
 - RPC, action, and notification (operation) data.
-- The full XPath function set — the engine implements a growing subset and
-  **skips** `deref()` rather than mis-evaluating it. Validation that depends on
-  an unsupported construct is skipped, not failed.
+- The full XPath function set — the engine implements a growing XPath 1.0 subset
+  plus the YANG functions `re-match`, `bit-is-set`, `derived-from`, and
+  `derived-from-or-self`, and **skips** `deref()` (and any other unimplemented
+  function) rather than mis-evaluating it. Validation that depends on an
+  unsupported construct is skipped, not failed.
 
 In addition, leaf values are currently held as raw JSON tokens with XML conversion
 layered on top; the planned neutral value-representation refactor will change the

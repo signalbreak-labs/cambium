@@ -15,11 +15,19 @@ lands rather than adding another dated file.
   metadata. The tier carries no runtime dependency on `openconfig/goyang`: `compat`
   owns its goyang-shaped AST node types natively, and the only remaining goyang seam
   is a thin vendored raw-statement lexer, kept out of the default cgo-free closure.
+  The IR is exportable as versioned JSON (`cambium.schema-ir.v1`) via the pure-Go
+  `cmd/cambium-ir` CLI, with rebuild failures carried in-band
+  ([ADR 0002](../adr/0002-versioned-schemair-export.md)).
 - **libyang backend tier** (`libyangbackend`, `internal/libyang`) — the complete
   RFC-7950 data engine over a vendored, statically linked libyang: parse, full
-  semantic validation, serialize, diff, merge, and LYB.
+  semantic validation, serialize, diff, merge, and LYB. The backend-tier `gnmi`
+  helper emits `ordered-by user` data as one atomic JSON_IETF payload value
+  (invariant I6), payload-only by design
+  ([ADR 0003](../adr/0003-gnmi-payload-only-helper.md)).
 - The shared [conformance corpus](conformance.md) passes, gating the ordering
-  invariants across the tiers that implement them.
+  invariants across the tiers that implement them. Goldens regenerate only from
+  the `/VERSIONS`-pinned, repo-built oracle, and the corpus ships as a versioned
+  artifact ([ADR 0004](../adr/0004-conformance-corpus-authority.md)).
 
 ## Experimental / active work
 
@@ -40,24 +48,37 @@ lands rather than adding another dated file.
     will change the internal representation and the public surface that exposes leaf
     values.
   - **Scope gaps.** No opaque XML `anydata`/`anyxml`, no cross-format conversion
-    for opaque content, no RPC/action/notification (operation) data, and the
-    XPath engine still skips `deref()` rather than mis-evaluating it.
+    for opaque content, and no RPC/action/notification (operation) data. The XPath
+    engine now covers the YANG functions `re-match`, `bit-is-set`, `derived-from`,
+    and `derived-from-or-self`; it still **skips** `deref()` rather than
+    mis-evaluating it.
 
   The goal is a complete, stable pure-Go data tier so that the full
   parse → validate → serialize path can run with the same portability the schema
-  tier already has — `go get`, cross-compile, no C toolchain.
+  tier already has — `go get`, cross-compile, no C toolchain. Graduation is
+  machine-gated: every conformance case marked `datatree = true` runs through
+  **both** engines in the differential lane (`go run ./cmd/cambium datatree-diff`),
+  which byte-compares output after compact-only normalization — element and member
+  order is never normalized away. Growing that flagged subset *is* the path to
+  stable.
 
 ## Not built yet
 
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
-  none exists today. See [adding a binding](adding-a-binding.md).
+  none exists today. The enabling step has landed: the corpus is published as a
+  versioned, checksummed artifact a peer can consume without cloning this repo
+  ([conformance artifact guide](../guides/conformance-artifact.md)). See
+  [adding a binding](adding-a-binding.md).
 
 ## How status is tracked
 
 - This page — the living narrative of stable / experimental / unbuilt.
 - The [conformance corpus](conformance.md) — the machine-checkable floor; a
-  capability is not "done" without passing fixtures.
+  capability is not "done" without passing fixtures. For `datatree`, the
+  differential lane (`datatree = true` cases) is the graduation gate.
+- [Architecture decision records](../adr/) — the one-way-door decisions and their
+  reversal costs.
 - Git history — past point-in-time audits and release-readiness snapshots remain
   there for anyone who needs the historical record.
 
