@@ -1,0 +1,6 @@
+{
+  "datatree-augment-derived-from-prefix-base:top": {
+    "kind": "datatree-augment-derived-from-prefix:aug-child",
+    "datatree-augment-derived-from-prefix:guarded": "ok"
+  }
+}

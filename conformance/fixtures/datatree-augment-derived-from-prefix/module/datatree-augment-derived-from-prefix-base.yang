@@ -1,0 +1,15 @@
+module datatree-augment-derived-from-prefix-base {
+  yang-version 1.1;
+  namespace "urn:datatree-augment-derived-from-prefix-base";
+  prefix base;
+
+  identity base-kind;
+
+  container top {
+    leaf kind {
+      type identityref {
+        base base-kind;
+      }
+    }
+  }
+}
