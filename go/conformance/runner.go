@@ -385,7 +385,7 @@ func formatBytesForCompare(format backend.Format, b []byte) []byte {
 	return normalize(b)
 }
 
-// normalize strips trailing ASCII whitespace, matching the Rust runner.
+// normalize strips trailing ASCII whitespace, matching the conformance contract.
 func normalize(b []byte) []byte {
 	return bytes.TrimRight(b, " \t\r\n\v\f")
 }

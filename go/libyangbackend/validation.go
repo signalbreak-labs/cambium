@@ -5,8 +5,8 @@
 
 // Structured validation diagnostics for multi-error RFC-7950 validation.
 //
-// This file mirrors rust/cambium-core/src/error.rs and the validation diagnostic
-// classification in rust/cambium-core/src/tree.rs.
+// This file follows the language-neutral adapter contract for validation
+// diagnostics (see /spec, /conformance, and docs/contributing/adding-a-binding.md).
 
 package libyangbackend
 

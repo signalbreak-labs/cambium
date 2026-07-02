@@ -386,8 +386,8 @@ func (t *DataTree) UserOrderedListAt(path string) (*UserOrderedList, error) {
 	// Reject non-user-ordered targets (the I1 mechanism). libyang only partially
 	// guards: lyd_insert_before/after reject a system-ordered node, but
 	// lyd_insert_child (InsertLast) silently succeeds, so a positional handle on
-	// a system-ordered list would violate the positional-only contract. Mirror
-	// the Rust oracle and fail at the boundary with E0005.
+	// a system-ordered list would violate the positional-only contract. Match
+	// the adapter contract and fail at the boundary with E0005.
 	ref, err := t.Get(path)
 	if err != nil {
 		return nil, wrap("user ordered list", err)
@@ -588,8 +588,8 @@ func (d *DataDiff) Close() {
 //
 // It deliberately has NO order-agnostic mutator (no Set, no Upsert, no index
 // assignment): reordering a system-ordered node by mistake is impossible to
-// express, mirroring the Rust UserOrderedList type. It keeps its owning
-// DataTree alive. External mutations invalidate the handle; re-acquire with
+// express, matching the adapter contract. It keeps its owning DataTree alive.
+// External mutations invalidate the handle; re-acquire with
 // UserOrderedListAt after RuleCodeStale.
 type UserOrderedList struct {
 	owner *DataTree

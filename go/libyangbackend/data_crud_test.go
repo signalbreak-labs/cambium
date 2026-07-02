@@ -45,8 +45,8 @@ func TestRemovePathRejectsListKey(t *testing.T) {
 	}
 }
 
-// loadCRUDContext creates a temporary module that matches the Rust
-// data_crud.rs demo exactly so the same paths and observables can be asserted.
+// loadCRUDContext creates a temporary module with stable paths and observables
+// for the CRUD behavior checks.
 func loadCRUDContext(t *testing.T) (*cambium.Context, *cambium.DataTree) {
 	t.Helper()
 	dir := t.TempDir()

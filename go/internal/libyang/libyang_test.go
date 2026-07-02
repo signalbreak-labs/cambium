@@ -56,7 +56,7 @@ func TestRawDataTreeNewDataCarriesContext(t *testing.T) {
 }
 
 // Merge and Diff across two different contexts must be rejected at the raw layer
-// (matching the Rust adapter); passing two ly_ctx to libyang is undefined
+// to match the adapter contract; passing two ly_ctx to libyang is undefined
 // behavior. Empty NewData trees keep the red case benign (no node deref).
 func TestMergeDiffRejectCrossContext(t *testing.T) {
 	c1, err := NewContext()

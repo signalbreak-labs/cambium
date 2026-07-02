@@ -8,7 +8,8 @@
 //
 // Calls are coarse-grained by mandate: a whole document is parsed / serialized /
 // validated per cgo call. There is no per-node cgo and no C->Go callback in any
-// hot path — exactly mirroring rust/cambium-libyang-sys/src/adapter.rs.
+// hot path, per the language-neutral adapter contract (see /spec,
+// /conformance, and docs/contributing/adding-a-binding.md).
 //
 //go:build cgo
 
@@ -816,9 +817,9 @@ func (t *RawDataTree) collectSiblings(first *C.struct_lyd_node) ([]RawChildInfo,
 	var out []RawChildInfo
 	for cur := first; cur != nil; cur = cur.next {
 		// Skip opaque / schema-less nodes (produced only under Opaque parse mode)
-		// to match the Rust adapter, which gates children/siblings/roots on the
-		// node having a schema name. Opaque nodes also cannot round-trip through
-		// lyd_find_path, so a NodeRef to one would be unusable.
+		// to match the adapter contract, which gates children/siblings/roots on
+		// the node having a schema name. Opaque nodes also cannot round-trip
+		// through lyd_find_path, so a NodeRef to one would be unusable.
 		if cur.schema == nil {
 			continue
 		}
@@ -1076,8 +1077,8 @@ func (t *RawDataTree) Merge(source *RawDataTree) error {
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(source)
 	defer runtime.KeepAlive(source.owner)
-	// Passing two different ly_ctx to libyang is undefined behavior; guard at the
-	// raw layer to match the Rust adapter (adapter.rs merge).
+	// Passing two different ly_ctx to libyang is undefined behavior; guard at
+	// the raw layer to match the adapter contract.
 	if t.ctx != source.ctx {
 		return fmt.Errorf("merge requires both trees to share the same context")
 	}
@@ -1123,8 +1124,8 @@ func (t *RawDataTree) Diff(other *RawDataTree, defaults bool) (*RawDataDiff, err
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(other)
 	defer runtime.KeepAlive(other.owner)
-	// Passing two different ly_ctx to libyang is undefined behavior; guard at the
-	// raw layer to match the Rust adapter (adapter.rs diff).
+	// Passing two different ly_ctx to libyang is undefined behavior; guard at
+	// the raw layer to match the adapter contract.
 	if t.ctx != other.ctx {
 		return nil, fmt.Errorf("diff requires both trees to share the same context")
 	}
@@ -1427,10 +1428,10 @@ func (l *RawUserOrderedList) MoveAfter(what, point int) error {
 func (l *RawUserOrderedList) nth(n int) *C.struct_lyd_node {
 	defer runtime.KeepAlive(l.owner)
 	// Index relative to THIS list's entries only. A parent container may hold
-	// other siblings (other lists, leaves), so filter by schema name — mirrors
-	// the Rust adapter's filtered nth_child. Without this, an index walks across
-	// foreign siblings and inserts/moves relative to the wrong node, silently
-	// corrupting the structural order this project exists to protect.
+	// other siblings (other lists, leaves), so filter by schema name per the
+	// adapter contract's filtered positional traversal. Without this, an index
+	// walks across foreign siblings and inserts/moves relative to the wrong node,
+	// silently corrupting the structural order this project exists to protect.
 	i := 0
 	for child := C.lyd_child(l.parent); child != nil; child = child.next {
 		if C.GoString(C.cam_lyd_schema_name(child)) != l.schemaName {

@@ -240,7 +240,7 @@ func TestUserOrderedListHeterogeneousParent(t *testing.T) {
 // handle on a system-ordered list fails with E0005 (the I1 mechanism). libyang
 // only partially guards this — lyd_insert_child silently succeeds on a
 // system-ordered list — so Cambium must reject the target at the API boundary,
-// mirroring the Rust oracle (rust/cambium-core/tests/user_ordered_read.rs).
+// matching the adapter contract.
 func TestUserOrderedListAtRejectsSystemOrdered(t *testing.T) {
 	dir := filepath.Join("..", "..", "target", "tests", "ordered-system-reject", "modules")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
