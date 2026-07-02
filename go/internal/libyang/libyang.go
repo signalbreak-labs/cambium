@@ -331,7 +331,7 @@ func (c *RawContext) NewData() *RawDataTree {
 	// Route through acquire/release like every other RawContext entry point:
 	// a successful acquire holds live > 0, so destroyCtx cannot write c.ctx
 	// while we read it, and the tree's own retain lands before our release.
-	if err := c.acquire(); err != nil {
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
 		return newRawDataTree(nil, c, nil)
 	}
 	defer c.release()
