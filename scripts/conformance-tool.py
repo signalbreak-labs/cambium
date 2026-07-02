@@ -89,7 +89,7 @@ def main():
     gen = sub.add_parser("gen", help="regenerate goldens from yanglint")
     gen.add_argument("names", nargs="+")
 
-    ver = sub.add_parser("verify", help="run Rust+Go runners")
+    ver = sub.add_parser("verify", help="run the Go conformance runner")
     ver.add_argument("name", nargs="?")
 
     args = parser.parse_args()

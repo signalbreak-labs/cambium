@@ -183,6 +183,15 @@ def write_goldens(name: str, wd_mode: Optional[str] = None,
     if name not in cases:
         raise RuntimeError(f"case {name} not found in manifest")
     case = cases[name]
+    expected = {fmt: rel for fmt, rel in case.get("expected", {}).items()
+                if fmt in {"xml", "json", "json_ietf"}}
+    if "input" not in case or not expected:
+        # Compile-only tiers (schema-ir) have no data input; helper-only cases
+        # (gnmi-json-ietf) have no yanglint-comparable format. Neither golden
+        # kind is produced by the oracle, so there is nothing to regenerate.
+        tier = case.get("tier", "backend-data")
+        print(f"  skipping {name}: no yanglint-regenerable goldens (tier={tier})")
+        return
     if wd_mode is None:
         wd_mode = case.get("serialize-defaults")
     if op_type is None:
@@ -191,9 +200,7 @@ def write_goldens(name: str, wd_mode: Optional[str] = None,
     input_path = CONFORMANCE / case["input"]
     golden_dir = CONFORMANCE / "golden" / name
     golden_dir.mkdir(parents=True, exist_ok=True)
-    for fmt, golden_rel in case.get("expected", {}).items():
-        if fmt not in {"xml", "json", "json_ietf"}:
-            continue
+    for fmt, golden_rel in expected.items():
         golden_path = CONFORMANCE / golden_rel
         golden_bytes = run_yanglint(module_dir, input_path, fmt, wd_mode, op_type)
         golden_path.write_bytes(golden_bytes + b"\n")
