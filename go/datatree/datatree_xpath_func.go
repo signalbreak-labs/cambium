@@ -6,13 +6,16 @@ package datatree
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
+
+	"github.com/signalbreak-labs/cambium/go/cambium"
+	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
 )
 
 // Core XPath 1.0 function library. Functions outside this set return an error so
-// the caller skips the check (YANG-specific functions like derived-from,
-// re-match, bit-is-set, and deref are intentionally not implemented yet and
-// therefore skip rather than mis-evaluate).
+// the caller skips the check. deref() is intentionally not implemented yet and
+// therefore skips rather than mis-evaluates.
 func (ev *evaluator) evalCall(x *xCall, c ectx) (xval, error) {
 	args := make([]xval, len(x.args))
 	for i, a := range x.args {
@@ -150,9 +153,146 @@ func (ev *evaluator) evalCall(x *xCall, c ectx) (xval, error) {
 			return strVal(""), nil
 		}
 		return strVal(n.name), nil
+	case "re-match":
+		if err := arity(2); err != nil {
+			return xval{}, err
+		}
+		pattern := args[1].toStr()
+		if unsupported := xsdregex.UnsupportedNativeSyntax(pattern); unsupported != "" {
+			return xval{}, fmt.Errorf("re-match() unsupported regex syntax: %s", unsupported)
+		}
+		re, err := regexp.Compile("^(?:" + xsdregex.NativePattern(pattern) + ")$")
+		if err != nil {
+			return xval{}, fmt.Errorf("re-match() regex compile: %w", err)
+		}
+		return boolVal(re.MatchString(args[0].toStr())), nil
+	case "bit-is-set":
+		if err := arity(2); err != nil {
+			return xval{}, err
+		}
+		want := args[1].toStr()
+		for _, bit := range strings.Fields(args[0].toStr()) {
+			if bit == want {
+				return boolVal(true), nil
+			}
+		}
+		return boolVal(false), nil
+	case "derived-from":
+		if err := arity(2); err != nil {
+			return xval{}, err
+		}
+		return ev.evalDerivedFrom(args[0], args[1].toStr(), false)
+	case "derived-from-or-self":
+		if err := arity(2); err != nil {
+			return xval{}, err
+		}
+		return ev.evalDerivedFrom(args[0], args[1].toStr(), true)
 	default:
 		return xval{}, fmt.Errorf("unsupported function %q", x.name)
 	}
+}
+
+func (ev *evaluator) evalDerivedFrom(value xval, targetQName string, orSelf bool) (xval, error) {
+	if value.kind != kNodeset {
+		return xval{}, fmt.Errorf("derived-from() requires a node-set")
+	}
+	target, ok, err := ev.identityForQName(targetQName)
+	if err != nil {
+		return xval{}, err
+	}
+	if !ok {
+		return boolVal(false), nil
+	}
+	for _, n := range value.ns {
+		actual, ok := identityRefIdentity(n)
+		if ok && identityDerivedFrom(actual, target, orSelf) {
+			return boolVal(true), nil
+		}
+	}
+	return boolVal(false), nil
+}
+
+func (ev *evaluator) identityForQName(qname string) (cambium.Identity, bool, error) {
+	prefix, local, prefixed := strings.Cut(qname, ":")
+	if !prefixed {
+		local = qname
+		prefix = ""
+	}
+	mod, ok := ev.module.ResolvePrefix(prefix)
+	if !ok {
+		return cambium.Identity{}, false, fmt.Errorf("unknown identity prefix %q", prefix)
+	}
+	id, ok := mod.Identity(local)
+	return id, ok, nil
+}
+
+func identityRefIdentity(n *xnode) (cambium.Identity, bool) {
+	if n == nil || !n.hasSchema || !n.leaf {
+		return cambium.Identity{}, false
+	}
+	ti, ok := n.schema.LeafType()
+	if !ok {
+		return cambium.Identity{}, false
+	}
+	resolved, ok := identityRefType(ti)
+	if !ok {
+		return cambium.Identity{}, false
+	}
+	value := n.value
+	leafModule := n.schema.Module().Name()
+	for _, base := range resolved.Bases() {
+		if id, ok := findIdentityRefValue(base, value, leafModule); ok {
+			return id, true
+		}
+	}
+	return cambium.Identity{}, false
+}
+
+func identityRefType(ti cambium.TypeInfo) (cambium.ResolvedIdentityRef, bool) {
+	switch r := ti.Resolved().(type) {
+	case cambium.ResolvedIdentityRef:
+		return r, true
+	case cambium.ResolvedLeafRef:
+		if rt, ok := r.Realtype(); ok && rt != nil {
+			return identityRefType(*rt)
+		}
+	}
+	return cambium.ResolvedIdentityRef{}, false
+}
+
+func findIdentityRefValue(id cambium.Identity, value, leafModule string) (cambium.Identity, bool) {
+	if identityRefValueMatches(id, value, leafModule) {
+		return id, true
+	}
+	for _, derived := range id.Derived() {
+		if found, ok := findIdentityRefValue(derived, value, leafModule); ok {
+			return found, true
+		}
+	}
+	return cambium.Identity{}, false
+}
+
+func identityRefValueMatches(id cambium.Identity, value, leafModule string) bool {
+	if strings.Contains(value, ":") {
+		return value == identityQName(id)
+	}
+	return id.Module().Name() == leafModule && id.Name() == value
+}
+
+func identityDerivedFrom(actual, target cambium.Identity, orSelf bool) bool {
+	if identityQName(actual) == identityQName(target) {
+		return orSelf
+	}
+	for _, derived := range target.Derived() {
+		if identityQName(actual) == identityQName(derived) || identityDerivedFrom(actual, derived, true) {
+			return true
+		}
+	}
+	return false
+}
+
+func identityQName(id cambium.Identity) string {
+	return id.Module().Name() + ":" + id.Name()
 }
 
 // xpathRound implements XPath round(): round half towards positive infinity.

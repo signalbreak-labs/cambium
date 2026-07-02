@@ -26,8 +26,9 @@ Two of them handle data:
 
 - The **experimental pure-Go `datatree` tier** (`CGO_ENABLED=0`) parses,
   serializes, and validates generic trees without any C toolchain, but its scope
-  is deliberately narrower (no `anydata`/`anyxml`, no RPC/action/notification
-  data, a core-subset XPath engine) and its API is still moving. See
+  is deliberately narrower (opaque `anydata`/`anyxml` are JSON_IETF-only, no
+  RPC/action/notification data, and not every XPath function is implemented) and
+  its API is still moving. See
   [the pure-Go data tree guide](./data-tree-pure-go.md).
 - This **libyang backend tier** is the mature, RFC-complete data engine.
 

@@ -1951,6 +1951,7 @@ module = "fixtures/constraints-when-xpath-functions/module"
 input = "fixtures/constraints-when-xpath-functions/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-when-xpath-functions/output.xml"
 json = "golden/constraints-when-xpath-functions/output.json"

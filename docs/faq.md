@@ -56,8 +56,8 @@ the cgo build requirement.
 - The pure-Go **`datatree`** tier is cgo-free but **experimental**. Its public API
   and internal value representation **will change** (the current raw-JSON-token
   representation is being reworked), and its scope is narrower than the backend: no
-  `anydata`/`anyxml`, no RPC / action / notification data, and an XPath engine that
-  implements only a core subset of `must`/`when`. Reach for it only if you need a
+  opaque XML `anydata`/`anyxml`, no RPC / action / notification data, and an XPath
+  engine that still omits `deref()`. Reach for it only if you need a
   cgo-free data round-trip and can tolerate API churn. See
   [guides/data-tree-pure-go.md](./guides/data-tree-pure-go.md) for the exact
   supported surface.

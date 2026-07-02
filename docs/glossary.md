@@ -138,10 +138,11 @@ supports.
 The **experimental**, cgo-free Cambium layer (package `datatree`) that parses,
 serializes, and validates generic instance data without libyang. It handles
 JSON_IETF and XML round-trip, structural and type validation, leafref instance
-existence, `must`/`when` over a core XPath subset, and apply-defaults — but its
+existence, `must`/`when` over a growing XPath subset, and apply-defaults — but its
 API and internal value representation are unstable and its scope is narrower than
-the libyang backend (no `anydata`/`anyxml`, no RPC/action/notification data,
-partial XPath). It is in the default cgo-free import closure.
+the libyang backend (opaque `anydata`/`anyxml` are JSON_IETF-only, no
+RPC/action/notification data, partial XPath). It is in the default cgo-free
+import closure.
 
 ## Rule code (CAMBIUM_E####)
 

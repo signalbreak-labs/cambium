@@ -38,8 +38,8 @@ Start from what you are trying to do, not from a package name.
   I can tolerate an unstable API and a narrower feature set."** → the **experimental
   `datatree` tier.** It parses/serializes JSON_IETF and XML and validates without a
   C toolchain, but its API and value representation will change, and it does not yet
-  cover `anydata`/`anyxml`, RPC/action/notification data, or the full XPath function
-  set. See the [pure-Go data tree guide](../guides/data-tree-pure-go.md). If you
+  cover opaque XML `anydata`/`anyxml`, RPC/action/notification data, or the full
+  XPath function set. See the [pure-Go data tree guide](../guides/data-tree-pure-go.md). If you
   need stability today, use the libyang backend instead.
 
 - **"I'm migrating from openconfig/goyang."** → **Schema-IR tier, `compat` package.**

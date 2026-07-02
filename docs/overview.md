@@ -109,12 +109,14 @@ import closure is machine-enforced by `scripts/check-go-default-pure.sh`.
 
 Package `datatree`. A generic, cgo-free data tree: parse and serialize JSON_IETF
 and XML, validate (mandatory, cardinality, uniqueness, leafref existence,
-`must`/`when` over a core XPath subset), and apply defaults — all without libyang.
+`must`/`when` over a growing XPath subset), preserve opaque `anydata`/`anyxml` in
+JSON_IETF, and apply defaults — all without libyang.
 For its supported constructs it preserves **I1/I2/I3/I5**.
 
 > **Experimental.** `datatree`'s public API and internal value representation **will
-> change**, and its scope is narrower than the libyang backend (no `anydata`/`anyxml`,
-> no RPC/action/notification data, partial XPath). Do not depend on its API yet — the
+> change**, and its scope is narrower than the libyang backend (opaque
+> `anydata`/`anyxml` are JSON_IETF-only, no RPC/action/notification data, partial
+> XPath). Do not depend on its API yet — the
 > [pure-Go data tree guide](guides/data-tree-pure-go.md) has the exact supported
 > surface and [the roadmap](contributing/roadmap.md) tracks status.
 
