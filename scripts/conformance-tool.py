@@ -2,7 +2,7 @@
 """Helper for authoring Cambium conformance fixtures.
 
 Creates fixture files, captures goldens from yanglint, updates manifest.toml,
-and verifies against Rust + Go runners.
+and verifies against the Go conformance runner.
 """
 import argparse
 import os
@@ -169,17 +169,11 @@ def gen_goldens(name: str) -> None:
 
 
 def verify(name: Optional[str] = None) -> int:
-    rust_cmd = ["cargo", "run", "-p", "conformance-runner"]
-    if name:
-        rust_cmd = ["cargo", "run", "-p", "conformance-runner", "--", name]
-    print("--- Rust runner ---")
-    r1 = subprocess.run(rust_cmd, cwd=ROOT)
-    print("\n--- Go runner ---")
+    print("--- Go runner ---")
     go_cmd = ["go", "run", "./cmd/cambium"]
     if name:
         go_cmd += [name]
-    r2 = subprocess.run(go_cmd, cwd=ROOT / "go")
-    return r1.returncode or r2.returncode
+    return subprocess.run(go_cmd, cwd=ROOT / "go").returncode
 
 
 def cmd_add(args):
