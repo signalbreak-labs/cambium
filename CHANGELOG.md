@@ -27,8 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   context operations.
 - Documented concurrency contract on `Context`, `DataTree`, `NodeRef`, and
   `UserOrderedList`, with race-detector stress tests.
-- CI execution of zig/musl static Go test binaries for the pure packages plus
-  `internal/libyang` and `libyangbackend`.
+- CI execution of zig/musl static Go test binaries for every test-bearing
+  package in the module.
 
 ### Changed
 

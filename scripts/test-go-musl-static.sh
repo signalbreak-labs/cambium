@@ -13,15 +13,6 @@ export GOARCH="${GOARCH:-amd64}"
 export CGO_ENABLED="${CGO_ENABLED:-1}"
 export CC="${CC:-zig cc -target x86_64-linux-musl}"
 
-pkgs=(
-  ./cambium
-  ./codegen
-  ./compat
-  ./datatree
-  ./internal/libyang
-  ./libyangbackend
-)
-
 host_os="$(go env GOHOSTOS)"
 host_arch="$(go env GOHOSTARCH)"
 if [ "$host_os" != "$GOOS" ] || [ "$host_arch" != "$GOARCH" ]; then
@@ -38,6 +29,17 @@ fi
 mkdir -p "$OUT_DIR"
 
 cd "$GO_DIR"
+
+# Every test-bearing package, derived from the live module so new packages
+# cannot be silently excluded from the musl lane.
+pkgs=()
+while IFS= read -r pkg; do
+  [ -n "$pkg" ] && pkgs+=("$pkg")
+done < <(go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
+if [ "${#pkgs[@]}" -eq 0 ]; then
+  echo "error: no test-bearing packages found under $GO_DIR" >&2
+  exit 1
+fi
 
 if [ "${CAMBIUM_MUSL_PROBE_RACE:-1}" != "0" ]; then
   echo "==> probing musl -race support on internal/libyang"
