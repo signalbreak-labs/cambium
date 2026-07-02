@@ -197,12 +197,16 @@ concurrency rules are part of the architecture, not an implementation detail.
   modules and frozen thereafter. In the pure tier this is explicit: `ContextBuilder`
   is the mutable phase and `Build()` returns a frozen `*Context`. The libyang
   `ly_ctx` follows the same discipline — assemble the schema, then treat it as
-  read-only and shareable for reads.
+  read-only and shareable for schema reads and parsing independent data trees.
+  Mutators and `Close()` must not race with those operations.
 - **Data trees are not concurrency-safe.** A `*DataTree` is mutable state with no
   internal locking. Do not share one across goroutines without external
   synchronization; give each goroutine its own (e.g. via `Duplicate()`), or
-  serialize access. The frozen context is the shared, read-only part; the data tree
-  is the per-operation, mutable part.
+  serialize access. Borrowed handles (`NodeRef`, ordered-list handles, diffs)
+  inherit the same rule and are invalidated by tree mutations. Backend validation
+  serializes libyang validation-log collection process-wide, but the safe sharing
+  shape is still one independent tree per goroutine. The frozen context is the
+  shared, read-only part; the data tree is the per-operation, mutable part.
 
 These rules follow directly from the hexagonal placement: the engine is an adapter
 the core does not own, so the contract for using it safely is stated explicitly at

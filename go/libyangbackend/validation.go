@@ -108,7 +108,9 @@ func (v *ValidationErrors) Error() string {
 }
 
 // Validate validates the tree. If validation fails, the returned error wraps a
-// *ValidationErrors that can be recovered with errors.As.
+// *ValidationErrors that can be recovered with errors.As. Validation is safe on
+// independent trees that share a frozen Context; libyang validation-log
+// collection is serialized process-wide by the backend.
 func (t *DataTree) Validate(mode ValidateMode) error {
 	ve, err := t.validateCollect(mode)
 	if err != nil {
