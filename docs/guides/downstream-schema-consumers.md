@@ -12,7 +12,9 @@ transport, or renderer-specific concepts.
 `ctx.SchemaIR()` returns a `cambium.SchemaIR` value tagged with
 `cambium.SchemaIRVersion`. The projection contains loaded modules in context
 order, including import-only modules, and marks each module with `Implemented`.
-Nested `SchemaIRNode` values are in effective schema declaration order.
+Nested `SchemaIRNode` values are in effective schema declaration order. If schema
+materialization fails during a dirty rebuild, `SchemaIR.Errors` carries
+structured diagnostics instead of silently dropping the failure.
 
 Each node carries:
 
