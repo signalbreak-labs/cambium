@@ -29,6 +29,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `UserOrderedList`, with race-detector stress tests.
 - CI execution of zig/musl static Go test binaries for every test-bearing
   package in the module.
+- Architecture decision records 0002–0005 (versioned SchemaIR export, payload-only
+  gNMI helper, conformance-corpus authority, fail-closed FFI lifecycle), and a
+  status-docs refresh reflecting the landed surfaces.
 
 ### Changed
 

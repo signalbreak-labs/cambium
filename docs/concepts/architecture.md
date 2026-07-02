@@ -27,7 +27,7 @@ the reverse.
 
 ```mermaid
 flowchart TD
-    callers["inbound (callers)<br/>codegen.GenerateGo · cmd/cambium · your program"]
+    callers["inbound (callers)<br/>codegen.GenerateGo · cmd/cambium · cmd/cambium-ir · your program"]
 
     subgraph core["DOMAIN CORE (pure Go)"]
         cambium["package cambium<br/>ordered schema IR"]
@@ -38,6 +38,7 @@ flowchart TD
     end
 
     subgraph adapter["OUTBOUND ADAPTER (optional, cgo)"]
+        gnmi["package gnmi<br/>JSON_IETF payload helper (I6)"]
         backend["package libyangbackend<br/>generic DataTree"]
         ffi["package internal/libyang<br/>cgo engine bindings"]
         engine["vendored libyang v5.x + PCRE2<br/>(static link)"]
@@ -45,6 +46,7 @@ flowchart TD
 
     callers --> cambium
     backend -. "dependencies point inward only" .-> cambium
+    gnmi --> backend
     backend --> ffi
     ffi -->|"cgo (only crossing)"| engine
 ```
@@ -140,6 +142,11 @@ backed by a vendored, statically linked libyang + PCRE2.
   is the only package that contains C interop and references the vendored engine.
   Build the engine once with `bash go/internal/libyang/build.sh`, a two-stage static
   CMake build of vendored PCRE2 then libyang.
+- **`gnmi`** — a small, payload-only helper on top of `libyangbackend`:
+  `JSONIETFAtomicUpdate` emits an `ordered-by user` subtree as **one atomic
+  JSON_IETF update value** (invariant I6), rejecting predicated paths rather than
+  silently widening them. It owns no client, session, or transport
+  ([ADR 0003](../adr/0003-gnmi-payload-only-helper.md)).
 
 The libyang tier stays strictly outside the default import closure. Nothing in
 `cambium`, `codegen`, `compat`, or `datatree` reaches it.
@@ -164,9 +171,10 @@ into the default closure, and that kind of regression is easy to miss in review.
 The script:
 
 1. Runs `CGO_ENABLED=0 go vet` and `CGO_ENABLED=0 go test` over `./cambium`,
-   `./codegen`, `./compat`, and `./datatree` (plus the cgo-free fitness tests under
-   `./conformance` and `./internal/...`), so the pure surface is exercised with cgo
-   genuinely disabled — the path the `CGO_ENABLED=1` lane would silently skip.
+   `./codegen`, `./compat`, `./datatree`, and `./cmd/cambium-ir` (plus the cgo-free
+   fitness tests under `./conformance` and `./internal/...`), so the pure surface is
+   exercised with cgo genuinely disabled — the path the `CGO_ENABLED=1` lane would
+   silently skip.
 2. Lists the full transitive dependency closure of those packages with
    `CGO_ENABLED=0 go list -deps` and fails if it contains any forbidden package:
    `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
@@ -198,7 +206,11 @@ concurrency rules are part of the architecture, not an implementation detail.
   is the mutable phase and `Build()` returns a frozen `*Context`. The libyang
   `ly_ctx` follows the same discipline — assemble the schema, then treat it as
   read-only and shareable for schema reads and parsing independent data trees.
-  Mutators and `Close()` must not race with those operations.
+  Mutators and `Close()` must not race with those operations; the FFI seam is
+  additionally **fail-closed** as a safety net — operations after (or racing)
+  `Close` return `ErrContextClosed` instead of reaching freed memory, and the
+  engine is destroyed only after the last live tree/diff is released
+  ([ADR 0005](../adr/0005-ffi-lifecycle-fail-closed.md)).
 - **Data trees are not concurrency-safe.** A `*DataTree` is mutable state with no
   internal locking. Do not share one across goroutines without external
   synchronization; give each goroutine its own (e.g. via `Duplicate()`), or
@@ -224,7 +236,10 @@ attach as a first-class peer rather than a bolt-on.
 - **`/conformance`** — a shared corpus of fixtures plus `golden/` outputs and
   `manifest.toml`. Every binding runs the same corpus through its own runner and is
   expected to reproduce the same golden bytes, so parity is defined by behavior on
-  shared inputs, not by which language landed first.
+  shared inputs, not by which language landed first. The corpus is also packaged as
+  a versioned, checksummed artifact for out-of-repo consumers
+  ([guide](../guides/conformance-artifact.md),
+  [ADR 0004](../adr/0004-conformance-corpus-authority.md)).
 - **`/VERSIONS`** — the single source of truth for the pinned C engine: the libyang
   and PCRE2 SHAs and the engine-affecting `cmake_flags`. Every build stack must
   honor the same pins so each links a byte-identical engine.

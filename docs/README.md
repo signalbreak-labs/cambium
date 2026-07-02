@@ -59,7 +59,7 @@ This suite has three authorities, with no overlap between them:
   (**experimental**): parse, validate, and serialize generic data without cgo.
 - [guides/data-tree-libyang.md](guides/data-tree-libyang.md) — package
   `libyangbackend`: build the engine, then parse, validate, serialize, diff, merge,
-  and emit LYB over real data.
+  and emit LYB over real data; includes the `gnmi` atomic JSON_IETF payload helper.
 - [guides/goyang-migration.md](guides/goyang-migration.md) — package `compat`: the
   goyang-shaped read-only projection and the migration notes.
 
@@ -75,6 +75,10 @@ This suite has three authorities, with no overlap between them:
   language binding attaches as a peer against `/spec` and `/conformance`.
 - [contributing/vendor-yang.md](contributing/vendor-yang.md) — policy for distilling
   owned conformance fixtures from vendor YANG without vendoring proprietary models.
+- [guides/conformance-artifact.md](guides/conformance-artifact.md) — the corpus as a
+  versioned, checksummed artifact for out-of-repo consumers.
+- [adr/](adr/) — architecture decision records: the accepted one-way-door decisions
+  and their reversal costs.
 - [../spec/api.md](../spec/api.md) · [../spec/ordering-invariants.md](../spec/ordering-invariants.md) · [../spec/rule-codes.md](../spec/rule-codes.md) — the normative contract.
 
 ## See also
