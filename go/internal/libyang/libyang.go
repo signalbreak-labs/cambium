@@ -1100,6 +1100,11 @@ func (t *RawDataTree) DiffApply(diff *RawDataDiff) error {
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(diff)
 	defer runtime.KeepAlive(diff.owner)
+	// Passing two different ly_ctx to libyang is undefined behavior; guard at the
+	// raw layer to match Merge and Diff.
+	if t.ctx != diff.ctx {
+		return fmt.Errorf("diff apply requires the diff and tree to share the same context")
+	}
 	rc := C.lyd_diff_apply_all(&t.tree, diff.tree) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return lyError(t.ctx, "diff apply", int(rc))

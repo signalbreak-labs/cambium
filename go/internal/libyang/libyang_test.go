@@ -7,6 +7,7 @@ package libyang
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -78,6 +79,71 @@ func TestMergeDiffRejectCrossContext(t *testing.T) {
 	if _, err := t1.Diff(t2, false); err == nil {
 		t.Fatal("Diff across contexts must return an error")
 	}
+}
+
+func TestDiffApplyRejectsCrossContext(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "diffapply-cross.yang"), []byte(`module diffapply-cross {
+  namespace "urn:diffapply-cross";
+  prefix dc;
+  revision 2026-07-02;
+  container top { leaf value { type string; } }
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c1 := diffApplyCrossContext(t, dir)
+	defer c1.Close()
+	c2 := diffApplyCrossContext(t, dir)
+	defer c2.Close()
+
+	treeA, err := c1.ParseData(FormatXML, ParseOnly, []byte(`<top xmlns="urn:diffapply-cross"><value>a</value></top>`))
+	if err != nil {
+		t.Fatalf("ParseData treeA: %v", err)
+	}
+	defer treeA.Close()
+	treeA2, err := c1.ParseData(FormatXML, ParseOnly, []byte(`<top xmlns="urn:diffapply-cross"><value>b</value></top>`))
+	if err != nil {
+		t.Fatalf("ParseData treeA2: %v", err)
+	}
+	defer treeA2.Close()
+	treeB, err := c2.ParseData(FormatXML, ParseOnly, []byte(`<top xmlns="urn:diffapply-cross"><value>a</value></top>`))
+	if err != nil {
+		t.Fatalf("ParseData treeB: %v", err)
+	}
+	defer treeB.Close()
+
+	diff, err := treeA.Diff(treeA2, false)
+	if err != nil {
+		t.Fatalf("Diff: %v", err)
+	}
+	if diff == nil {
+		t.Fatal("Diff returned nil")
+	}
+	defer diff.Close()
+
+	err = treeB.DiffApply(diff)
+	if err == nil || !strings.Contains(err.Error(), "same context") {
+		t.Fatalf("DiffApply cross-context error = %v, want same context error", err)
+	}
+}
+
+func diffApplyCrossContext(t *testing.T, dir string) *RawContext {
+	t.Helper()
+	ctx, err := NewContext()
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	if err := ctx.SetSearchPath(dir); err != nil {
+		ctx.Close()
+		t.Fatalf("SetSearchPath: %v", err)
+	}
+	if err := ctx.LoadModule("diffapply-cross"); err != nil {
+		ctx.Close()
+		t.Fatalf("LoadModule: %v", err)
+	}
+	return ctx
 }
 
 func TestNodeValueStrDirectUsesLydGetValue(t *testing.T) {
