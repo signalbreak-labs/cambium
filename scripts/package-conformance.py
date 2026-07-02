@@ -61,10 +61,14 @@ def git_version() -> str:
 
 
 def sanitize_version(version: str) -> str:
-    cleaned = version.strip()
-    if not cleaned:
+    raw = version.strip()
+    if not raw:
         raise SystemExit("version must not be empty")
-    bad = {"/", "\\", "\x00"}
+    # Go subdirectory-module release tags are path-like (for example,
+    # go/v0.4.0). Artifact names are filesystem entries, so normalize the tag
+    # separator instead of rejecting the project's valid release-tag format.
+    cleaned = raw.replace("/", "-")
+    bad = {"\\", "\x00"}
     if any(ch in cleaned for ch in bad) or cleaned in {".", ".."}:
         raise SystemExit(f"unsafe version label: {version!r}")
     return cleaned

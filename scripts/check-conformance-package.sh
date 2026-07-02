@@ -5,19 +5,23 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-"$ROOT/scripts/package-conformance.py" --version test-version --out-dir "$tmp"
+check_package() {
+  local input_version="$1"
+  local artifact_version="$2"
 
-archive="$tmp/cambium-conformance-test-version.tar.gz"
-checksum="$archive.sha256"
-test -s "$archive"
-test -s "$checksum"
+  "$ROOT/scripts/package-conformance.py" --version "$input_version" --out-dir "$tmp"
 
-tar -tzf "$archive" > "$tmp/contents.txt"
-grep -Fx "cambium-conformance-test-version/VERSION" "$tmp/contents.txt" >/dev/null
-grep -Fx "cambium-conformance-test-version/VERSIONS" "$tmp/contents.txt" >/dev/null
-grep -Fx "cambium-conformance-test-version/conformance/manifest.toml" "$tmp/contents.txt" >/dev/null
+  archive="$tmp/cambium-conformance-$artifact_version.tar.gz"
+  checksum="$archive.sha256"
+  test -s "$archive"
+  test -s "$checksum"
 
-python3 - "$archive" "$checksum" <<'PY'
+  tar -tzf "$archive" > "$tmp/contents.txt"
+  grep -Fx "cambium-conformance-$artifact_version/VERSION" "$tmp/contents.txt" >/dev/null
+  grep -Fx "cambium-conformance-$artifact_version/VERSIONS" "$tmp/contents.txt" >/dev/null
+  grep -Fx "cambium-conformance-$artifact_version/conformance/manifest.toml" "$tmp/contents.txt" >/dev/null
+
+  python3 - "$archive" "$checksum" <<'PY'
 import hashlib
 import pathlib
 import sys
@@ -32,5 +36,9 @@ got = hashlib.sha256(archive.read_bytes()).hexdigest()
 if got != want:
     raise SystemExit(f"checksum {got} != {want}")
 PY
+}
+
+check_package test-version test-version
+check_package go/v0.4.0 go-v0.4.0
 
 echo "conformance package check passed"

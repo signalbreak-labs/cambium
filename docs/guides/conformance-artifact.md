@@ -26,3 +26,7 @@ To build the same package locally:
 scripts/package-conformance.py --version dev --out-dir dist
 scripts/check-conformance-package.sh
 ```
+
+Version labels that contain a release-tag path separator, such as `go/v0.4.0`,
+are normalized in the archive filename and root directory, for example
+`cambium-conformance-go-v0.4.0.tar.gz`.
