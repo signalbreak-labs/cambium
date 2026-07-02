@@ -49,6 +49,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `Context.NewData` after `Close` returns a closable tree shell whose
   context-dependent operations fail with `ErrContextClosed`; `libyangbackend`
   now re-exports the sentinel for public `errors.Is` checks.
+- gNMI JSON_IETF atomic updates now reject predicated data paths with
+  `RuleCodeDataPath`; callers must pass the list or leaf-list path so I6
+  ordered values remain atomic.
 
 ## [go/v0.3.8] - 2026-06-26
 
