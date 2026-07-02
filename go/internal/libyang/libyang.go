@@ -323,15 +323,19 @@ func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDat
 }
 
 // NewData creates an empty in-memory data tree tied to this context. If called
-// after Close, it still returns a closable tree shell for API compatibility, but
-// operations that require the libyang context fail with ErrContextClosed.
+// after (or concurrently with) Close, it still returns a closable tree shell
+// for API compatibility, but operations that require the libyang context fail
+// with ErrContextClosed.
 func (c *RawContext) NewData() *RawDataTree {
 	defer pinToOSThread()()
-	ctx := c.ctx
-	if atomic.LoadInt32(&c.closeReq) == 1 || atomic.LoadInt32(&c.destroyed) == 1 {
-		ctx = nil
+	// Route through acquire/release like every other RawContext entry point:
+	// a successful acquire holds live > 0, so destroyCtx cannot write c.ctx
+	// while we read it, and the tree's own retain lands before our release.
+	if err := c.acquire(); err != nil {
+		return newRawDataTree(nil, c, nil)
 	}
-	return newRawDataTree(nil, c, ctx)
+	defer c.release()
+	return newRawDataTree(nil, c, c.ctx)
 }
 
 // RawDataTree owns a libyang lyd_node tree. It keeps its owning RawContext

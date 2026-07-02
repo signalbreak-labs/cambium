@@ -29,13 +29,24 @@ func TestContextCloseConcurrentWithOpsIsDefined(t *testing.T) {
 		start := make(chan struct{})
 		done := make(chan struct{})
 		for g := 0; g < goroutines; g++ {
+			parse := g%2 == 0
 			go func() {
 				defer func() { done <- struct{}{} }()
 				<-start
-				tree, err := c.ParseData(FormatXML, 0, []byte(`<a xmlns="urn:closerace"/>`))
-				if err == nil {
-					tree.Close()
+				if parse {
+					tree, err := c.ParseData(FormatXML, 0, []byte(`<a xmlns="urn:closerace"/>`))
+					if err == nil {
+						tree.Close()
+					}
+					return
 				}
+				// NewData never errors: racing Close it must return either a
+				// live tree or a fail-closed shell, never a dangling ctx.
+				tree := c.NewData()
+				if err := tree.NewPath("/x", nil, 0); err != nil && !errors.Is(err, ErrContextClosed) {
+					_ = err // any libyang error is acceptable; UAF/race is the failure mode
+				}
+				tree.Close()
 			}()
 		}
 		close(start)
