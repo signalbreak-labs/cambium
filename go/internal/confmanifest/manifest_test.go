@@ -123,6 +123,39 @@ func TestEffectiveTierDefaultsToBackendData(t *testing.T) {
 	}
 }
 
+func TestLoadParsesDataTreeFlag(t *testing.T) {
+	manifest := `[[case]]
+name = "datatree-opt-in"
+module = "fixtures/datatree-opt-in/module"
+input = "fixtures/datatree-opt-in/input.xml"
+input-format = "xml"
+datatree = true
+[case.expected]
+xml = "golden/datatree-opt-in/output.xml"
+`
+	tmp, err := os.CreateTemp("", "confmanifest-datatree-*.toml")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+
+	if _, err := tmp.WriteString(manifest); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	_ = tmp.Close()
+
+	cases, err := Load(tmp.Name())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cases) != 1 {
+		t.Fatalf("cases = %d, want 1", len(cases))
+	}
+	if !cases[0].DataTree {
+		t.Fatalf("DataTree = false, want true")
+	}
+}
+
 func TestLoadRejectsInvalidTier(t *testing.T) {
 	manifest := `[[case]]
 name = "bad-tier"

@@ -37,6 +37,7 @@ type Case struct {
 	OpType            string
 	SerializeDefaults string
 	Oracle            bool
+	DataTree          bool
 	ExpectedIR        string
 	Expected          map[string]string // format -> golden path
 	// Invariants are the ordering invariant ids (e.g. "I2", "I3") this case
@@ -125,6 +126,12 @@ func Load(path string) ([]Case, error) {
 				return nil, fmt.Errorf("case %q: invalid oracle %q: %w", cur.Name, val, err)
 			}
 			cur.Oracle = b
+		case "datatree":
+			b, err := strconv.ParseBool(val)
+			if err != nil {
+				return nil, fmt.Errorf("case %q: invalid datatree %q: %w", cur.Name, val, err)
+			}
+			cur.DataTree = b
 		case "expected-ir":
 			cur.ExpectedIR = unquote(val)
 		case "invariants":

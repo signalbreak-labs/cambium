@@ -87,6 +87,29 @@ func TestRunCaseRejectsSchemaIR(t *testing.T) {
 	}
 }
 
+func TestRunDataTreeDifferentialFlaggedCases(t *testing.T) {
+	dir, err := FindConformanceDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	passed, skipped, failed, err := RunDataTreeDifferential(dir, []string{"scrambled-children", "keys-first", "rpc-order"})
+	if err != nil {
+		t.Fatalf("RunDataTreeDifferential: %v", err)
+	}
+	for _, name := range []string{"scrambled-children", "keys-first"} {
+		if !slices.Contains(passed, name) {
+			t.Errorf("%s not in passed list: %v", name, passed)
+		}
+	}
+	if !slices.Contains(skipped, "rpc-order") {
+		t.Errorf("rpc-order should be skipped as non-datatree case: %v", skipped)
+	}
+	for _, f := range failed {
+		t.Errorf("unexpected datatree differential failure: %s", f)
+	}
+}
+
 func TestRunYanglintOracleBuildsExpectedCommand(t *testing.T) {
 	dir := t.TempDir()
 	moduleDir := filepath.Join(dir, "module")

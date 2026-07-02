@@ -11,14 +11,19 @@ package conformance
 
 import (
 	"bytes"
+	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	core "github.com/signalbreak-labs/cambium/go/cambium"
+	"github.com/signalbreak-labs/cambium/go/datatree"
 	"github.com/signalbreak-labs/cambium/go/internal/confmanifest"
 	backend "github.com/signalbreak-labs/cambium/go/libyangbackend"
 )
@@ -58,11 +63,54 @@ func RunCase(conformanceDir string, c Case) error {
 	if c.EffectiveTier() == confmanifest.TierSchemaIR {
 		return fmt.Errorf("RunCase cannot execute schema-ir case %q", c.Name)
 	}
+	outputs, err := backendCaseOutputs(conformanceDir, c)
+	if err != nil {
+		return err
+	}
+	for _, actual := range outputs {
+		goldenPath := filepath.Join(conformanceDir, c.Expected[actual.name])
+		expected, err := os.ReadFile(goldenPath)
+		if err != nil {
+			return fmt.Errorf("read golden %s: %w", goldenPath, err)
+		}
+		if !bytes.Equal(formatBytesForCompare(actual.format, expected), formatBytesForCompare(actual.format, actual.data)) {
+			return fmt.Errorf(
+				"%s output does not match golden %s\n--- expected ---\n%s\n--- actual ---\n%s",
+				actual.name, goldenPath, snippet(expected), snippet(actual.data),
+			)
+		}
+		if c.Oracle {
+			yanglint := strings.TrimSpace(os.Getenv("CAMBIUM_YANGLINT"))
+			if yanglint != "" {
+				oracle, err := runYanglintOracle(yanglint, filepath.Join(conformanceDir, c.Module), filepath.Join(conformanceDir, c.Input), actual.format, actual.flags.WithDefaults, c.OpType)
+				if err != nil {
+					return err
+				}
+				if !bytes.Equal(formatBytesForCompare(actual.format, oracle), formatBytesForCompare(actual.format, actual.data)) {
+					return fmt.Errorf(
+						"%s output differs from yanglint oracle\n--- yanglint ---\n%s\n--- cambium ---\n%s",
+						actual.name, snippet(oracle), snippet(actual.data),
+					)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+type caseOutput struct {
+	name   string
+	format backend.Format
+	flags  backend.SerializeFlags
+	data   []byte
+}
+
+func backendCaseOutputs(conformanceDir string, c Case) ([]caseOutput, error) {
 	if c.Input == "" {
-		return fmt.Errorf("case %q has no input", c.Name)
+		return nil, fmt.Errorf("case %q has no input", c.Name)
 	}
 	if c.InputFormat == "" {
-		return fmt.Errorf("case %q has no input-format", c.Name)
+		return nil, fmt.Errorf("case %q has no input-format", c.Name)
 	}
 
 	moduleDir := filepath.Join(conformanceDir, c.Module)
@@ -70,39 +118,39 @@ func RunCase(conformanceDir string, c Case) error {
 
 	ctx, err := backend.NewContext()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer ctx.Close()
 	if err := ctx.SetSearchPath(moduleDir); err != nil {
-		return err
+		return nil, err
 	}
 	if err := loadModulesInDir(ctx, moduleDir); err != nil {
-		return err
+		return nil, err
 	}
 
 	input, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read input: %w", err)
+		return nil, fmt.Errorf("read input: %w", err)
 	}
 	inFmt, err := parseFormat(c.InputFormat)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var tree *backend.DataTree
 	if c.OpType != "" {
 		op, err := parseOpType(c.OpType)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		tree, err = ctx.ParseOp(inFmt, op, input)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	} else {
 		tree, err = ctx.Parse(inFmt, backend.ParseModeDataOnly, input)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	defer tree.Close()
@@ -113,50 +161,26 @@ func RunCase(conformanceDir string, c Case) error {
 	}
 	sort.Strings(formats)
 
+	outputs := make([]caseOutput, 0, len(formats))
 	for _, fmtName := range formats {
-		goldenPath := filepath.Join(conformanceDir, c.Expected[fmtName])
-		expected, err := os.ReadFile(goldenPath)
-		if err != nil {
-			return fmt.Errorf("read golden %s: %w", goldenPath, err)
-		}
 		outFmt, err := parseFormat(fmtName)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		flags := backend.DefaultSerializeFlags()
 		if c.SerializeDefaults != "" {
 			flags.WithDefaults, err = parseWithDefaults(c.SerializeDefaults)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 		actual, err := tree.Serialize(outFmt, flags)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if !bytes.Equal(formatBytesForCompare(outFmt, expected), formatBytesForCompare(outFmt, actual)) {
-			return fmt.Errorf(
-				"%s output does not match golden %s\n--- expected ---\n%s\n--- actual ---\n%s",
-				fmtName, goldenPath, snippet(expected), snippet(actual),
-			)
-		}
-		if c.Oracle {
-			yanglint := strings.TrimSpace(os.Getenv("CAMBIUM_YANGLINT"))
-			if yanglint != "" {
-				oracle, err := runYanglintOracle(yanglint, moduleDir, inputPath, outFmt, flags.WithDefaults, c.OpType)
-				if err != nil {
-					return err
-				}
-				if !bytes.Equal(formatBytesForCompare(outFmt, oracle), formatBytesForCompare(outFmt, actual)) {
-					return fmt.Errorf(
-						"%s output differs from yanglint oracle\n--- yanglint ---\n%s\n--- cambium ---\n%s",
-						fmtName, snippet(oracle), snippet(actual),
-					)
-				}
-			}
-		}
+		outputs = append(outputs, caseOutput{name: fmtName, format: outFmt, flags: flags, data: actual})
 	}
-	return nil
+	return outputs, nil
 }
 
 // Run executes the named cases (or all, if only is empty) and returns the
@@ -184,6 +208,235 @@ func Run(conformanceDir string, only []string) (passed, failed []string, err err
 		}
 	}
 	return passed, failed, nil
+}
+
+// RunDataTreeDifferential executes datatree-opted backend-data cases through
+// both the libyang backend and the pure-Go datatree, comparing normalized
+// serialized outputs. Cases that are selected but not opted in are reported as
+// skipped.
+func RunDataTreeDifferential(conformanceDir string, only []string) (passed, skipped, failed []string, err error) {
+	cases, err := LoadManifest(filepath.Join(conformanceDir, "manifest.toml"))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	enabled := map[string]bool{}
+	for _, n := range only {
+		enabled[n] = true
+	}
+	for _, c := range cases {
+		if len(only) > 0 && !enabled[c.Name] {
+			continue
+		}
+		if c.EffectiveTier() != confmanifest.TierBackendData || !c.DataTree {
+			if len(only) > 0 {
+				skipped = append(skipped, c.Name)
+			}
+			continue
+		}
+		if e := RunDataTreeDifferentialCase(conformanceDir, c); e != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", c.Name, e))
+		} else {
+			passed = append(passed, c.Name)
+		}
+	}
+	return passed, skipped, failed, nil
+}
+
+// RunDataTreeDifferentialCase compares one datatree-opted backend-data fixture
+// against the libyang backend.
+func RunDataTreeDifferentialCase(conformanceDir string, c Case) error {
+	if c.EffectiveTier() == confmanifest.TierSchemaIR {
+		return fmt.Errorf("RunDataTreeDifferentialCase cannot execute schema-ir case %q", c.Name)
+	}
+	if !c.DataTree {
+		return fmt.Errorf("case %q is not marked datatree=true", c.Name)
+	}
+	backendOutputs, err := backendCaseOutputs(conformanceDir, c)
+	if err != nil {
+		return fmt.Errorf("backend: %w", err)
+	}
+	dataTreeOutputs, err := dataTreeCaseOutputs(conformanceDir, c)
+	if err != nil {
+		return fmt.Errorf("datatree: %w", err)
+	}
+	dataByName := make(map[string]caseOutput, len(dataTreeOutputs))
+	for _, out := range dataTreeOutputs {
+		dataByName[out.name] = out
+	}
+	for _, want := range backendOutputs {
+		got, ok := dataByName[want.name]
+		if !ok {
+			return fmt.Errorf("%s output missing from datatree", want.name)
+		}
+		if !bytes.Equal(formatBytesForDifferential(want.format, want.data), formatBytesForDifferential(want.format, got.data)) {
+			return fmt.Errorf(
+				"%s output differs between backend and datatree\n--- backend ---\n%s\n--- datatree ---\n%s",
+				want.name, snippet(want.data), snippet(got.data),
+			)
+		}
+	}
+	return nil
+}
+
+func dataTreeCaseOutputs(conformanceDir string, c Case) ([]caseOutput, error) {
+	if c.OpType != "" {
+		return nil, fmt.Errorf("operation documents are not supported")
+	}
+	if c.SerializeDefaults != "" {
+		return nil, fmt.Errorf("with-defaults serialization is not supported")
+	}
+	if c.Input == "" {
+		return nil, fmt.Errorf("case %q has no input", c.Name)
+	}
+	if c.InputFormat == "" {
+		return nil, fmt.Errorf("case %q has no input-format", c.Name)
+	}
+
+	moduleDir := filepath.Join(conformanceDir, c.Module)
+	inputPath := filepath.Join(conformanceDir, c.Input)
+	ctx, err := core.NewContext()
+	if err != nil {
+		return nil, err
+	}
+	defer ctx.Close()
+	if err := ctx.SetSearchPath(moduleDir); err != nil {
+		return nil, err
+	}
+	if err := loadModulesInDirPure(ctx, moduleDir); err != nil {
+		return nil, err
+	}
+
+	input, err := os.ReadFile(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("read input: %w", err)
+	}
+	inFmt, err := parseDataTreeFormat(c.InputFormat)
+	if err != nil {
+		return nil, err
+	}
+	mod, err := dataTreeModuleForInput(ctx, c.InputFormat, input)
+	if err != nil {
+		return nil, err
+	}
+	tree, err := datatree.Parse(mod, inFmt, input)
+	if err != nil {
+		return nil, err
+	}
+
+	formats := make([]string, 0, len(c.Expected))
+	for f := range c.Expected {
+		formats = append(formats, f)
+	}
+	sort.Strings(formats)
+
+	outputs := make([]caseOutput, 0, len(formats))
+	for _, fmtName := range formats {
+		dtFmt, backendFmt, err := parseDataTreeOutputFormat(fmtName)
+		if err != nil {
+			return nil, err
+		}
+		data, err := tree.Serialize(dtFmt)
+		if err != nil {
+			return nil, err
+		}
+		outputs = append(outputs, caseOutput{name: fmtName, format: backendFmt, data: data})
+	}
+	return outputs, nil
+}
+
+func loadModulesInDirPure(ctx *core.Context, dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read module dir: %w", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) != ".yang" {
+			continue
+		}
+		if isSubmodule(filepath.Join(dir, e.Name())) {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		stem := strings.TrimSuffix(n, ".yang")
+		if at := strings.IndexByte(stem, '@'); at >= 0 {
+			stem = stem[:at]
+		}
+		if err := ctx.LoadModule(stem); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func dataTreeModuleForInput(ctx *core.Context, format string, input []byte) (core.Module, error) {
+	switch strings.ToLower(format) {
+	case "xml":
+		dec := xml.NewDecoder(bytes.NewReader(input))
+		for {
+			tok, err := dec.Token()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return core.Module{}, err
+			}
+			if start, ok := tok.(xml.StartElement); ok {
+				if mod, ok := ctx.FindModuleByNamespace(start.Name.Space); ok {
+					return mod, nil
+				}
+				return core.Module{}, fmt.Errorf("no module loaded for namespace %q", start.Name.Space)
+			}
+		}
+	case "json", "json-ietf", "json_ietf":
+		var raw map[string]json.RawMessage
+		if err := json.Unmarshal(input, &raw); err != nil {
+			return core.Module{}, err
+		}
+		names := make([]string, 0, len(raw))
+		for name := range raw {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if i := strings.IndexByte(name, ':'); i > 0 {
+				if mod, err := ctx.Schema(name[:i]); err == nil {
+					return mod, nil
+				}
+			}
+		}
+	}
+	mods := ctx.Modules()
+	if len(mods) == 1 {
+		return mods[0], nil
+	}
+	return core.Module{}, fmt.Errorf("cannot infer datatree module from %s input", format)
+}
+
+func parseDataTreeFormat(s string) (datatree.Format, error) {
+	switch strings.ToLower(s) {
+	case "xml":
+		return datatree.FormatXML, nil
+	case "json", "json-ietf", "json_ietf":
+		return datatree.FormatJSONIETF, nil
+	default:
+		return 0, fmt.Errorf("unsupported datatree input format: %s", s)
+	}
+}
+
+func parseDataTreeOutputFormat(s string) (dtFormat datatree.Format, backendFormat backend.Format, err error) {
+	switch strings.ToLower(s) {
+	case "xml":
+		return datatree.FormatXML, backend.FormatXML, nil
+	case "json", "json-ietf", "json_ietf":
+		backendFmt, err := parseFormat(s)
+		return datatree.FormatJSONIETF, backendFmt, err
+	default:
+		return 0, 0, fmt.Errorf("unsupported datatree output format: %s", s)
+	}
 }
 
 func loadModulesInDir(ctx *backend.Context, dir string) error {
@@ -383,6 +636,45 @@ func formatBytesForCompare(format backend.Format, b []byte) []byte {
 		return b
 	}
 	return normalize(b)
+}
+
+func formatBytesForDifferential(format backend.Format, b []byte) []byte {
+	b = normalize(b)
+	switch format {
+	case backend.FormatJSON, backend.FormatJSONIETF:
+		var buf bytes.Buffer
+		if err := json.Compact(&buf, b); err == nil {
+			return buf.Bytes()
+		}
+	case backend.FormatXML:
+		return compactXMLWhitespace(b)
+	}
+	return b
+}
+
+func compactXMLWhitespace(b []byte) []byte {
+	dec := xml.NewDecoder(bytes.NewReader(b))
+	var out bytes.Buffer
+	enc := xml.NewEncoder(&out)
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return b
+		}
+		if chars, ok := tok.(xml.CharData); ok && strings.TrimSpace(string(chars)) == "" {
+			continue
+		}
+		if err := enc.EncodeToken(tok); err != nil {
+			return b
+		}
+	}
+	if err := enc.Flush(); err != nil {
+		return b
+	}
+	return out.Bytes()
 }
 
 // normalize strips trailing ASCII whitespace, matching the conformance contract.

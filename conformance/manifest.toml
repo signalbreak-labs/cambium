@@ -118,6 +118,7 @@ module = "fixtures/scrambled-children/module"
 input = "fixtures/scrambled-children/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/scrambled-children/output.xml"
 json = "golden/scrambled-children/output.json"
@@ -145,6 +146,7 @@ module = "fixtures/keys-first/module"
 input = "fixtures/keys-first/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/keys-first/output.xml"
 json = "golden/keys-first/output.json"
@@ -171,6 +173,7 @@ module = "fixtures/ordered-user/module"
 input = "fixtures/ordered-user/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ordered-user/output.xml"
 json = "golden/ordered-user/output.json"

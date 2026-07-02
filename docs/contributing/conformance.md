@@ -150,8 +150,8 @@ is [`/spec/api.md`](../../spec/api.md).
 
 Cambium has three tiers (see [architecture](../concepts/architecture.md)): the
 pure-Go **Schema-IR** tier, the experimental pure-Go **`datatree`** tier, and the
-cgo **libyang backend/data** tier. Conformance, however, is gated by exactly two
-runners, distinguished by a case's `tier`:
+cgo **libyang backend/data** tier. The manifest has two `tier` values, plus an
+opt-in differential flag for the experimental datatree lane:
 
 - **Schema-IR cases** (`tier = "schema-ir"`) are driven by the **pure-Go
   schema-IR runner** under `CGO_ENABLED=0`. They assert ordered schema structure
@@ -166,14 +166,12 @@ runners, distinguished by a case's `tier`:
   `[case.expected]`. They additionally exercise the data-tier invariants
   **I1/I5** over real data.
 
-> **The experimental `datatree` tier is not a conformance runner.** The
-> generic pure-Go data tree (`go/datatree`) is exercised by its own package
-> tests and is part of the cgo-free pure gate as a *built and tested* package —
-> `green-bar.sh` and `check-go-default-pure.sh` both include `./datatree` — but
-> the manifest declares no `datatree` tier and no case is dispatched to it. Do
-> not describe `datatree` as a conformance tier: the two runners above are the
-> whole story. (See [overview](../overview.md) for why `datatree` is still
-> experimental.)
+- **Datatree differential cases** are backend/data cases marked
+  `datatree = true`. They still belong to the backend/data tier, but
+  `cmd/cambium datatree-diff` also parses and serializes them through the
+  experimental pure-Go `datatree` package, then compares normalized XML/JSON
+  output against the libyang backend. This is an explicit supported-subset gate,
+  not a claim that datatree is a complete conformance tier.
 
 The manifest's tier shape is enforced, not assumed. A pure-Go fitness test
 (`TestNoCGOConformanceManifestDeclaresSupportedTiers`, build-tagged `!cgo`)
@@ -263,14 +261,18 @@ cd go
 go run ./cmd/cambium                                   # curated enabled set
 go run ./cmd/cambium all                               # every backend/data case in the manifest
 go run ./cmd/cambium scrambled-children ordered-user   # named cases only
+go run ./cmd/cambium datatree-diff                     # datatree=true differential cases
+go run ./cmd/cambium datatree-diff scrambled-children  # one differential case
 ```
 
-The argument handling is exactly three modes:
+The argument handling is:
 
 - **No arguments** — runs a *curated enabled set* (an explicit list of
   backend/data fixtures hard-coded in `cmd/cambium/main.go`, all currently
   passing).
 - **`all`** — runs every backend/data case in the manifest.
+- **`datatree-diff`** — runs backend/data cases marked `datatree = true` through
+  both libyangbackend and datatree, comparing normalized serialized output.
 - **One or more names** — runs exactly the named cases, nothing else.
 
 When the `CAMBIUM_YANGLINT` environment variable points at a `yanglint` binary,
