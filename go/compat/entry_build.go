@@ -567,7 +567,11 @@ func (e *Entry) ApplyDeviate(deviateOpts ...DeviateOpt) []error {
 			appendErr(fmt.Errorf("cannot find target node to deviate, %s", deviation.DeviatedPath))
 			continue
 		}
-		for deviationType, deviateEntries := range deviation.Deviate {
+		for _, deviationType := range []deviationType{DeviationUnset, DeviationNotSupported, DeviationAdd, DeviationReplace, DeviationDelete} {
+			deviateEntries, ok := deviation.Deviate[deviationType]
+			if !ok {
+				continue
+			}
 			for _, devSpec := range deviateEntries {
 				if devSpec == nil {
 					continue

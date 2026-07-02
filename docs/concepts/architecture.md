@@ -25,30 +25,28 @@ small, coarse-grained surface (`DataTree` parse/validate/serialize/diff/merge).
 Dependencies point inward only: the data adapter knows about the schema tier, never
 the reverse.
 
-```text
-                       inbound (callers)
-        codegen.GenerateGo · cmd/cambium · your program
-                              │
-        ┌─────────────────────▼──────────────────────────┐
-        │            DOMAIN CORE  (pure Go)               │
-        │                                                 │
-        │   package cambium    ordered schema IR          │
-        │   package codegen    typed-struct generator     │
-        │   package compat     goyang-shaped projection   │
-        │   package datatree   pure-Go data tree (exp.)   │
-        │                                                 │
-        │   imports: stdlib only.  No cgo. No libyang.    │
-        └─────────────────────┬───────────────────────────┘
-                              │  (dependencies point inward only)
-        ┌─────────────────────▼──────────────────────────┐
-        │   OUTBOUND ADAPTER  (optional, cgo)             │
-        │                                                 │
-        │   package libyangbackend   generic DataTree     │
-        │   package internal/libyang cgo engine bindings  │
-        │                                                 │
-        │   ───────────── cgo boundary ───────────────    │
-        │   vendored libyang v5.x + PCRE2 (static link)   │
-        └──────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    callers["inbound (callers)<br/>codegen.GenerateGo · cmd/cambium · your program"]
+
+    subgraph core["DOMAIN CORE (pure Go)"]
+        cambium["package cambium<br/>ordered schema IR"]
+        codegen["package codegen<br/>typed-struct generator"]
+        compat["package compat<br/>goyang-shaped projection"]
+        datatree["package datatree<br/>pure-Go data tree (exp.)"]
+        pure["imports: stdlib only.<br/>No cgo. No libyang."]
+    end
+
+    subgraph adapter["OUTBOUND ADAPTER (optional, cgo)"]
+        backend["package libyangbackend<br/>generic DataTree"]
+        ffi["package internal/libyang<br/>cgo engine bindings"]
+        engine["vendored libyang v5.x + PCRE2<br/>(static link)"]
+    end
+
+    callers --> cambium
+    backend -. "dependencies point inward only" .-> cambium
+    backend --> ffi
+    ffi -->|"cgo (only crossing)"| engine
 ```
 
 The payoff of this shape is that the import that matters most — the default,

@@ -51,10 +51,15 @@ func (c *Context) LoadReport() LoadReport {
 	if c == nil || c.closed {
 		return LoadReport{}
 	}
-	_ = c.rebuildIfDirty()
+	rebuildErr := c.rebuildIfDirty()
 
 	var report LoadReport
 	report.Warnings = append(report.Warnings, c.loadWarnings...)
+	if rebuildErr != nil {
+		diag := DiagnosticFromError(wrap("load report: schema rebuild", rebuildErr))
+		diag.Message = "schema rebuild: " + diag.Message
+		report.Warnings = append(report.Warnings, diag)
+	}
 	seenSource := make(map[string]bool)
 	addSource := func(path string) {
 		if path == "" || seenSource[path] {

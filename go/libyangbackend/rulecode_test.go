@@ -56,7 +56,7 @@ func assertParseErrorCode(t *testing.T, ctx *cambium.Context, xml string, want c
 }
 
 // TestRuleCodeContext: loading a missing module yields CAMBIUM_E0001 (Context),
-// the same code the Rust core assigns for the same failure.
+// the same code the language-neutral contract assigns for the same failure.
 func TestRuleCodeContext(t *testing.T) {
 	ctx, err := cambium.NewContext()
 	if err != nil {

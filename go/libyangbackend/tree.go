@@ -6,8 +6,8 @@
 // Data-tree read / navigation API.
 //
 // This file adds NodeRef, NodeSet, DataSiblings, Value, Decimal64, and the
-// read-only DataTree accessors. It mirrors rust/cambium-core/src/tree.rs and
-// list.rs for the read side.
+// read-only DataTree accessors per the language-neutral adapter contract (see
+// /spec, /conformance, and docs/contributing/adding-a-binding.md).
 
 package libyangbackend
 

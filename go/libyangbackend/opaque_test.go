@@ -15,10 +15,9 @@ import (
 
 // TestOpaqueNodesExcludedFromChildren asserts that opaque / schema-less nodes
 // (produced only under Opaque parse mode) do not surface in Children() /
-// RootNodes(), matching the Rust adapter which gates the walk on the node having
-// a schema name. Without the gate, identical input + API yields a different node
-// set across the two SDKs — and an opaque NodeRef cannot round-trip through
-// lyd_find_path, so its accessors would all error.
+// RootNodes(), matching the adapter contract which gates the walk on the node
+// having a schema name. Without the gate, opaque nodes would surface in generic
+// data accessors and fail to round-trip through lyd_find_path.
 func TestOpaqueNodesExcludedFromChildren(t *testing.T) {
 	dir := filepath.Join("..", "..", "target", "tests", "opaque-exclude", "modules")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
