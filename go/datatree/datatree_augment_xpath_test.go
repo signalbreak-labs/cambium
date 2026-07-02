@@ -155,6 +155,48 @@ func TestAugmentXPathAbsolutePathFindsAugmentedNode(t *testing.T) {
 	}
 }
 
+// TestAugmentedMustDerivedFromResolvesAugmentModulePrefix pins identity
+// prefix resolution for must expressions defined in an augmenting module:
+// 'a:' is the augmenting module's own prefix, undefined in the tree's root
+// module, so it resolves only through the expression's SourceModule. The
+// violation half is the teeth — evalConstraint skips erroring expressions,
+// so a resolution failure would silently pass both inputs (the companion
+// conformance fixture datatree-augment-derived-from-prefix, being oracle
+// valid, can only exercise the satisfied half).
+func TestAugmentedMustDerivedFromResolvesAugmentModulePrefix(t *testing.T) {
+	base := `module adf-base {
+	    yang-version 1.1;
+	    namespace "urn:adf-base"; prefix b;
+	    identity base-kind;
+	    container top {
+	        leaf kind { type identityref { base base-kind; } }
+	    }
+	}`
+	aug := `module adf-aug {
+	    yang-version 1.1;
+	    namespace "urn:adf-aug"; prefix a;
+	    import adf-base { prefix b; }
+	    identity aug-kind { base b:base-kind; }
+	    identity aug-child { base aug-kind; }
+	    identity other-kind { base b:base-kind; }
+	    augment "/b:top" {
+	        leaf guarded {
+	            must "derived-from(../b:kind, 'a:aug-kind')";
+	            type string;
+	        }
+	    }
+	}`
+	mod := loadMultiModSrc(t, "adf-base", base, aug)
+
+	if err := validateOne(t, mod, `{"adf-base:top":{"kind":"adf-aug:aug-child","adf-aug:guarded":"ok"}}`); err != nil {
+		t.Fatalf("derived-from with augment-module self prefix should hold transitively: %v", err)
+	}
+	err := validateOne(t, mod, `{"adf-base:top":{"kind":"adf-aug:other-kind","adf-aug:guarded":"x"}}`)
+	if err == nil || !strings.Contains(err.Error(), "must condition") {
+		t.Fatalf("non-derived identity must violate the augmented derived-from must (a skip means prefix resolution failed), got %v", err)
+	}
+}
+
 func TestInstanceIdentifierToAugmentedNode(t *testing.T) {
 	base := `module ax-iid-base {
 	    namespace "urn:ax-iid-base"; prefix b;
