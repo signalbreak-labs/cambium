@@ -30,6 +30,14 @@ Each node carries:
 The projection is a value snapshot over Cambium's ordered handles. Ordering still
 comes from Cambium's ordered IR slices, never from map iteration.
 
+For command-line consumers, `cmd/cambium-ir` exports the pure-Go SchemaIR as JSON
+without importing the cgo backend:
+
+```bash
+cd go
+CGO_ENABLED=0 go run ./cmd/cambium-ir -search ../conformance/fixtures/scrambled-children/module order-demo
+```
+
 For handle-oriented code, use `Context.Schema`, `Module`, `SchemaNodeRef`, and
 `SchemaChildren` directly. `SchemaNodeRef.LocalPath()` returns a local module-root
 path, while `Path()` preserves the existing goyang-shaped path that begins with
