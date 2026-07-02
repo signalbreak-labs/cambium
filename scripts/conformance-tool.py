@@ -6,10 +6,16 @@ and verifies against Rust + Go runners.
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFORMANCE = ROOT / "conformance"
@@ -43,6 +49,41 @@ def load_manifest() -> str:
 
 def save_manifest(text: str) -> None:
     (CONFORMANCE / "manifest.toml").write_text(text)
+
+
+def pinned_libyang_version(repo_root: Path) -> str:
+    versions = repo_root / "VERSIONS"
+    if tomllib is not None:
+        with open(versions, "rb") as f:
+            return tomllib.load(f)["libyang"]["tag"].lstrip("v")
+
+    in_libyang = False
+    for line in versions.read_text().splitlines():
+        stripped = line.strip()
+        if stripped == "[libyang]":
+            in_libyang = True
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_libyang = False
+            continue
+        if in_libyang:
+            m = re.match(r'tag\s*=\s*"v?([^"]+)"', stripped)
+            if m:
+                return m.group(1)
+    raise RuntimeError("VERSIONS missing [libyang].tag")
+
+
+def assert_yanglint_matches_pin(repo_root: Path) -> None:
+    """Refuse to generate goldens with an oracle that differs from /VERSIONS."""
+    pinned = pinned_libyang_version(repo_root)
+    out = subprocess.run(["yanglint", "--version"], capture_output=True, text=True, check=True).stdout
+    m = re.search(r"(\d+\.\d+\.\d+)", out)
+    if not m or m.group(1) != pinned:
+        got = m.group(1) if m else out.strip()
+        sys.exit(
+            f"yanglint version {got!r} does not match VERSIONS pin {pinned}; "
+            "build the pinned yanglint (see VERSIONS) before regenerating goldens"
+        )
 
 
 def case_exists(name: str) -> bool:
@@ -154,6 +195,7 @@ def cmd_add(args):
 
 
 def cmd_gen(args):
+    assert_yanglint_matches_pin(ROOT)
     for name in args.names:
         print(f"Regenerating goldens for {name}...")
         gen_goldens(name)
@@ -189,7 +231,7 @@ def main():
     ver.add_argument("name", nargs="?")
 
     args = parser.parse_args()
-    if not YANGLINT.exists():
+    if args.command in {"add", "gen"} and not YANGLINT.exists():
         print(f"yanglint not found at {YANGLINT}", file=sys.stderr)
         return 1
     if args.command == "add":
