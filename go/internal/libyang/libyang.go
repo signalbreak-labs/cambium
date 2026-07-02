@@ -64,6 +64,7 @@ static struct lyd_node *cam_set_dnode(const struct ly_set *set, uint32_t i) {
 import "C" //nolint:gocritic // dupImport false positive: gocritic pairs the cgo "C" pseudo-import with "unsafe"
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"strings"
@@ -75,6 +76,9 @@ import (
 // validateLogMu protects the ctx-global libyang error-log options and the
 // ly_err_item list during multi-error validation collection.
 var validateLogMu sync.Mutex
+
+// ErrContextClosed is returned by RawContext operations invoked after Close.
+var ErrContextClosed = errors.New("libyang: context closed")
 
 // pinToOSThread pins the calling goroutine to its OS thread for one libyang
 // operation plus its error retrieval. libyang stores ly_err_item lists per
@@ -207,6 +211,10 @@ func NewContext() (*RawContext, error) {
 // SetSearchPath appends a directory to the module search path.
 func (c *RawContext) SetSearchPath(path string) error {
 	defer pinToOSThread()()
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
+		return err
+	}
+	defer c.release()
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	rc := C.ly_ctx_set_searchdir(c.ctx, cpath)
@@ -219,6 +227,10 @@ func (c *RawContext) SetSearchPath(path string) error {
 // LoadModule loads a YANG module (all features) into the context.
 func (c *RawContext) LoadModule(name string) error {
 	defer pinToOSThread()()
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
+		return err
+	}
+	defer c.release()
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	mod := C.ly_ctx_load_module(c.ctx, cname, nil, nil)
@@ -241,6 +253,10 @@ func checkNul(data []byte) error {
 // ParseData parses a whole data document in a single cgo call.
 func (c *RawContext) ParseData(format Format, parseOptions uint32, data []byte) (*RawDataTree, error) {
 	defer pinToOSThread()()
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
+		return nil, err
+	}
+	defer c.release()
 	var keepAlive []byte
 	var cdata *C.char
 	if format == FormatLYB {
@@ -268,6 +284,10 @@ func (c *RawContext) ParseData(format Format, parseOptions uint32, data []byte) 
 // ParseOp parses an RPC, action, or notification document.
 func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDataTree, error) {
 	defer pinToOSThread()()
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
+		return nil, err
+	}
+	defer c.release()
 	if err := checkNul(data); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
 		return nil, err
 	}
@@ -501,6 +521,23 @@ func (c *RawContext) retain() {
 	}
 }
 
+// acquire registers an in-flight cgo operation against this context,
+// failing once Close has been requested. Paired with release(); prevents
+// ly_ctx_destroy while an operation is executing on c.ctx.
+func (c *RawContext) acquire() error {
+	if c == nil || atomic.LoadInt32(&c.closeReq) == 1 || c.ctx == nil {
+		return ErrContextClosed
+	}
+	atomic.AddInt64(&c.live, 1)
+	if atomic.LoadInt32(&c.closeReq) == 1 {
+		// Close raced us and may have destroyed the ctx (it saw live==0
+		// before our increment). Back out and report closed.
+		c.release()
+		return ErrContextClosed
+	}
+	return nil
+}
+
 // release records that a data tree/diff has been freed. If Close was requested
 // and this was the last outstanding tree, the context is destroyed now — never
 // before its data, which would use-after-free the schema/dictionary.
@@ -528,7 +565,8 @@ func (c *RawContext) destroyCtx() {
 // Close requests destruction of the context and cancels the finalizer. The
 // actual ly_ctx_destroy is deferred until every data tree/diff from this
 // context has been freed, so a caller may Close the context before its trees
-// are collected without a use-after-free. Idempotent.
+// are collected without a use-after-free. After Close, SetSearchPath,
+// LoadModule, ParseData, and ParseOp return ErrContextClosed. Idempotent.
 func (c *RawContext) Close() {
 	defer pinToOSThread()()
 	runtime.SetFinalizer(c, nil)
