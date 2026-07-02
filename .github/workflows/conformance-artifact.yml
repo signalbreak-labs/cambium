@@ -1,0 +1,45 @@
+name: conformance-artifact
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label to embed in the artifact
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check conformance package
+        run: scripts/check-conformance-package.sh
+
+      - name: Build conformance package
+        shell: bash
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME:-$(git rev-parse --short HEAD)}"
+          fi
+          scripts/package-conformance.py --version "$version" --out-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cambium-conformance
+          path: |
+            dist/cambium-conformance-*.tar.gz
+            dist/cambium-conformance-*.tar.gz.sha256
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/cambium-conformance-* --clobber

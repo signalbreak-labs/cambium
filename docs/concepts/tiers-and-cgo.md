@@ -38,8 +38,8 @@ Start from what you are trying to do, not from a package name.
   I can tolerate an unstable API and a narrower feature set."** → the **experimental
   `datatree` tier.** It parses/serializes JSON_IETF and XML and validates without a
   C toolchain, but its API and value representation will change, and it does not yet
-  cover `anydata`/`anyxml`, RPC/action/notification data, or the full XPath function
-  set. See the [pure-Go data tree guide](../guides/data-tree-pure-go.md). If you
+  cover opaque XML `anydata`/`anyxml`, RPC/action/notification data, or the full
+  XPath function set. See the [pure-Go data tree guide](../guides/data-tree-pure-go.md). If you
   need stability today, use the libyang backend instead.
 
 - **"I'm migrating from openconfig/goyang."** → **Schema-IR tier, `compat` package.**
@@ -81,9 +81,14 @@ boundary, and it is a real trade-off, not a formality.
   `bash go/internal/libyang/build.sh`, a two-stage static CMake build of PCRE2 then
   libyang. You need a C toolchain and CMake.
 - cgo at build time, which complicates cross-compilation.
-- The libyang concurrency contract: an `ly_ctx` is build-once-then-frozen (shareable
-  for reads), and a `*DataTree` is **not** concurrency-safe — give each goroutine its
-  own (`Duplicate()`) or serialize access.
+- The concurrency contract: schema contexts are build-once-then-frozen. In the pure
+  tier, `ContextBuilder.Build()` returns the shareable read-only context. In the
+  backend, finish `SetSearchPath`/`LoadModule` first, then share the context for
+  schema reads and parsing independent trees. `*DataTree` values and borrowed
+  handles (`NodeRef`, ordered-list handles, diffs) are **not** concurrency-safe —
+  give each goroutine its own tree (`Duplicate()` when needed) or serialize access.
+  Backend validation is safe on independent trees, but validation-log collection is
+  serialized process-wide today.
 
 In exchange you get the complete, mature RFC-7950 data engine. The pure tiers never
 reach the backend: `//go:build cgo` tags and the import-closure check keep it

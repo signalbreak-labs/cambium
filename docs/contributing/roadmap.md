@@ -27,8 +27,9 @@ lands rather than adding another dated file.
   development frontier. What works today: JSON_IETF and XML parse/serialize for
   containers, leaves, leaf-lists, and lists; structural and type validation;
   leaf-list/list uniqueness and list-key checks; leafref instance existence;
-  `must`/`when` over a core XPath subset; and apply-defaults. It preserves ordering
-  invariants I1/I2/I3/I5 over what it supports. See the
+  `must`/`when` over a growing XPath subset; opaque `anydata`/`anyxml` in
+  JSON_IETF; and apply-defaults. It preserves ordering invariants I1/I2/I3/I5
+  over what it supports. See the
   [pure-Go data tree guide](../guides/data-tree-pure-go.md).
 
   It is **experimental** for concrete reasons, each of which is on the path to
@@ -38,9 +39,9 @@ lands rather than adding another dated file.
     tokens with XML conversion layered on top. A neutral value model is planned; it
     will change the internal representation and the public surface that exposes leaf
     values.
-  - **Scope gaps.** No `anydata`/`anyxml`, no RPC/action/notification (operation)
-    data, and the XPath engine implements a core subset — it skips `derived-from`,
-    `re-match`, `bit-is-set`, and `deref` rather than mis-evaluating them.
+  - **Scope gaps.** No opaque XML `anydata`/`anyxml`, no cross-format conversion
+    for opaque content, no RPC/action/notification (operation) data, and the
+    XPath engine still skips `deref()` rather than mis-evaluating it.
 
   The goal is a complete, stable pure-Go data tier so that the full
   parse → validate → serialize path can run with the same portability the schema
@@ -48,11 +49,6 @@ lands rather than adding another dated file.
 
 ## Not built yet
 
-- **gNMI (invariant I6).** No tier emits gNMI today; the `gnmi-ordered-atomic`
-  conformance fixture is deferred (see
-  [`/spec/ordering-invariants.md`](../../spec/ordering-invariants.md) §7). I6's
-  mechanism (carrying `ordered-by user` as one atomic JSON_IETF value) is specified
-  but not wired to a gNMI output path.
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
   none exists today. See [adding a binding](adding-a-binding.md).

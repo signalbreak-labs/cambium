@@ -15,6 +15,7 @@ const SchemaIRVersion = "cambium.schema-ir.v1"
 type SchemaIR struct {
 	Version string
 	Modules []SchemaIRModule
+	Errors  []Diagnostic
 }
 
 // SchemaIRModule is one loaded implemented module in context load order.
@@ -74,7 +75,11 @@ func (c *Context) SchemaIR() SchemaIR {
 	if c == nil || c.closed {
 		return ir
 	}
-	_ = c.rebuildIfDirty()
+	if err := c.rebuildIfDirty(); err != nil {
+		diag := DiagnosticFromError(wrap("schema tree", err))
+		diag.Message = "schema rebuild: " + diag.Message
+		ir.Errors = append(ir.Errors, diag)
+	}
 	for _, mod := range c.loadOrder {
 		if mod == nil || mod.stmt == nil {
 			continue

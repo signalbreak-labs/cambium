@@ -11,6 +11,7 @@ package libyangbackend
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/signalbreak-labs/cambium/go/internal/libyang"
 )
@@ -245,10 +246,15 @@ func wrap(op string, err error) error {
 	return &Error{Code: codeForOp(op), Op: op, Err: err}
 }
 
-// Context is a compiled YANG context: build-once-then-frozen.
+// Context is a compiled YANG context: build-once-then-frozen. After search
+// paths and modules are configured, a Context may be shared by goroutines for
+// schema reads, parsing, and creation of independent data trees. Mutators
+// (SetSearchPath, LoadModule, LoadModuleFromPath) and Close must not race with
+// those operations.
 type Context struct {
-	raw    *libyang.RawContext
-	forest *schemaForest
+	raw      *libyang.RawContext
+	forestMu sync.Mutex
+	forest   *schemaForest
 }
 
 // NewContext creates an empty context.
@@ -260,27 +266,34 @@ func NewContext() (*Context, error) {
 	return &Context{raw: raw}, nil
 }
 
-// SetSearchPath appends a directory to the module search path.
+// SetSearchPath appends a directory to the module search path. It is part of
+// context construction and must not race with reads or parses.
 func (c *Context) SetSearchPath(path string) error {
 	return wrap("set search path", c.raw.SetSearchPath(path))
 }
 
-// LoadModule loads a YANG module (all features) into the context.
+// LoadModule loads a YANG module (all features) into the context. It is part of
+// context construction and must not race with reads or parses.
 func (c *Context) LoadModule(name string) error {
 	if err := c.raw.LoadModule(name); err != nil {
 		return wrap("load module", err)
 	}
+	c.forestMu.Lock()
 	c.forest = nil
+	c.forestMu.Unlock()
 	return nil
 }
 
 // LoadModuleFromPath loads a YANG module from a file path into the context.
-// The path may be absolute or relative to the current working directory.
+// The path may be absolute or relative to the current working directory. It is
+// part of context construction and must not race with reads or parses.
 func (c *Context) LoadModuleFromPath(path string) error {
 	if err := c.raw.LoadModuleFromPath(path); err != nil {
 		return wrap("load module", err)
 	}
+	c.forestMu.Lock()
 	c.forest = nil
+	c.forestMu.Unlock()
 	return nil
 }
 
@@ -307,6 +320,8 @@ func (c *Context) Modules() []Module {
 
 // schemaForest lazily builds and returns the compiled schema forest.
 func (c *Context) schemaForest() (*schemaForest, error) {
+	c.forestMu.Lock()
+	defer c.forestMu.Unlock()
 	if c.forest == nil {
 		if err := c.buildForest(); err != nil {
 			return nil, err
@@ -342,12 +357,15 @@ func (c *Context) NewData() *DataTree {
 	return &DataTree{owner: c, raw: c.raw.NewData()}
 }
 
-// Close frees the underlying context.
+// Close frees the underlying context. It must not race with operations using the
+// context or trees borrowed from it.
 func (c *Context) Close() { c.raw.Close() }
 
 // DataTree is a YANG data tree. Child order is the source of truth; any keyed
 // index is a derived lookup cache and is never iterated for serialization.
-// It keeps its owning Context alive.
+// It keeps its owning Context alive. A DataTree is mutable and is not
+// concurrency-safe; use Duplicate to give each goroutine its own tree, or guard
+// access externally.
 type DataTree struct {
 	owner *Context
 	raw   *libyang.RawDataTree
@@ -406,7 +424,7 @@ func (t *DataTree) UserOrderedListAt(path string) (*UserOrderedList, error) {
 	return &UserOrderedList{owner: t, raw: raw, gen: t.raw.Generation()}, nil
 }
 
-// Close frees the underlying tree.
+// Close frees the underlying tree. It must not race with other tree operations.
 func (t *DataTree) Close() { t.raw.Close() }
 
 // Duplicate creates a deep, independent copy of the tree.
@@ -588,9 +606,10 @@ func (d *DataDiff) Close() {
 //
 // It deliberately has NO order-agnostic mutator (no Set, no Upsert, no index
 // assignment): reordering a system-ordered node by mistake is impossible to
-// express, matching the adapter contract. It keeps its owning DataTree alive.
-// External mutations invalidate the handle; re-acquire with
-// UserOrderedListAt after RuleCodeStale.
+// express, matching the adapter contract. It keeps its owning DataTree alive and
+// inherits the tree's single-goroutine/external-synchronization contract.
+// External mutations invalidate the handle; re-acquire with UserOrderedListAt
+// after RuleCodeStale.
 type UserOrderedList struct {
 	owner *DataTree
 	raw   *libyang.RawUserOrderedList

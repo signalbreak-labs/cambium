@@ -72,6 +72,12 @@ jobs:
         run: cd go && CGO_ENABLED=0 go test ./internal/yangparse -run '^$' -fuzz '^FuzzParse$' -fuzztime=20s && CGO_ENABLED=0 go test ./datatree -run '^$' -fuzz '^Fuzz' -fuzztime=20s && CGO_ENABLED=0 go test ./internal/xsdregex -run '^$' -fuzz '^Fuzz' -fuzztime=20s
       - name: Go conformance runner
         run: cd go && go run ./cmd/cambium all
+      - name: Build yanglint oracle
+        run: scripts/build-yanglint-oracle.sh
+      - name: Yanglint oracle conformance
+        env:
+          CAMBIUM_YANGLINT: ${{ github.workspace }}/go/internal/libyang/.build/yanglint-oracle-install/bin/yanglint
+        run: cd go && go run ./cmd/cambium all
       - name: Engine config diff
         run: scripts/diff-engine-config.sh
 

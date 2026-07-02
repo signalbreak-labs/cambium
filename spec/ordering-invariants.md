@@ -212,12 +212,12 @@ Backend/data runner contract:
 | `list-keyless-positional` | Backend/data | I1/I2 | keyless list positional order |
 | `list-ordered-by-system-canonical` | Backend/data | I2 | system-ordered entries canonicalize deterministically |
 | `json-object-determinism` | Backend/data | I5 | deterministic object member output |
-| `gnmi-ordered-atomic` *(deferred)* | Backend/data | I6 | ordered list as atomic JSON_IETF — **deferred to kickoff Block 2** (no fixture yet). I6 itself is implemented and unit-tested in both languages (`Format::JsonIetf` + `DataDiff::is_ordered_by_user`); only the dedicated golden fixture is outstanding. See `docs/conformance-coverage-catalog.md`. |
+| `gnmi-ordered-atomic` | Backend/data | I6 | ordered list carried as one atomic JSON_IETF gNMI payload value |
 
 > Fixture names above are kept in sync with `/conformance/manifest.toml`. Every
-> non-deferred row maps to a live case; the `invariants` key in `manifest.toml`
-> is the machine-checkable binding (see §6) and the conformance runners assert
-> every non-deferred invariant has at least one passing fixture.
+> row maps to a live case; the `invariants` key in `manifest.toml` is the
+> machine-checkable binding (see §6) and the conformance runners assert every
+> invariant has at least one passing fixture.
 
 ## Appendix - RFC reference table
 

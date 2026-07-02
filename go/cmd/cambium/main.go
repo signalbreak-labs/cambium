@@ -84,6 +84,7 @@ var enabled = []string{
 	"identity-multi-base-cross-module",
 	"identity-cross-module-derivation",
 	"list-ordered-by-user-insertion",
+	"gnmi-ordered-atomic",
 	"list-ordered-by-system-canonical",
 	"leaflist-ordered-by-user",
 	"leaflist-ordered-by-system",
@@ -178,14 +179,41 @@ func main() {
 		os.Exit(1)
 	}
 	// No args: run the curated enabled set. `all`: run every manifest case.
-	// Otherwise: run exactly the named cases.
+	// `datatree-diff`: run the datatree/libyang differential lane. Otherwise:
+	// run exactly the named cases.
 	selected := enabled
+	datatreeDiff := false
 	if len(os.Args) > 1 {
-		if os.Args[1] == "all" {
+		switch os.Args[1] {
+		case "datatree-diff":
+			datatreeDiff = true
+			selected = os.Args[2:]
+		case "all":
 			selected = nil // nil => Run executes every case in the manifest
-		} else {
+		default:
 			selected = os.Args[1:]
 		}
+	}
+	if datatreeDiff {
+		passed, skipped, failed, err := conformance.RunDataTreeDifferential(dir, selected)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		for _, name := range passed {
+			fmt.Printf("PASS %s\n", name)
+		}
+		for _, name := range skipped {
+			fmt.Printf("SKIP %s\n", name)
+		}
+		for _, f := range failed {
+			fmt.Printf("FAIL %s\n", f)
+		}
+		fmt.Printf("\ndatatree differential: %d passed, %d skipped, %d failed\n", len(passed), len(skipped), len(failed))
+		if len(failed) > 0 {
+			os.Exit(1)
+		}
+		return
 	}
 	passed, failed, err := conformance.Run(dir, selected)
 	if err != nil {

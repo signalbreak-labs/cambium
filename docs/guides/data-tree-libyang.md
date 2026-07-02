@@ -26,8 +26,9 @@ Two of them handle data:
 
 - The **experimental pure-Go `datatree` tier** (`CGO_ENABLED=0`) parses,
   serializes, and validates generic trees without any C toolchain, but its scope
-  is deliberately narrower (no `anydata`/`anyxml`, no RPC/action/notification
-  data, a core-subset XPath engine) and its API is still moving. See
+  is deliberately narrower (opaque `anydata`/`anyxml` are JSON_IETF-only, no
+  RPC/action/notification data, and not every XPath function is implemented) and
+  its API is still moving. See
   [the pure-Go data tree guide](./data-tree-pure-go.md).
 - This **libyang backend tier** is the mature, RFC-complete data engine.
 
@@ -433,9 +434,10 @@ Over real instance data, the libyang backend guarantees:
 - **I5** — lists and leaf-lists serialize as JSON arrays carrying I1/I2 order.
 
 Serialization realizes all of these as a single ordered walk of libyang's
-`lyd_node.next/prev` chain. I6 (gNMI) is not wired yet — its atomic-JSON_IETF
-mechanism is specified, but no tier emits a gNMI output path. The normative statements
-are in [ordering-invariants](../../spec/ordering-invariants.md).
+`lyd_node.next/prev` chain. I6 is exposed through the backend-tier `go/gnmi`
+payload helper, which emits one atomic JSON_IETF value for the requested gNMI
+path and does not own client or transport behavior. The normative statements are
+in [ordering-invariants](../../spec/ordering-invariants.md).
 
 ## See also
 

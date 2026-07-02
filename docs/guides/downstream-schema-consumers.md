@@ -12,7 +12,9 @@ transport, or renderer-specific concepts.
 `ctx.SchemaIR()` returns a `cambium.SchemaIR` value tagged with
 `cambium.SchemaIRVersion`. The projection contains loaded modules in context
 order, including import-only modules, and marks each module with `Implemented`.
-Nested `SchemaIRNode` values are in effective schema declaration order.
+Nested `SchemaIRNode` values are in effective schema declaration order. If schema
+materialization fails during a dirty rebuild, `SchemaIR.Errors` carries
+structured diagnostics instead of silently dropping the failure.
 
 Each node carries:
 
@@ -27,6 +29,14 @@ Each node carries:
 
 The projection is a value snapshot over Cambium's ordered handles. Ordering still
 comes from Cambium's ordered IR slices, never from map iteration.
+
+For command-line consumers, `cmd/cambium-ir` exports the pure-Go SchemaIR as JSON
+without importing the cgo backend:
+
+```bash
+cd go
+CGO_ENABLED=0 go run ./cmd/cambium-ir -search ../conformance/fixtures/scrambled-children/module order-demo
+```
 
 For handle-oriented code, use `Context.Schema`, `Module`, `SchemaNodeRef`, and
 `SchemaChildren` directly. `SchemaNodeRef.LocalPath()` returns a local module-root

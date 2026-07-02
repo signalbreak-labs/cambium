@@ -44,7 +44,9 @@ const (
 	FormatXML
 )
 
-// Tree is an ordered, schema-bound generic data tree.
+// Tree is an ordered, schema-bound generic data tree. Tree values are mutable
+// and are not concurrency-safe; give each goroutine its own parsed tree or guard
+// access externally.
 type Tree struct {
 	module cambium.Module
 	roots  []*node

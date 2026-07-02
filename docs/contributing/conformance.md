@@ -24,7 +24,8 @@ the spec plus the shared cases and golden outputs, not by which language landed
 first. Cambium ships a Go binding today; a future binding under `/<lang>/` would
 reuse the exact same fixtures and `golden/` files through its own runner. See
 [adding a binding](./adding-a-binding.md) for how a peer binding plugs into this
-corpus.
+corpus. Release automation also publishes `/conformance` plus `/VERSIONS` as a
+standalone tarball; see the [conformance artifact guide](../guides/conformance-artifact.md).
 
 ## Layout
 
@@ -122,6 +123,10 @@ list's keys in key-statement order:
 cross-checked against an independent `yanglint` run when one is available (see
 [Running the gates](#running-the-gates)).
 
+`gnmi-json-ietf` expected outputs are backend-tier payload helper cases. They
+also set `gnmi-path`, and the runner emits one `go/gnmi` JSON_IETF update value
+for that path rather than decomposing an ordered subtree into scalar updates.
+
 ## Cases are tagged by invariant
 
 Each case may carry an `invariants` array naming the ordering invariants (I1–I6)
@@ -137,6 +142,8 @@ it exercises, so the corpus maps directly onto the normative contract in
   serialize (carried by the `ordered-user` and `*-ordered-by-user` cases; some
   cases tag `["I1", "I2"]`).
 - **I5** — JSON arrays carry I1/I2 order under a deterministic printer profile.
+- **I6** — gNMI output carries `ordered-by user` data as one atomic JSON_IETF
+  payload value (`gnmi-ordered-atomic`).
 
 The invariant tags are how coverage is read: the normative wording for I1–I6
 lives in the spec, and the corpus is the executable proof that each tier upholds
@@ -150,8 +157,8 @@ is [`/spec/api.md`](../../spec/api.md).
 
 Cambium has three tiers (see [architecture](../concepts/architecture.md)): the
 pure-Go **Schema-IR** tier, the experimental pure-Go **`datatree`** tier, and the
-cgo **libyang backend/data** tier. Conformance, however, is gated by exactly two
-runners, distinguished by a case's `tier`:
+cgo **libyang backend/data** tier. The manifest has two `tier` values, plus an
+opt-in differential flag for the experimental datatree lane:
 
 - **Schema-IR cases** (`tier = "schema-ir"`) are driven by the **pure-Go
   schema-IR runner** under `CGO_ENABLED=0`. They assert ordered schema structure
@@ -166,14 +173,12 @@ runners, distinguished by a case's `tier`:
   `[case.expected]`. They additionally exercise the data-tier invariants
   **I1/I5** over real data.
 
-> **The experimental `datatree` tier is not a conformance runner.** The
-> generic pure-Go data tree (`go/datatree`) is exercised by its own package
-> tests and is part of the cgo-free pure gate as a *built and tested* package —
-> `green-bar.sh` and `check-go-default-pure.sh` both include `./datatree` — but
-> the manifest declares no `datatree` tier and no case is dispatched to it. Do
-> not describe `datatree` as a conformance tier: the two runners above are the
-> whole story. (See [overview](../overview.md) for why `datatree` is still
-> experimental.)
+- **Datatree differential cases** are backend/data cases marked
+  `datatree = true`. They still belong to the backend/data tier, but
+  `cmd/cambium datatree-diff` also parses and serializes them through the
+  experimental pure-Go `datatree` package, then compares normalized XML/JSON
+  output against the libyang backend. This is an explicit supported-subset gate,
+  not a claim that datatree is a complete conformance tier.
 
 The manifest's tier shape is enforced, not assumed. A pure-Go fitness test
 (`TestNoCGOConformanceManifestDeclaresSupportedTiers`, build-tagged `!cgo`)
@@ -263,14 +268,18 @@ cd go
 go run ./cmd/cambium                                   # curated enabled set
 go run ./cmd/cambium all                               # every backend/data case in the manifest
 go run ./cmd/cambium scrambled-children ordered-user   # named cases only
+go run ./cmd/cambium datatree-diff                     # datatree=true differential cases
+go run ./cmd/cambium datatree-diff scrambled-children  # one differential case
 ```
 
-The argument handling is exactly three modes:
+The argument handling is:
 
 - **No arguments** — runs a *curated enabled set* (an explicit list of
   backend/data fixtures hard-coded in `cmd/cambium/main.go`, all currently
   passing).
 - **`all`** — runs every backend/data case in the manifest.
+- **`datatree-diff`** — runs backend/data cases marked `datatree = true` through
+  both libyangbackend and datatree, comparing normalized serialized output.
 - **One or more names** — runs exactly the named cases, nothing else.
 
 When the `CAMBIUM_YANGLINT` environment variable points at a `yanglint` binary,

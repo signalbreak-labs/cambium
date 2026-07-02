@@ -22,8 +22,8 @@ construction. The API reference is the package godoc on
 Reach for `datatree` when you want generic data parse/serialize/validate without a
 C toolchain, you can tolerate an unstable API, and your models stay inside its
 supported scope (below). When you need production-grade, RFC-complete validation —
-the full XPath function set, `anydata`/`anyxml`, operation data — use the
-[libyang backend](data-tree-libyang.md) instead. The
+opaque XML `anydata`/`anyxml`, cross-format opaque conversion, operation data, or
+the full XPath function set — use the [libyang backend](data-tree-libyang.md) instead. The
 [tiers & cgo boundary](../concepts/tiers-and-cgo.md) page lays out the trade-off.
 
 ## Parsing and serializing
@@ -95,22 +95,21 @@ A parsed `*Tree` exposes its data as ordered `Node` values:
 
 - `(*Tree).Validate() error` checks mandatory nodes, cardinality
   (`min`/`max-elements`), uniqueness and list-key uniqueness, leafref instance
-  existence, and `must`/`when` constraints over a core XPath subset.
+  existence, and `must`/`when` constraints over a growing XPath subset.
 - `(*Tree).ApplyDefaults()` fills absent leaves with their schema defaults.
 
 ## Supported scope and limitations
 
 This is the experimental part. `datatree` currently handles containers, leaves,
-leaf-lists, and lists across JSON_IETF and XML, with the validation above, and it
-preserves ordering invariants I1/I2/I3/I5 over what it supports. It does **not** yet
-handle:
+leaf-lists, lists, and opaque `anydata`/`anyxml` values in JSON_IETF, with the
+validation above, and it preserves ordering invariants I1/I2/I3/I5 over what it
+supports. It does **not** yet handle:
 
-- `anydata` and `anyxml` nodes.
+- Opaque `anydata`/`anyxml` in XML, or cross-format conversion of opaque content.
 - RPC, action, and notification (operation) data.
-- The full XPath function set — the engine implements a core subset and
-  **skips** `derived-from`, `re-match`, `bit-is-set`, and `deref` rather than
-  mis-evaluating them. Validation that depends on an unsupported construct is
-  skipped, not failed.
+- The full XPath function set — the engine implements a growing subset and
+  **skips** `deref()` rather than mis-evaluating it. Validation that depends on
+  an unsupported construct is skipped, not failed.
 
 In addition, leaf values are currently held as raw JSON tokens with XML conversion
 layered on top; the planned neutral value-representation refactor will change the

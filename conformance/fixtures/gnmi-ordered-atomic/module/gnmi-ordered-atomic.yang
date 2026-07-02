@@ -1,0 +1,14 @@
+module gnmi-ordered-atomic {
+  namespace "urn:gnmi-ordered-atomic";
+  prefix goa;
+  revision 2026-07-02;
+
+  container top {
+    list rule {
+      ordered-by user;
+      key name;
+      leaf name { type string; }
+      leaf action { type string; }
+    }
+  }
+}

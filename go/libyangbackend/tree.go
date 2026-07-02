@@ -269,7 +269,9 @@ func (v Value) InstanceIdentifier() (string, bool) {
 	return v.str, true
 }
 
-// NodeRef is a borrowed handle to one node in a DataTree.
+// NodeRef is a borrowed handle to one node in a DataTree. It inherits the
+// tree's single-goroutine/external-synchronization contract, and mutations to
+// the tree invalidate previously borrowed handles.
 type NodeRef struct {
 	tree *DataTree
 	path string

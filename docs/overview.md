@@ -109,12 +109,14 @@ import closure is machine-enforced by `scripts/check-go-default-pure.sh`.
 
 Package `datatree`. A generic, cgo-free data tree: parse and serialize JSON_IETF
 and XML, validate (mandatory, cardinality, uniqueness, leafref existence,
-`must`/`when` over a core XPath subset), and apply defaults — all without libyang.
+`must`/`when` over a growing XPath subset), preserve opaque `anydata`/`anyxml` in
+JSON_IETF, and apply defaults — all without libyang.
 For its supported constructs it preserves **I1/I2/I3/I5**.
 
 > **Experimental.** `datatree`'s public API and internal value representation **will
-> change**, and its scope is narrower than the libyang backend (no `anydata`/`anyxml`,
-> no RPC/action/notification data, partial XPath). Do not depend on its API yet — the
+> change**, and its scope is narrower than the libyang backend (opaque
+> `anydata`/`anyxml` are JSON_IETF-only, no RPC/action/notification data, partial
+> XPath). Do not depend on its API yet — the
 > [pure-Go data tree guide](guides/data-tree-pure-go.md) has the exact supported
 > surface and [the roadmap](contributing/roadmap.md) tracks status.
 
@@ -127,9 +129,11 @@ This is the mature, complete data engine. The cost is real and explicit: it
 requires cgo and a one-time native build (`bash go/internal/libyang/build.sh`),
 stays strictly outside the default cgo-free closure, uses a coarse-grained
 whole-document FFI boundary, treats `ly_ctx` as build-once-then-frozen, and its
-data trees are not concurrency-safe. Guarantees **I1/I2/I3/I4/I5** over real data;
-gNMI output (I6) is not wired yet — its atomic-JSON_IETF mechanism is specified, but
-no tier emits gNMI today.
+data trees are not concurrency-safe. A frozen context may be shared for schema
+reads and parsing independent trees; trees and borrowed handles require external
+synchronization or per-goroutine copies. Guarantees **I1/I2/I3/I4/I5** over real
+data; the backend-tier `go/gnmi` helper carries **I6** as one atomic JSON_IETF
+payload value without adding a gNMI client or transport.
 
 **Choosing a tier.** Schema and codegen only → Schema-IR tier, no C build. Generic
 data round-trip and validation without a C toolchain, and you can tolerate an

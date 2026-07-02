@@ -101,7 +101,7 @@ order, with **no libyang and no cgo**. `datatree.Parse(module, format, data)`
 accepts JSON_IETF or XML; `(*Tree).Serialize`, `Validate`, and `ApplyDefaults`
 round-trip and check it. For the constructs it supports it preserves I1/I2/I3/I5,
 and it validates mandatory, cardinality, uniqueness, leafref instance existence,
-and `must`/`when` over a core XPath subset.
+and `must`/`when` over a growing XPath subset.
 
 This tier is **experimental and not a stable public surface.** Two facts shape how
 to treat it:
@@ -109,10 +109,10 @@ to treat it:
 - **Its value representation is being reworked.** Leaf values are currently stored
   as raw JSON tokens, with XML conversion layered on top; a neutral
   value-representation refactor is planned, and the public API will change with it.
-- **Its scope is narrower than the libyang backend.** No `anydata`/`anyxml`, no
-  RPC/action/notification data, and the XPath engine implements a core subset — it
-  *skips* `derived-from`, `re-match`, `bit-is-set`, and `deref` rather than
-  mis-evaluating them.
+- **Its scope is narrower than the libyang backend.** `anydata`/`anyxml` are
+  opaque JSON_IETF-only values (no opaque XML capture and no cross-format
+  conversion), RPC/action/notification data is not handled, and `deref()` is
+  still skipped rather than mis-evaluated.
 
 Why does a second, pure-Go data tree exist alongside the libyang backend? Because
 the long-term goal is a complete data tier that honors the same cgo-free property
@@ -197,12 +197,16 @@ concurrency rules are part of the architecture, not an implementation detail.
   modules and frozen thereafter. In the pure tier this is explicit: `ContextBuilder`
   is the mutable phase and `Build()` returns a frozen `*Context`. The libyang
   `ly_ctx` follows the same discipline — assemble the schema, then treat it as
-  read-only and shareable for reads.
+  read-only and shareable for schema reads and parsing independent data trees.
+  Mutators and `Close()` must not race with those operations.
 - **Data trees are not concurrency-safe.** A `*DataTree` is mutable state with no
   internal locking. Do not share one across goroutines without external
   synchronization; give each goroutine its own (e.g. via `Duplicate()`), or
-  serialize access. The frozen context is the shared, read-only part; the data tree
-  is the per-operation, mutable part.
+  serialize access. Borrowed handles (`NodeRef`, ordered-list handles, diffs)
+  inherit the same rule and are invalidated by tree mutations. Backend validation
+  serializes libyang validation-log collection process-wide, but the safe sharing
+  shape is still one independent tree per goroutine. The frozen context is the
+  shared, read-only part; the data tree is the per-operation, mutable part.
 
 These rules follow directly from the hexagonal placement: the engine is an adapter
 the core does not own, so the contract for using it safely is stated explicitly at

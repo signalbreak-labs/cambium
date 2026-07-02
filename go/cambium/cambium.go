@@ -126,7 +126,8 @@ func validValidationMode(mode ValidationMode) bool {
 	return mode == ValidationStrict || mode == ValidationVendorCompatible
 }
 
-// ContextBuilder is the mutable phase for constructing a frozen Context.
+// ContextBuilder is the mutable phase for constructing a frozen Context. Do not
+// share a builder across goroutines without external synchronization.
 type ContextBuilder struct {
 	ctx   *Context
 	built bool
@@ -243,7 +244,8 @@ func (b *ContextBuilder) LoadModuleStr(source string) error {
 	return nil
 }
 
-// Build consumes the mutable phase and returns a frozen schema context.
+// Build consumes the mutable phase and returns a frozen schema context that may
+// be shared by goroutines for read-only schema access.
 func (b *ContextBuilder) Build() (*Context, error) {
 	if err := b.ensureMutable(); err != nil {
 		return nil, err
@@ -256,7 +258,11 @@ func (b *ContextBuilder) Build() (*Context, error) {
 	return b.ctx, nil
 }
 
-// Context is a pure-Go YANG schema loading context.
+// Context is a pure-Go YANG schema loading context. Contexts returned by
+// ContextBuilder.Build are frozen and may be shared by goroutines for read-only
+// schema access. Contexts created by NewContext remain mutable until the caller
+// stops loading modules; mutators, dirty rebuilds, and Close must not race with
+// other operations.
 type Context struct {
 	searchPaths     []string
 	modules         map[string]*moduleData
@@ -304,7 +310,8 @@ type moduleDataSnapshot struct {
 	requested         bool
 }
 
-// NewContext creates an empty pure-Go schema context.
+// NewContext creates an empty mutable pure-Go schema context. Prefer
+// NewContextBuilder when a frozen, concurrently readable context is needed.
 func NewContext() (*Context, error) {
 	return newContext(ContextFlags{})
 }
@@ -322,7 +329,8 @@ func newContext(flags ContextFlags) (*Context, error) {
 	}, nil
 }
 
-// Close releases context-owned schema state. It is idempotent.
+// Close releases context-owned schema state. It is idempotent, but must not race
+// with reads or mutators.
 func (c *Context) Close() {
 	if c == nil {
 		return

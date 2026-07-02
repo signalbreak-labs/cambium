@@ -127,8 +127,9 @@ in effective declaration order), I3 (list keys first, in `key` order), and I4
 (RPC/action/notification children in schema order). The libyang backend
 additionally guarantees I1 (`ordered-by user` preserved across round-trip) and I5
 (YANG lists/leaf-lists as JSON arrays carrying I1/I2 order). I6 (gNMI `ordered-by
-user` output as one atomic JSON_IETF subtree) is specified but not yet wired to a
-gNMI output path, so no tier emits gNMI today.
+user` output as one atomic JSON_IETF subtree) is emitted by the backend-tier
+`go/gnmi` payload helper, which deliberately stops short of client or transport
+code.
 The experimental `datatree` tier reproduces I1/I2/I3/I5 over the constructs it
 supports.
 
@@ -137,10 +138,11 @@ supports.
 The **experimental**, cgo-free Cambium layer (package `datatree`) that parses,
 serializes, and validates generic instance data without libyang. It handles
 JSON_IETF and XML round-trip, structural and type validation, leafref instance
-existence, `must`/`when` over a core XPath subset, and apply-defaults — but its
+existence, `must`/`when` over a growing XPath subset, and apply-defaults — but its
 API and internal value representation are unstable and its scope is narrower than
-the libyang backend (no `anydata`/`anyxml`, no RPC/action/notification data,
-partial XPath). It is in the default cgo-free import closure.
+the libyang backend (opaque `anydata`/`anyxml` are JSON_IETF-only, no
+RPC/action/notification data, partial XPath). It is in the default cgo-free
+import closure.
 
 ## Rule code (CAMBIUM_E####)
 

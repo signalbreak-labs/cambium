@@ -62,17 +62,56 @@ func TestMustCountAbsolutePath(t *testing.T) {
 	}
 }
 
-// TestMustUnsupportedFunctionSkipped guards the safety rule: a must using a
-// function the engine does not implement (re-match) is SKIPPED, not reported,
-// even though the value would fail it.
-func TestMustUnsupportedFunctionSkipped(t *testing.T) {
+func TestMustReMatchFunction(t *testing.T) {
 	mod := loadModSrc(t, `module mwu {
         namespace "urn:mwu"; prefix mwu;
         leaf x { must "re-match(., '[0-9]+')"; type string; }
     }`, "mwu")
-	if err := validateOne(t, mod, `{"mwu:x":"abc"}`); err != nil {
-		if strings.Contains(err.Error(), "must") {
-			t.Fatalf("unsupported must function must be skipped, not reported: %v", err)
-		}
+	if err := validateOne(t, mod, `{"mwu:x":"123"}`); err != nil {
+		t.Fatalf("re-match should accept digit-only value: %v", err)
+	}
+	err := validateOne(t, mod, `{"mwu:x":"abc"}`)
+	if err == nil || !strings.Contains(err.Error(), "must condition") {
+		t.Fatalf("re-match should reject non-matching value, got %v", err)
+	}
+}
+
+func TestWhenBitIsSetFunction(t *testing.T) {
+	mod := loadModSrc(t, `module mwb {
+        namespace "urn:mwb"; prefix mwb;
+        container top {
+            leaf flags { type bits { bit enabled; bit debug; } }
+            leaf guarded { when "bit-is-set(../flags, 'enabled')"; type string; }
+        }
+    }`, "mwb")
+	if err := validateOne(t, mod, `{"mwb:top":{"flags":"enabled debug","guarded":"ok"}}`); err != nil {
+		t.Fatalf("bit-is-set should accept present bit: %v", err)
+	}
+	err := validateOne(t, mod, `{"mwb:top":{"flags":"debug","guarded":"blocked"}}`)
+	if err == nil || !strings.Contains(err.Error(), "when condition") {
+		t.Fatalf("bit-is-set should reject absent bit, got %v", err)
+	}
+}
+
+func TestWhenDerivedFromFunctions(t *testing.T) {
+	mod := loadModSrc(t, `module mwd {
+        namespace "urn:mwd"; prefix mwd;
+        identity base;
+        identity child { base base; }
+        container top {
+            leaf kind { type identityref { base base; } }
+            leaf strict { when "derived-from(../kind, 'mwd:base')"; type string; }
+            leaf self { when "derived-from-or-self(../kind, 'mwd:base')"; type string; }
+        }
+    }`, "mwd")
+	if err := validateOne(t, mod, `{"mwd:top":{"kind":"child","strict":"ok","self":"ok"}}`); err != nil {
+		t.Fatalf("derived-from should accept child identity: %v", err)
+	}
+	if err := validateOne(t, mod, `{"mwd:top":{"kind":"base","self":"ok"}}`); err != nil {
+		t.Fatalf("derived-from-or-self should accept base identity: %v", err)
+	}
+	err := validateOne(t, mod, `{"mwd:top":{"kind":"base","strict":"blocked"}}`)
+	if err == nil || !strings.Contains(err.Error(), "when condition") {
+		t.Fatalf("derived-from should reject base itself, got %v", err)
 	}
 }

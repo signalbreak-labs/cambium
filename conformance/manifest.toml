@@ -118,6 +118,7 @@ module = "fixtures/scrambled-children/module"
 input = "fixtures/scrambled-children/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/scrambled-children/output.xml"
 json = "golden/scrambled-children/output.json"
@@ -145,6 +146,7 @@ module = "fixtures/keys-first/module"
 input = "fixtures/keys-first/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/keys-first/output.xml"
 json = "golden/keys-first/output.json"
@@ -171,6 +173,7 @@ module = "fixtures/ordered-user/module"
 input = "fixtures/ordered-user/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ordered-user/output.xml"
 json = "golden/ordered-user/output.json"
@@ -1948,6 +1951,7 @@ module = "fixtures/constraints-when-xpath-functions/module"
 input = "fixtures/constraints-when-xpath-functions/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-when-xpath-functions/output.xml"
 json = "golden/constraints-when-xpath-functions/output.json"
@@ -2461,6 +2465,16 @@ oracle = true
 xml = "golden/list-ordered-by-user-insertion/output.xml"
 json = "golden/list-ordered-by-user-insertion/output.json"
 json_ietf = "golden/list-ordered-by-user-insertion/output.json_ietf"
+
+[[case]]
+name = "gnmi-ordered-atomic"
+invariants = ["I6"]
+module = "fixtures/gnmi-ordered-atomic/module"
+input = "fixtures/gnmi-ordered-atomic/input.xml"
+input-format = "xml"
+gnmi-path = "/gnmi-ordered-atomic:top/rule"
+[case.expected]
+gnmi-json-ietf = "golden/gnmi-ordered-atomic/output.gnmi.json"
 
 [[case]]
 name = "list-ordered-by-system-canonical"
