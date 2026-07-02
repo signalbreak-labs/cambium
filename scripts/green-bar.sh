@@ -30,6 +30,7 @@ run_in "$ROOT/go" env CGO_ENABLED=1 go vet ./...
 run_in "$ROOT/go" env CGO_ENABLED=1 go test -race ./...
 run_in "$ROOT/go" golangci-lint run
 run_in "$ROOT/go" env CGO_ENABLED=1 go run ./cmd/cambium all
+run_in "$ROOT/go" env CGO_ENABLED=1 go run ./cmd/cambium datatree-diff
 run "$ROOT/scripts/build-yanglint-oracle.sh"
 run_in "$ROOT/go" env CAMBIUM_YANGLINT="$ROOT/go/internal/libyang/.build/yanglint-oracle-install/bin/yanglint" go run ./cmd/cambium all
 

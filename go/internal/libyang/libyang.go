@@ -322,9 +322,19 @@ func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDat
 	return newRawDataTree(node, c, c.ctx), nil
 }
 
-// NewData creates an empty in-memory data tree tied to this context.
+// NewData creates an empty in-memory data tree tied to this context. If called
+// after (or concurrently with) Close, it still returns a closable tree shell
+// for API compatibility, but operations that require the libyang context fail
+// with ErrContextClosed.
 func (c *RawContext) NewData() *RawDataTree {
 	defer pinToOSThread()()
+	// Route through acquire/release like every other RawContext entry point:
+	// a successful acquire holds live > 0, so destroyCtx cannot write c.ctx
+	// while we read it, and the tree's own retain lands before our release.
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
+		return newRawDataTree(nil, c, nil)
+	}
+	defer c.release()
 	return newRawDataTree(nil, c, c.ctx)
 }
 
@@ -348,6 +358,13 @@ func newRawDataTree(tree *C.struct_lyd_node, owner *RawContext, ctx *C.struct_ly
 	return t
 }
 
+func (t *RawDataTree) requireContext() error {
+	if t == nil || t.ctx == nil {
+		return ErrContextClosed
+	}
+	return nil
+}
+
 // NewPath creates or updates a node at `path`. A nil `value` creates an inner
 // node (container/list); a non-nil value sets a leaf or leaf-list. `options`
 // is a bitmask of NewPathUpdate/NewPathOutput/NewPathOpaque.
@@ -355,6 +372,10 @@ func (t *RawDataTree) NewPath(path string, value *string, options uint32) error 
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return ctxErr
+	}
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 
@@ -405,6 +426,10 @@ func (t *RawDataTree) SetValue(path, value string) (bool, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return false, ctxErr
+	}
 	node, ok, err := t.FindNode(path)
 	if err != nil {
 		return false, err
@@ -434,6 +459,10 @@ func (t *RawDataTree) RemovePath(path string) error {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return ctxErr
+	}
 	node, ok, err := t.FindNode(path)
 	if err != nil {
 		return err
@@ -479,6 +508,10 @@ func (t *RawDataTree) UnlinkPath(path string) (*RawDataTree, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 	node, ok, err := t.FindNode(path)
 	if err != nil {
 		return nil, err
@@ -501,6 +534,10 @@ func (t *RawDataTree) AddDefaults(options uint32) error {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return ctxErr
+	}
 	rc := C.lyd_new_implicit_all(&t.tree, t.ctx, C.uint32_t(options), nil) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
 		return lyError(t.ctx, "add defaults", int(rc))
@@ -525,8 +562,13 @@ func (c *RawContext) retain() {
 // acquire registers an in-flight cgo operation against this context,
 // failing once Close has been requested. Paired with release(); prevents
 // ly_ctx_destroy while an operation is executing on c.ctx.
+//
+// The gate reads only atomics: destroyCtx writes c.ctx concurrently with a
+// racing Close, so a plain c.ctx read here would be a data race. destroyed==1
+// implies the pointer is gone; closeReq==1 covers every path that can lead
+// there while the context is still reachable.
 func (c *RawContext) acquire() error {
-	if c == nil || atomic.LoadInt32(&c.closeReq) == 1 || c.ctx == nil {
+	if c == nil || atomic.LoadInt32(&c.closeReq) == 1 || atomic.LoadInt32(&c.destroyed) == 1 {
 		return ErrContextClosed
 	}
 	atomic.AddInt64(&c.live, 1)
@@ -613,6 +655,10 @@ func (t *RawDataTree) Duplicate() (*RawDataTree, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 	first := C.lyd_first_sibling(t.tree)
 	var out *C.struct_lyd_node
 	rc := C.lyd_dup_siblings(first, nil, C.uint32_t(C.LYD_DUP_RECURSIVE|C.LYD_DUP_WITH_FLAGS), &out) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
@@ -707,7 +753,11 @@ func (t *RawDataTree) Serialize(format Format, options uint32) ([]byte, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
-	return serializeNode(t.owner.ctx, t.tree, format, options, true)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
+	return serializeNode(t.ctx, t.tree, format, options, true)
 }
 
 // SerializeLYB prints the whole tree to LYB bytes.
@@ -715,7 +765,11 @@ func (t *RawDataTree) SerializeLYB(options uint32) ([]byte, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
-	return serializeNodeLYB(t.owner.ctx, t.tree, options)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
+	return serializeNodeLYB(t.ctx, t.tree, options)
 }
 
 // Validate validates the whole tree.
@@ -723,9 +777,13 @@ func (t *RawDataTree) Validate(options uint32) error {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return ctxErr
+	}
 	rc := C.lyd_validate_all(&t.tree, nil, C.uint32_t(options), nil) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
-		return lyError(t.owner.ctx, "validate", int(rc))
+		return lyError(t.ctx, "validate", int(rc))
 	}
 	// Re-anchor the canonical first sibling; validation may insert defaults.
 	if t.tree != nil {
@@ -757,6 +815,10 @@ func (t *RawDataTree) FindNode(path string) (*C.struct_lyd_node, bool, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, false, ctxErr
+	}
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	var node *C.struct_lyd_node
@@ -765,7 +827,7 @@ func (t *RawDataTree) FindNode(path string) (*C.struct_lyd_node, bool, error) {
 		return nil, false, nil
 	}
 	if rc != C.LY_SUCCESS {
-		return nil, false, lyError(t.owner.ctx, "find path", int(rc))
+		return nil, false, lyError(t.ctx, "find path", int(rc))
 	}
 	if node == nil {
 		return nil, false, nil
@@ -778,6 +840,10 @@ func (t *RawDataTree) RootNodes() ([]RawChildInfo, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 	first := C.lyd_first_sibling(t.tree)
 	return t.collectSiblings(first)
 }
@@ -842,12 +908,16 @@ func (t *RawDataTree) XPathPaths(xpath string) ([]string, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 	cxpath := C.CString(xpath)
 	defer C.free(unsafe.Pointer(cxpath))
 	var set *C.struct_ly_set
 	rc := C.lyd_find_xpath(t.tree, cxpath, &set) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if rc != C.LY_SUCCESS {
-		return nil, lyError(t.owner.ctx, "xpath", int(rc))
+		return nil, lyError(t.ctx, "xpath", int(rc))
 	}
 	if set == nil {
 		return nil, nil
@@ -931,6 +1001,10 @@ func (t *RawDataTree) ValidateCollect(options uint32) ([]RawDiagnostic, error) {
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 
 	validateLogMu.Lock()
 	defer validateLogMu.Unlock()
@@ -938,7 +1012,7 @@ func (t *RawDataTree) ValidateCollect(options uint32) ([]RawDiagnostic, error) {
 	prev := C.ly_log_options(C.uint32_t(C.LY_LOLOG | C.LY_LOSTORE))
 	defer C.ly_log_options(prev)
 
-	C.ly_err_clean(t.owner.ctx, nil)
+	C.ly_err_clean(t.ctx, nil)
 	rc := C.lyd_validate_all(&t.tree, nil, C.uint32_t(options), nil) //nolint:gocritic // dupSubExpr false positive on cgo-rewritten call
 	if t.tree != nil {
 		t.tree = C.lyd_first_sibling(t.tree)
@@ -946,15 +1020,15 @@ func (t *RawDataTree) ValidateCollect(options uint32) ([]RawDiagnostic, error) {
 	t.incrementGen()
 
 	if rc == C.LY_SUCCESS {
-		C.ly_err_clean(t.owner.ctx, nil)
+		C.ly_err_clean(t.ctx, nil)
 		return nil, nil
 	}
 	if rc != C.LY_EVALID {
-		return nil, lyError(t.owner.ctx, "validate", int(rc))
+		return nil, lyError(t.ctx, "validate", int(rc))
 	}
 
 	var out []RawDiagnostic
-	for item := C.ly_err_first(t.owner.ctx); item != nil; item = item.next {
+	for item := C.ly_err_first(t.ctx); item != nil; item = item.next {
 		out = append(out, RawDiagnostic{
 			Message:    cgoString(item.msg),
 			DataPath:   cgoString(item.data_path),
@@ -964,10 +1038,10 @@ func (t *RawDataTree) ValidateCollect(options uint32) ([]RawDiagnostic, error) {
 		})
 	}
 	if len(out) == 0 {
-		C.ly_err_clean(t.owner.ctx, nil)
+		C.ly_err_clean(t.ctx, nil)
 		return nil, fmt.Errorf("validate: validation failed (LY_EVALID) but libyang produced no retrievable diagnostics")
 	}
-	C.ly_err_clean(t.owner.ctx, nil)
+	C.ly_err_clean(t.ctx, nil)
 	return out, nil
 }
 
@@ -1020,6 +1094,10 @@ func (t *RawDataTree) UserOrderedListAt(path string) (*RawUserOrderedList, error
 	defer pinToOSThread()()
 	defer runtime.KeepAlive(t)
 	defer runtime.KeepAlive(t.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	var node *C.struct_lyd_node
@@ -1077,6 +1155,14 @@ func (t *RawDataTree) Merge(source *RawDataTree) error {
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(source)
 	defer runtime.KeepAlive(source.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return ctxErr
+	}
+	sourceErr := source.requireContext()
+	if sourceErr != nil {
+		return sourceErr
+	}
 	// Passing two different ly_ctx to libyang is undefined behavior; guard at
 	// the raw layer to match the adapter contract.
 	if t.ctx != source.ctx {
@@ -1101,6 +1187,13 @@ func (t *RawDataTree) DiffApply(diff *RawDataDiff) error {
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(diff)
 	defer runtime.KeepAlive(diff.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return ctxErr
+	}
+	if diff.ctx == nil {
+		return ErrContextClosed
+	}
 	// Passing two different ly_ctx to libyang is undefined behavior; guard at the
 	// raw layer to match Merge and Diff.
 	if t.ctx != diff.ctx {
@@ -1124,6 +1217,14 @@ func (t *RawDataTree) Diff(other *RawDataTree, defaults bool) (*RawDataDiff, err
 	defer runtime.KeepAlive(t.owner)
 	defer runtime.KeepAlive(other)
 	defer runtime.KeepAlive(other.owner)
+	ctxErr := t.requireContext()
+	if ctxErr != nil {
+		return nil, ctxErr
+	}
+	otherErr := other.requireContext()
+	if otherErr != nil {
+		return nil, otherErr
+	}
 	// Passing two different ly_ctx to libyang is undefined behavior; guard at
 	// the raw layer to match the adapter contract.
 	if t.ctx != other.ctx {

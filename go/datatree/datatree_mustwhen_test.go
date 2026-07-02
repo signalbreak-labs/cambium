@@ -62,6 +62,23 @@ func TestMustCountAbsolutePath(t *testing.T) {
 	}
 }
 
+// TestMustUnsupportedFunctionSkipped guards the safety rule: a must using a
+// function the engine does not implement (deref, the one remaining YANG XPath
+// function) is SKIPPED, not reported. If deref() gets implemented, this test
+// must be consciously repointed or replaced, exactly as the re-match version
+// of this guard was.
+func TestMustUnsupportedFunctionSkipped(t *testing.T) {
+	mod := loadModSrc(t, `module mws {
+        namespace "urn:mws"; prefix mws;
+        leaf x { must "deref(.)"; type string; }
+    }`, "mws")
+	if err := validateOne(t, mod, `{"mws:x":"abc"}`); err != nil {
+		if strings.Contains(err.Error(), "must") {
+			t.Fatalf("unsupported must function must be skipped, not reported: %v", err)
+		}
+	}
+}
+
 func TestMustReMatchFunction(t *testing.T) {
 	mod := loadModSrc(t, `module mwu {
         namespace "urn:mwu"; prefix mwu;

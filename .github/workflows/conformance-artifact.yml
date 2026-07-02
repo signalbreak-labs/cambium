@@ -17,15 +17,19 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check conformance package
         run: scripts/check-conformance-package.sh
 
       - name: Build conformance package
         shell: bash
+        env:
+          # Never interpolate workflow inputs into the script body — env
+          # indirection keeps a crafted input from becoming shell syntax.
+          VERSION_INPUT: ${{ github.event.inputs.version }}
         run: |
-          version="${{ github.event.inputs.version }}"
+          version="$VERSION_INPUT"
           if [ -z "$version" ]; then
             version="${GITHUB_REF_NAME:-$(git rev-parse --short HEAD)}"
           fi

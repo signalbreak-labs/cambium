@@ -30,7 +30,9 @@ type Update struct {
 
 // JSONIETFAtomicUpdate serializes tree as JSON_IETF and extracts the value at
 // path as one atomic update payload. The path is Cambium's absolute data path
-// form (for example, "/example:top/list").
+// form (for example, "/example:top/list"). Predicates are rejected: pass the
+// list or leaf-list path itself so the ordered value remains one atomic I6
+// update.
 func JSONIETFAtomicUpdate(tree *backend.DataTree, path string, flags backend.SerializeFlags) (Update, error) {
 	if tree == nil {
 		return Update{}, dataPathError("nil data tree")
@@ -91,7 +93,9 @@ func parseDataPath(path string) ([]pathSegment, error) {
 	}
 	segments := make([]pathSegment, 0, len(parts))
 	for _, part := range parts {
-		part = stripPredicates(part)
+		if strings.Contains(part, "[") {
+			return nil, fmt.Errorf("predicates are not supported; pass the list path for an atomic I6 update")
+		}
 		if part == "" {
 			return nil, fmt.Errorf("path contains an empty segment: %s", path)
 		}
@@ -148,13 +152,6 @@ func splitPath(path string) ([]string, error) {
 	}
 	parts = append(parts, path[start:])
 	return parts, nil
-}
-
-func stripPredicates(part string) string {
-	if i := strings.IndexByte(part, '['); i >= 0 {
-		return part[:i]
-	}
-	return part
 }
 
 func lookupJSONIETFKey(obj map[string]json.RawMessage, seg pathSegment, root bool) (json.RawMessage, bool) {

@@ -16,6 +16,16 @@ Nested `SchemaIRNode` values are in effective schema declaration order. If schem
 materialization fails during a dirty rebuild, `SchemaIR.Errors` carries
 structured diagnostics instead of silently dropping the failure.
 
+The current version string is `cambium.schema-ir.v1` (defined in
+`go/cambium/schema_ir.go` and emitted by `cmd/cambium-ir`). For v1, consumers can
+depend on the presence and meaning of the documented top-level fields:
+`version`, `modules`, and optional `errors`; module identity/import/include
+fields; node path/name/kind/order fields; type/default/config/constraint fields;
+source location; and provenance. Future v1 releases may add fields to objects or
+new enum/string values where the existing meaning is unchanged. Removing or
+renaming fields, changing path semantics, or changing ordering semantics requires
+a new version string.
+
 Each node carries:
 
 - local, module-qualified, and namespace-expanded paths (`LocalPath`,
@@ -31,7 +41,8 @@ The projection is a value snapshot over Cambium's ordered handles. Ordering stil
 comes from Cambium's ordered IR slices, never from map iteration.
 
 For command-line consumers, `cmd/cambium-ir` exports the pure-Go SchemaIR as JSON
-without importing the cgo backend:
+without importing the cgo backend. Its output is the JSON form of the same
+versioned projection, not a separate schema:
 
 ```bash
 cd go

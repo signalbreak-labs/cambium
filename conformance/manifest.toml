@@ -1961,6 +1961,19 @@ json_ietf = "golden/constraints-when-xpath-functions/output.json_ietf"
 
 
 [[case]]
+name = "datatree-augment-derived-from-prefix"
+module = "fixtures/datatree-augment-derived-from-prefix/module"
+input = "fixtures/datatree-augment-derived-from-prefix/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+[case.expected]
+json_ietf = "golden/datatree-augment-derived-from-prefix/output.json_ietf"
+
+
+
+
+[[case]]
 name = "constraints-must-multiple"
 module = "fixtures/constraints-must-multiple/module"
 input = "fixtures/constraints-must-multiple/input.xml"

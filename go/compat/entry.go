@@ -1774,6 +1774,10 @@ func orderedEntryChildPairs(entry *Entry) []entryChildPair {
 			remaining = append(remaining, key)
 		}
 	}
+	// Supported Entry builders keep Dir and ordered in sync through add, merge,
+	// delete, and FixChoice. This fallback is retained for manually constructed
+	// goyang-shaped Entries, where the only defensible traversal is goyang's
+	// historical alphabetical map-key order.
 	sort.Strings(remaining)
 	for _, key := range remaining {
 		pairs = append(pairs, entryChildPair{key: key, entry: entry.Dir[key]})

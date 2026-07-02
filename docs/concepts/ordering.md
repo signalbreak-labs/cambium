@@ -169,7 +169,10 @@ schema-level and libyang-only guarantee; see the
 is. The backend-tier `go/gnmi` helper emits gNMI-style payload values only: it
 carries `ordered-by user` data as one atomic JSON_IETF value and leaves client,
 session, and transport ownership to downstream code. The `gnmi-ordered-atomic`
-conformance fixture gates that behavior.
+conformance fixture gates that behavior. The helper envelope has `path`,
+`encoding`, and `value` fields; `encoding` is `JSON_IETF`, `path` is an
+unpredicated Cambium absolute data path, and `value` is the JSON_IETF subtree
+for that path.
 
 ## See also
 

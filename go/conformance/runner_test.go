@@ -93,20 +93,43 @@ func TestRunDataTreeDifferentialFlaggedCases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	passed, skipped, failed, err := RunDataTreeDifferential(dir, []string{"scrambled-children", "keys-first", "rpc-order"})
+	// Run EVERY datatree-flagged case (empty selection = whole manifest), so a
+	// case opted in via `datatree = true` is gated here automatically — the
+	// lane must never hold silently-failing flagged cases.
+	passed, _, failed, err := RunDataTreeDifferential(dir, nil)
 	if err != nil {
 		t.Fatalf("RunDataTreeDifferential: %v", err)
 	}
-	for _, name := range []string{"scrambled-children", "keys-first"} {
+	for _, name := range []string{
+		"scrambled-children",
+		"keys-first",
+		"ordered-user",
+		"constraints-when-xpath-functions",
+	} {
 		if !slices.Contains(passed, name) {
 			t.Errorf("%s not in passed list: %v", name, passed)
 		}
 	}
+	for _, f := range failed {
+		t.Errorf("datatree differential failure: %s", f)
+	}
+}
+
+func TestRunDataTreeDifferentialSkipsUnflaggedSelection(t *testing.T) {
+	dir, err := FindConformanceDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	passed, skipped, failed, err := RunDataTreeDifferential(dir, []string{"rpc-order"})
+	if err != nil {
+		t.Fatalf("RunDataTreeDifferential: %v", err)
+	}
+	if len(passed) != 0 || len(failed) != 0 {
+		t.Fatalf("passed = %v, failed = %v, want none", passed, failed)
+	}
 	if !slices.Contains(skipped, "rpc-order") {
 		t.Errorf("rpc-order should be skipped as non-datatree case: %v", skipped)
-	}
-	for _, f := range failed {
-		t.Errorf("unexpected datatree differential failure: %s", f)
 	}
 }
 

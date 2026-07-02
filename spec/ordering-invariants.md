@@ -212,7 +212,7 @@ Backend/data runner contract:
 | `list-keyless-positional` | Backend/data | I1/I2 | keyless list positional order |
 | `list-ordered-by-system-canonical` | Backend/data | I2 | system-ordered entries canonicalize deterministically |
 | `json-object-determinism` | Backend/data | I5 | deterministic object member output |
-| `gnmi-ordered-atomic` | Backend/data | I6 | ordered list carried as one atomic JSON_IETF gNMI payload value |
+| `gnmi-ordered-atomic` | Backend/data | I6 | ordered list carried as one atomic JSON_IETF gNMI payload value; predicated gNMI paths are rejected with a data-path error so callers pass the list path for the atomic update |
 
 > Fixture names above are kept in sync with `/conformance/manifest.toml`. Every
 > row maps to a live case; the `invariants` key in `manifest.toml` is the

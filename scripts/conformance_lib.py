@@ -2,8 +2,14 @@
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Optional
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11
+    tomllib = None
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFORMANCE = ROOT / "conformance"
@@ -15,6 +21,52 @@ def normalize(data: bytes) -> bytes:
     while data and data[-1:].isspace():
         data = data[:-1]
     return data
+
+
+def pinned_libyang_version(repo_root: Path) -> str:
+    versions = repo_root / "VERSIONS"
+    if tomllib is not None:
+        with open(versions, "rb") as f:
+            return tomllib.load(f)["libyang"]["tag"].lstrip("v")
+
+    in_libyang = False
+    for line in versions.read_text().splitlines():
+        stripped = line.strip()
+        if stripped == "[libyang]":
+            in_libyang = True
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_libyang = False
+            continue
+        if in_libyang:
+            m = re.match(r'tag\s*=\s*"v?([^"]+)"', stripped)
+            if m:
+                return m.group(1)
+    raise RuntimeError("VERSIONS missing [libyang].tag")
+
+
+def assert_yanglint_matches_pin(repo_root: Path) -> None:
+    """Refuse to generate goldens with an oracle that differs from /VERSIONS.
+
+    Probes the SAME binary golden generation invokes (the repo-built YANGLINT),
+    not a PATH lookup: goldens are always written by that binary, and it is the
+    one that can silently go stale when the /VERSIONS pin is bumped without a
+    rebuild of go/internal/libyang/.build.
+    """
+    pinned = pinned_libyang_version(repo_root)
+    try:
+        out = subprocess.run(
+            [str(YANGLINT), "--version"], capture_output=True, text=True, check=True
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        sys.exit(f"cannot probe oracle version via {YANGLINT}: {exc}")
+    m = re.search(r"(\d+\.\d+\.\d+)", out)
+    if not m or m.group(1) != pinned:
+        got = m.group(1) if m else out.strip()
+        sys.exit(
+            f"yanglint version {got!r} at {YANGLINT} does not match VERSIONS pin {pinned}; "
+            "rebuild the pinned yanglint (bash go/internal/libyang/build.sh) before regenerating goldens"
+        )
 
 
 def is_module(path: Path) -> bool:
@@ -48,7 +100,7 @@ def run_yanglint(module_dir: Path, input_path: Path, fmt: str,
     for s in schemas:
         feature_args.extend(["-F", f"{_module_name(s)}:"])
     cmd = [str(YANGLINT), "-X", "-p", str(module_dir)]
-    if wd_mode:
+    if wd_mode and wd_mode != "explicit":
         cmd.extend(["-d", wd_mode])
     if op_type:
         yanglint_type = {"rpc": "rpc", "reply": "reply", "notification": "notif"}[op_type]
@@ -128,16 +180,27 @@ def write_goldens(name: str, wd_mode: Optional[str] = None,
     if current is not None and "name" in current:
         cases[current["name"]] = current
 
+    if name not in cases:
+        raise RuntimeError(f"case {name} not found in manifest")
     case = cases[name]
+    expected = {fmt: rel for fmt, rel in case.get("expected", {}).items()
+                if fmt in {"xml", "json", "json_ietf"}}
+    if "input" not in case or not expected:
+        # Compile-only tiers (schema-ir) have no data input; helper-only cases
+        # (gnmi-json-ietf) have no yanglint-comparable format. Neither golden
+        # kind is produced by the oracle, so there is nothing to regenerate.
+        tier = case.get("tier", "backend-data")
+        print(f"  skipping {name}: no yanglint-regenerable goldens (tier={tier})")
+        return
+    if wd_mode is None:
+        wd_mode = case.get("serialize-defaults")
     if op_type is None:
         op_type = case.get("op-type")
     module_dir = CONFORMANCE / case["module"]
     input_path = CONFORMANCE / case["input"]
     golden_dir = CONFORMANCE / "golden" / name
     golden_dir.mkdir(parents=True, exist_ok=True)
-    for fmt, golden_rel in case.get("expected", {}).items():
-        if fmt not in {"xml", "json", "json_ietf"}:
-            continue
+    for fmt, golden_rel in expected.items():
         golden_path = CONFORMANCE / golden_rel
         golden_bytes = run_yanglint(module_dir, input_path, fmt, wd_mode, op_type)
         golden_path.write_bytes(golden_bytes + b"\n")
