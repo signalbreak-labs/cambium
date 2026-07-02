@@ -130,8 +130,8 @@ whole-document FFI boundary, treats `ly_ctx` as build-once-then-frozen, and its
 data trees are not concurrency-safe. A frozen context may be shared for schema
 reads and parsing independent trees; trees and borrowed handles require external
 synchronization or per-goroutine copies. Guarantees **I1/I2/I3/I4/I5** over real
-data; gNMI output (I6) is not wired yet — its atomic-JSON_IETF mechanism is
-specified, but no tier emits gNMI today.
+data; the backend-tier `go/gnmi` helper carries **I6** as one atomic JSON_IETF
+payload value without adding a gNMI client or transport.
 
 **Choosing a tier.** Schema and codegen only → Schema-IR tier, no C build. Generic
 data round-trip and validation without a C toolchain, and you can tolerate an

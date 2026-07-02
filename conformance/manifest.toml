@@ -2466,6 +2466,16 @@ json = "golden/list-ordered-by-user-insertion/output.json"
 json_ietf = "golden/list-ordered-by-user-insertion/output.json_ietf"
 
 [[case]]
+name = "gnmi-ordered-atomic"
+invariants = ["I6"]
+module = "fixtures/gnmi-ordered-atomic/module"
+input = "fixtures/gnmi-ordered-atomic/input.xml"
+input-format = "xml"
+gnmi-path = "/gnmi-ordered-atomic:top/rule"
+[case.expected]
+gnmi-json-ietf = "golden/gnmi-ordered-atomic/output.gnmi.json"
+
+[[case]]
 name = "list-ordered-by-system-canonical"
 invariants = ["I2"]
 module = "fixtures/list-ordered-by-system-canonical/module"

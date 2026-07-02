@@ -127,8 +127,9 @@ in effective declaration order), I3 (list keys first, in `key` order), and I4
 (RPC/action/notification children in schema order). The libyang backend
 additionally guarantees I1 (`ordered-by user` preserved across round-trip) and I5
 (YANG lists/leaf-lists as JSON arrays carrying I1/I2 order). I6 (gNMI `ordered-by
-user` output as one atomic JSON_IETF subtree) is specified but not yet wired to a
-gNMI output path, so no tier emits gNMI today.
+user` output as one atomic JSON_IETF subtree) is emitted by the backend-tier
+`go/gnmi` payload helper, which deliberately stops short of client or transport
+code.
 The experimental `datatree` tier reproduces I1/I2/I3/I5 over the constructs it
 supports.
 

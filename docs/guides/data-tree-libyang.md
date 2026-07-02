@@ -433,9 +433,10 @@ Over real instance data, the libyang backend guarantees:
 - **I5** — lists and leaf-lists serialize as JSON arrays carrying I1/I2 order.
 
 Serialization realizes all of these as a single ordered walk of libyang's
-`lyd_node.next/prev` chain. I6 (gNMI) is not wired yet — its atomic-JSON_IETF
-mechanism is specified, but no tier emits a gNMI output path. The normative statements
-are in [ordering-invariants](../../spec/ordering-invariants.md).
+`lyd_node.next/prev` chain. I6 is exposed through the backend-tier `go/gnmi`
+payload helper, which emits one atomic JSON_IETF value for the requested gNMI
+path and does not own client or transport behavior. The normative statements are
+in [ordering-invariants](../../spec/ordering-invariants.md).
 
 ## See also
 

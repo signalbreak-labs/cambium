@@ -24,6 +24,7 @@ import (
 
 	core "github.com/signalbreak-labs/cambium/go/cambium"
 	"github.com/signalbreak-labs/cambium/go/datatree"
+	"github.com/signalbreak-labs/cambium/go/gnmi"
 	"github.com/signalbreak-labs/cambium/go/internal/confmanifest"
 	backend "github.com/signalbreak-labs/cambium/go/libyangbackend"
 )
@@ -163,6 +164,23 @@ func backendCaseOutputs(conformanceDir string, c Case) ([]caseOutput, error) {
 
 	outputs := make([]caseOutput, 0, len(formats))
 	for _, fmtName := range formats {
+		if fmtName == "gnmi-json-ietf" {
+			if c.GNMIPath == "" {
+				return nil, fmt.Errorf("case %q has gnmi-json-ietf output but no gnmi-path", c.Name)
+			}
+			flags := backend.DefaultSerializeFlags()
+			update, err := gnmi.JSONIETFAtomicUpdate(tree, c.GNMIPath, flags)
+			if err != nil {
+				return nil, err
+			}
+			actual, err := json.MarshalIndent(update, "", "  ")
+			if err != nil {
+				return nil, fmt.Errorf("marshal gnmi update: %w", err)
+			}
+			actual = append(actual, '\n')
+			outputs = append(outputs, caseOutput{name: fmtName, format: backend.FormatJSONIETF, flags: flags, data: actual})
+			continue
+		}
 		outFmt, err := parseFormat(fmtName)
 		if err != nil {
 			return nil, err

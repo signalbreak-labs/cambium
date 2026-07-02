@@ -35,6 +35,7 @@ type Case struct {
 	Input             string
 	InputFormat       string
 	OpType            string
+	GNMIPath          string
 	SerializeDefaults string
 	Oracle            bool
 	DataTree          bool
@@ -118,6 +119,8 @@ func Load(path string) ([]Case, error) {
 			cur.InputFormat = unquote(val)
 		case "op-type":
 			cur.OpType = unquote(val)
+		case "gnmi-path":
+			cur.GNMIPath = unquote(val)
 		case "serialize-defaults":
 			cur.SerializeDefaults = unquote(val)
 		case "oracle":

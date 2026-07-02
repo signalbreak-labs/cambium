@@ -158,7 +158,7 @@ The invariants are tier-scoped, because Cambium has more than one engine:
 | I4 | ✅ at the schema level | — (no operation data) | ✅ over data |
 | I1 | — (schema has no data) | ✅ for supported constructs | ✅ |
 | I5 | — | ✅ for supported constructs | ✅ |
-| I6 | — | — | deferred (no gNMI path) |
+| I6 | — | — | ✅ via `go/gnmi` JSON_IETF payload helper |
 
 The Schema-IR tier guarantees the *schema-level* ordering (I2/I3/I4) with no cgo.
 The libyang backend adds the *data-level* guarantees (I1/I5, full I2/I3/I4 over real
@@ -166,9 +166,10 @@ trees). The experimental `datatree` tier reproduces I1/I2/I3/I5 over the constru
 it supports, cgo-free — it carries no RPC/action/notification data, so I4 stays a
 schema-level and libyang-only guarantee; see the
 [pure-Go data tree guide](../guides/data-tree-pure-go.md) for exactly what that scope
-is. No tier emits gNMI output yet: I6's mechanism — carrying `ordered-by user` as one
-atomic JSON_IETF value — is specified but not wired to a gNMI output path, and the
-`gnmi-ordered-atomic` conformance fixture is deferred.
+is. The backend-tier `go/gnmi` helper emits gNMI-style payload values only: it
+carries `ordered-by user` data as one atomic JSON_IETF value and leaves client,
+session, and transport ownership to downstream code. The `gnmi-ordered-atomic`
+conformance fixture gates that behavior.
 
 ## See also
 

@@ -81,6 +81,9 @@ func TestSharedManifestReferencesExistingFiles(t *testing.T) {
 				t.Fatalf("case %q has no expected outputs", c.Name)
 			}
 			for format, rel := range c.Expected {
+				if format == "gnmi-json-ietf" && c.GNMIPath == "" {
+					t.Fatalf("case %q has gnmi-json-ietf output but no gnmi-path", c.Name)
+				}
 				assertPathExists(t, root, c.Name, "expected "+format, rel)
 			}
 		default:
@@ -156,6 +159,39 @@ xml = "golden/datatree-opt-in/output.xml"
 	}
 }
 
+func TestLoadParsesGNMIPath(t *testing.T) {
+	manifest := `[[case]]
+name = "gnmi"
+module = "fixtures/gnmi/module"
+input = "fixtures/gnmi/input.xml"
+input-format = "xml"
+gnmi-path = "/gnmi:top/rule"
+[case.expected]
+gnmi-json-ietf = "golden/gnmi/output.gnmi.json"
+`
+	tmp, err := os.CreateTemp("", "confmanifest-gnmi-*.toml")
+	if err != nil {
+		t.Fatalf("CreateTemp: %v", err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+
+	if _, err := tmp.WriteString(manifest); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	_ = tmp.Close()
+
+	cases, err := Load(tmp.Name())
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cases) != 1 {
+		t.Fatalf("cases = %d, want 1", len(cases))
+	}
+	if cases[0].GNMIPath != "/gnmi:top/rule" {
+		t.Fatalf("GNMIPath = %q", cases[0].GNMIPath)
+	}
+}
+
 func TestLoadRejectsInvalidTier(t *testing.T) {
 	manifest := `[[case]]
 name = "bad-tier"
@@ -187,11 +223,8 @@ module = "foo.yang"
 }
 
 // requiredInvariants are the ordering invariants that MUST each have at least
-// one passing conformance fixture. I6 (gNMI atomic ordered-by-user) is omitted:
-// it is deferred per spec/ordering-invariants.md §7 — the behavior is
-// implemented + unit-tested in go/libyangbackend, but the dedicated golden
-// fixture is outstanding.
-var requiredInvariants = []string{"I1", "I2", "I3", "I4", "I5"}
+// one passing conformance fixture.
+var requiredInvariants = []string{"I1", "I2", "I3", "I4", "I5", "I6"}
 
 // G-08: the I1-I6 -> fixture mapping must be machine-checkable, not prose-only.
 // Cases carry an `invariants` tag in manifest.toml; this fails if a required

@@ -1,0 +1,18 @@
+{
+  "path": "/gnmi-ordered-atomic:top/rule",
+  "encoding": "JSON_IETF",
+  "value": [
+    {
+      "name": "c",
+      "action": "drop"
+    },
+    {
+      "name": "a",
+      "action": "accept"
+    },
+    {
+      "name": "b",
+      "action": "reject"
+    }
+  ]
+}

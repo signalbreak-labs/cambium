@@ -84,6 +84,7 @@ var enabled = []string{
 	"identity-multi-base-cross-module",
 	"identity-cross-module-derivation",
 	"list-ordered-by-user-insertion",
+	"gnmi-ordered-atomic",
 	"list-ordered-by-system-canonical",
 	"leaflist-ordered-by-user",
 	"leaflist-ordered-by-system",

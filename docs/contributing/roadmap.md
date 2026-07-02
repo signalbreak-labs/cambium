@@ -48,11 +48,6 @@ lands rather than adding another dated file.
 
 ## Not built yet
 
-- **gNMI (invariant I6).** No tier emits gNMI today; the `gnmi-ordered-atomic`
-  conformance fixture is deferred (see
-  [`/spec/ordering-invariants.md`](../../spec/ordering-invariants.md) §7). I6's
-  mechanism (carrying `ordered-by user` as one atomic JSON_IETF value) is specified
-  but not wired to a gNMI output path.
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
   none exists today. See [adding a binding](adding-a-binding.md).

@@ -122,6 +122,10 @@ list's keys in key-statement order:
 cross-checked against an independent `yanglint` run when one is available (see
 [Running the gates](#running-the-gates)).
 
+`gnmi-json-ietf` expected outputs are backend-tier payload helper cases. They
+also set `gnmi-path`, and the runner emits one `go/gnmi` JSON_IETF update value
+for that path rather than decomposing an ordered subtree into scalar updates.
+
 ## Cases are tagged by invariant
 
 Each case may carry an `invariants` array naming the ordering invariants (I1–I6)
@@ -137,6 +141,8 @@ it exercises, so the corpus maps directly onto the normative contract in
   serialize (carried by the `ordered-user` and `*-ordered-by-user` cases; some
   cases tag `["I1", "I2"]`).
 - **I5** — JSON arrays carry I1/I2 order under a deterministic printer profile.
+- **I6** — gNMI output carries `ordered-by user` data as one atomic JSON_IETF
+  payload value (`gnmi-ordered-atomic`).
 
 The invariant tags are how coverage is read: the normative wording for I1–I6
 lives in the spec, and the corpus is the executable proof that each tier upholds

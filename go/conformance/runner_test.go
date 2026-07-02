@@ -110,6 +110,30 @@ func TestRunDataTreeDifferentialFlaggedCases(t *testing.T) {
 	}
 }
 
+func TestRunCaseSupportsGNMIJSONIETFAtomicOutput(t *testing.T) {
+	dir, err := FindConformanceDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases, err := LoadManifest(filepath.Join(dir, "manifest.toml"))
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	var target *Case
+	for i := range cases {
+		if cases[i].Name == "gnmi-ordered-atomic" {
+			target = &cases[i]
+			break
+		}
+	}
+	if target == nil {
+		t.Fatal("gnmi-ordered-atomic case not found in manifest")
+	}
+	if err := RunCase(dir, *target); err != nil {
+		t.Fatalf("gnmi-ordered-atomic failed byte parity: %v", err)
+	}
+}
+
 func TestRunYanglintOracleBuildsExpectedCommand(t *testing.T) {
 	dir := t.TempDir()
 	moduleDir := filepath.Join(dir, "module")
