@@ -6,6 +6,8 @@
 // serializes it back in effective schema declaration order, so it requires no
 // libyang/cgo for generic data round-tripping.
 //
+// Experimental: this package's public API and internal value representation are unstable and will change without notice; see the repository README "capability tiers" table.
+//
 // Order is structural here exactly as in the schema tier: a node's children are
 // stored as an ordered slice (never a map as the traversal source), output
 // follows schema declaration order (invariant I2), list keys are emitted first
