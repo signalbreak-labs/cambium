@@ -4,38 +4,55 @@
 package codegen
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// TestRegenerateStaticTemplates captures the exact bytes of each fully-static
-// helper block into go/codegen/templates/*.tmpl. It is a one-shot generator,
-// run only when CAMBIUM_REGEN_TEMPLATES is set, used to migrate the helpers to
-// //go:embed without changing a single output byte. Kept in-tree so the embed
-// files can be regenerated verbatim if a helper ever changes.
-func TestRegenerateStaticTemplates(t *testing.T) {
+// Only fully-static helpers (no internal g-dependent branches) are captured.
+// emitJSONParseHelper is intentionally excluded: it has a conditional
+// `if g.emittedDecimal64` block, so it stays as code (see templates.go).
+var staticTemplateBlocks = map[string]func(*goEmitter, *strings.Builder){
+	"binaryparse":        (*goEmitter).emitBinaryParseHelper,
+	"patternvalidate":    (*goEmitter).emitPatternValidateHelper,
+	"bitsparse":          (*goEmitter).emitBitsParseHelper,
+	"decimal64":          (*goEmitter).emitDecimal64Helper,
+	"userorderedvec":     (*goEmitter).emitUserOrderedVecHelper,
+	"instanceidentifier": (*goEmitter).emitInstanceIdentifierHelper,
+	"anydata":            (*goEmitter).emitAnyDataHelper,
+	"cambiumstructiface": (*goEmitter).emitCambiumStructInterface,
+}
+
+func TestTemplatesMatchEmitters(t *testing.T) {
+	for name, fn := range staticTemplateBlocks {
+		var b strings.Builder
+		fn(&goEmitter{}, &b)
+		path := filepath.Join("templates", name+".tmpl")
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if !bytes.Equal(got, []byte(b.String())) {
+			t.Fatalf("%s template drift: run CAMBIUM_REGEN_TEMPLATES=1 go test ./codegen to regenerate, then review the diff", path)
+		}
+	}
+}
+
+// TestRegenerateTemplates captures the exact bytes of each fully-static helper
+// block into go/codegen/templates/*.tmpl. It is a one-shot generator, run only
+// when CAMBIUM_REGEN_TEMPLATES is set, used to migrate the helpers to //go:embed
+// without changing a single output byte. Kept in-tree so the embed files can be
+// regenerated verbatim if a helper ever changes.
+func TestRegenerateTemplates(t *testing.T) {
 	if os.Getenv("CAMBIUM_REGEN_TEMPLATES") == "" {
 		t.Skip("set CAMBIUM_REGEN_TEMPLATES=1 to regenerate codegen/templates/*.tmpl")
-	}
-	// Only fully-static helpers (no internal g-dependent branches) are captured.
-	// emitJSONParseHelper is intentionally excluded: it has a conditional
-	// `if g.emittedDecimal64` block, so it stays as code (see templates.go).
-	blocks := map[string]func(*goEmitter, *strings.Builder){
-		"binaryparse":        (*goEmitter).emitBinaryParseHelper,
-		"patternvalidate":    (*goEmitter).emitPatternValidateHelper,
-		"bitsparse":          (*goEmitter).emitBitsParseHelper,
-		"decimal64":          (*goEmitter).emitDecimal64Helper,
-		"userorderedvec":     (*goEmitter).emitUserOrderedVecHelper,
-		"instanceidentifier": (*goEmitter).emitInstanceIdentifierHelper,
-		"anydata":            (*goEmitter).emitAnyDataHelper,
-		"cambiumstructiface": (*goEmitter).emitCambiumStructInterface,
 	}
 	if err := os.MkdirAll("templates", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, fn := range blocks {
+	for name, fn := range staticTemplateBlocks {
 		var b strings.Builder
 		fn(&goEmitter{}, &b)
 		path := filepath.Join("templates", name+".tmpl")
