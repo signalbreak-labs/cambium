@@ -16,6 +16,10 @@ import (
 	"github.com/signalbreak-labs/cambium/go/internal/libyang"
 )
 
+// ErrContextClosed is returned, directly or wrapped, by operations that require
+// a libyang context after the owning Context has been closed.
+var ErrContextClosed = libyang.ErrContextClosed
+
 // Format is an on-wire encoding. Every format is produced by a single ordered
 // walk of the libyang sibling chain — never a native map/struct serializer.
 type Format int
@@ -352,7 +356,9 @@ func (c *Context) ParseOp(format Format, opType OpType, data []byte) (*DataTree,
 	return &DataTree{owner: c, raw: raw}, nil
 }
 
-// NewData creates an empty in-memory data tree against this context.
+// NewData creates an empty in-memory data tree against this context. If called
+// after Close, it still returns a closable DataTree for API compatibility, but
+// operations that require the libyang context fail with ErrContextClosed.
 func (c *Context) NewData() *DataTree {
 	return &DataTree{owner: c, raw: c.raw.NewData()}
 }

@@ -46,6 +46,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   behavior in libyang), matching the existing `Merge`/`Diff` guards.
 - Post-`Close` and concurrent-with-`Close` context operations are fail-closed
   instead of reaching freed C memory.
+- `Context.NewData` after `Close` returns a closable tree shell whose
+  context-dependent operations fail with `ErrContextClosed`; `libyangbackend`
+  now re-exports the sentinel for public `errors.Is` checks.
 
 ## [go/v0.3.8] - 2026-06-26
 

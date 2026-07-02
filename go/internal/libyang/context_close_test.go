@@ -66,3 +66,32 @@ func TestContextOpsAfterCloseReturnErrContextClosed(t *testing.T) {
 		t.Fatalf("ParseOp after Close error = %v, want ErrContextClosed", err)
 	}
 }
+
+func TestNewDataAfterCloseRawFailsClosed(t *testing.T) {
+	c, err := NewContext()
+	if err != nil {
+		t.Fatalf("NewContext: %v", err)
+	}
+	c.Close()
+
+	tree := c.NewData()
+	defer tree.Close()
+	if tree == nil {
+		t.Fatal("NewData after Close returned nil")
+	}
+	if tree.ctx != nil {
+		t.Fatalf("NewData after Close ctx = %p, want nil", tree.ctx)
+	}
+	if _, err := tree.RootNodes(); !errors.Is(err, ErrContextClosed) {
+		t.Fatalf("RootNodes after Close error = %v, want ErrContextClosed", err)
+	}
+	if err := tree.NewPath("/x", nil, 0); !errors.Is(err, ErrContextClosed) {
+		t.Fatalf("NewPath after Close error = %v, want ErrContextClosed", err)
+	}
+	if _, err := tree.Serialize(FormatXML, 0); !errors.Is(err, ErrContextClosed) {
+		t.Fatalf("Serialize after Close error = %v, want ErrContextClosed", err)
+	}
+	if err := tree.Validate(0); !errors.Is(err, ErrContextClosed) {
+		t.Fatalf("Validate after Close error = %v, want ErrContextClosed", err)
+	}
+}

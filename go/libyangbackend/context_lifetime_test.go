@@ -6,6 +6,7 @@
 package libyangbackend_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -81,4 +82,27 @@ func TestContextCloseBeforeTreeFinalized(t *testing.T) {
 		runtime.GC()
 	}
 	// Reaching here without a SIGSEGV is the assertion.
+}
+
+func TestNewDataAfterCloseBackendFailsClosed(t *testing.T) {
+	ctx := lifetimeContext(t)
+	ctx.Close()
+
+	tree := ctx.NewData()
+	defer tree.Close()
+	if tree == nil {
+		t.Fatal("NewData after Close returned nil")
+	}
+	if _, err := tree.RootNodes(); !errors.Is(err, cambium.ErrContextClosed) {
+		t.Fatalf("RootNodes after Close error = %v, want ErrContextClosed", err)
+	}
+	if _, err := tree.NewPath("/lifeclose:top", nil, cambium.NewPathOpts{}); !errors.Is(err, cambium.ErrContextClosed) {
+		t.Fatalf("NewPath after Close error = %v, want ErrContextClosed", err)
+	}
+	if _, err := tree.Serialize(cambium.FormatXML, cambium.DefaultSerializeFlags()); !errors.Is(err, cambium.ErrContextClosed) {
+		t.Fatalf("Serialize after Close error = %v, want ErrContextClosed", err)
+	}
+	if err := tree.Validate(cambium.ValidateMode{}); !errors.Is(err, cambium.ErrContextClosed) {
+		t.Fatalf("Validate after Close error = %v, want ErrContextClosed", err)
+	}
 }
