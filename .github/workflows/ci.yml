@@ -68,6 +68,8 @@ jobs:
           working-directory: go
       - name: Go vet + test
         run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
+      - name: fuzz smoke (20s each)
+        run: cd go && CGO_ENABLED=0 go test ./internal/yangparse -run '^$' -fuzz '^FuzzParse$' -fuzztime=20s && CGO_ENABLED=0 go test ./datatree -run '^$' -fuzz '^Fuzz' -fuzztime=20s && CGO_ENABLED=0 go test ./internal/xsdregex -run '^$' -fuzz '^Fuzz' -fuzztime=20s
       - name: Go conformance runner
         run: cd go && go run ./cmd/cambium all
       - name: Engine config diff
