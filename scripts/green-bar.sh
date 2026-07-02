@@ -30,9 +30,12 @@ run_in "$ROOT/go" env CGO_ENABLED=1 go vet ./...
 run_in "$ROOT/go" env CGO_ENABLED=1 go test -race ./...
 run_in "$ROOT/go" golangci-lint run
 run_in "$ROOT/go" env CGO_ENABLED=1 go run ./cmd/cambium all
+run "$ROOT/scripts/build-yanglint-oracle.sh"
+run_in "$ROOT/go" env CAMBIUM_YANGLINT="$ROOT/go/internal/libyang/.build/yanglint-oracle-install/bin/yanglint" go run ./cmd/cambium all
 
 # Engine build flags must match the pinned /VERSIONS cmake_flags.
 run "$ROOT/scripts/diff-engine-config.sh"
+run "$ROOT/scripts/check-ci-yanglint-oracle.sh"
 
 # Every version tag must be go/vX.Y.Z, never a bare vX.Y.Z (see PUBLISHING.md).
 run "$ROOT/scripts/check-release-tags.sh"
