@@ -20,7 +20,9 @@ binding implements against:
   `golden/` outputs and `manifest.toml`. Every binding runs the same corpus through
   its own runner and reproduces the same golden bytes. Parity is defined by behavior
   on shared inputs, not by which language landed first. See
-  [conformance](conformance.md).
+  [conformance](conformance.md). Releases also publish this corpus with `/VERSIONS`
+  as a standalone tarball for external runners; see
+  [conformance artifact](../guides/conformance-artifact.md).
 - **[`/VERSIONS`](../../VERSIONS)** — the single source of truth for the pinned C
   engine: the libyang and PCRE2 SHAs and the engine-affecting `cmake_flags`. Every
   build stack must honor the same pins so each links a byte-identical engine.

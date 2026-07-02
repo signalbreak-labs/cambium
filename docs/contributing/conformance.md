@@ -24,7 +24,8 @@ the spec plus the shared cases and golden outputs, not by which language landed
 first. Cambium ships a Go binding today; a future binding under `/<lang>/` would
 reuse the exact same fixtures and `golden/` files through its own runner. See
 [adding a binding](./adding-a-binding.md) for how a peer binding plugs into this
-corpus.
+corpus. Release automation also publishes `/conformance` plus `/VERSIONS` as a
+standalone tarball; see the [conformance artifact guide](../guides/conformance-artifact.md).
 
 ## Layout
 

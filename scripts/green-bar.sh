@@ -40,5 +40,8 @@ run "$ROOT/scripts/check-ci-yanglint-oracle.sh"
 # Every version tag must be go/vX.Y.Z, never a bare vX.Y.Z (see PUBLISHING.md).
 run "$ROOT/scripts/check-release-tags.sh"
 
+# Shared corpus artifact must be buildable for downstream language bindings.
+run "$ROOT/scripts/check-conformance-package.sh"
+
 echo ""
 echo "green bar passed"
