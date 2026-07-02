@@ -525,8 +525,13 @@ func (c *RawContext) retain() {
 // acquire registers an in-flight cgo operation against this context,
 // failing once Close has been requested. Paired with release(); prevents
 // ly_ctx_destroy while an operation is executing on c.ctx.
+//
+// The gate reads only atomics: destroyCtx writes c.ctx concurrently with a
+// racing Close, so a plain c.ctx read here would be a data race. destroyed==1
+// implies the pointer is gone; closeReq==1 covers every path that can lead
+// there while the context is still reachable.
 func (c *RawContext) acquire() error {
-	if c == nil || atomic.LoadInt32(&c.closeReq) == 1 || c.ctx == nil {
+	if c == nil || atomic.LoadInt32(&c.closeReq) == 1 || atomic.LoadInt32(&c.destroyed) == 1 {
 		return ErrContextClosed
 	}
 	atomic.AddInt64(&c.live, 1)
