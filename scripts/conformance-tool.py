@@ -74,15 +74,26 @@ def pinned_libyang_version(repo_root: Path) -> str:
 
 
 def assert_yanglint_matches_pin(repo_root: Path) -> None:
-    """Refuse to generate goldens with an oracle that differs from /VERSIONS."""
+    """Refuse to generate goldens with an oracle that differs from /VERSIONS.
+
+    Probes the SAME binary gen_goldens invokes (the repo-built YANGLINT), not a
+    PATH lookup: goldens are always written by that binary, and it is the one
+    that can silently go stale when the /VERSIONS pin is bumped without a
+    rebuild of go/internal/libyang/.build.
+    """
     pinned = pinned_libyang_version(repo_root)
-    out = subprocess.run(["yanglint", "--version"], capture_output=True, text=True, check=True).stdout
+    try:
+        out = subprocess.run(
+            [str(YANGLINT), "--version"], capture_output=True, text=True, check=True
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        sys.exit(f"cannot probe oracle version via {YANGLINT}: {exc}")
     m = re.search(r"(\d+\.\d+\.\d+)", out)
     if not m or m.group(1) != pinned:
         got = m.group(1) if m else out.strip()
         sys.exit(
-            f"yanglint version {got!r} does not match VERSIONS pin {pinned}; "
-            "build the pinned yanglint (see VERSIONS) before regenerating goldens"
+            f"yanglint version {got!r} at {YANGLINT} does not match VERSIONS pin {pinned}; "
+            "rebuild the pinned yanglint (bash go/internal/libyang/build.sh) before regenerating goldens"
         )
 
 
@@ -172,6 +183,7 @@ def verify(name: Optional[str] = None) -> int:
 
 
 def cmd_add(args):
+    assert_yanglint_matches_pin(ROOT)
     fixture_dir = CONFORMANCE / "fixtures" / args.name
     module_dir = fixture_dir / "module"
     module_dir.mkdir(parents=True, exist_ok=True)
