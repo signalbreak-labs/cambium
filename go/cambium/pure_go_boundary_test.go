@@ -747,7 +747,7 @@ func TestPureGoNoCGO(t *testing.T) {
 	moduleFile := filepath.Join(modDir, "go.mod")
 	moduleContent := `module cambium-pure-go-smoke
 
-go 1.25.0
+go 1.27.1
 
 require github.com/signalbreak-labs/cambium/go v0.0.0
 
