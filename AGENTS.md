@@ -84,9 +84,11 @@ NETCONF/Terraform coupling) **are** in scope and stay.
                          codegen          — pure-Go typed-struct generator (cgo-free)
                          compat           — goyang-compatible surface (cgo-free)
                          datatree         — experimental pure-Go data tree (cgo-free)
+                         gnmi             — optional gNMI JSON_IETF I6 helper (cgo, outside default closure)
                          libyangbackend   — optional libyang data tier (cgo, outside default closure)
                          internal/libyang — cgo engine bindings + static build
                          cmd/cambium      — conformance runner (cgo)
+                         cmd/cambium-ir   — SchemaIR JSON exporter (cgo-free)
 /scripts/              green-bar, engine-config + release-flatten checks, conformance authoring
 /docs/                 overview, concepts/, consumer guides/, contributing/, glossary, faq
 /.planning/            gitignored agent scratchpad
@@ -96,7 +98,7 @@ No libyang major in any package name — absorb it internally.
 ## Build / test / lint
 The optional backend statically links a **vendored** libyang + PCRE2 (no system
 libyang). The default Go schema/codegen/datatree surface MUST build with cgo disabled.
-- **Go default (cgo-free)** — `cd go && CGO_ENABLED=0 go test ./cambium ./codegen ./compat ./datatree` · `cd go && CGO_ENABLED=0 go vet ./cambium ./codegen ./compat ./datatree` · `scripts/check-go-default-pure.sh`
+- **Go default (cgo-free)** — `cd go && CGO_ENABLED=0 go test ./cambium ./codegen ./compat ./datatree ./cmd/cambium-ir` · `cd go && CGO_ENABLED=0 go vet ./cambium ./codegen ./compat ./datatree ./cmd/cambium-ir` · `scripts/check-go-default-pure.sh`
 - **Go backend/full (cgo)** — `bash go/internal/libyang/build.sh` · `cd go && CGO_ENABLED=1 go test ./...` · `cd go && CGO_ENABLED=1 go vet ./...` · `cd go && golangci-lint run` · `cd go && go run ./cmd/cambium all`
 - **One-shot** — `scripts/green-bar.sh` runs the full local gate.
 
