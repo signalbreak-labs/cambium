@@ -85,3 +85,27 @@ func TestXMLUnknownElementRejected(t *testing.T) {
 		t.Fatalf("expected unknown-element error, got %v", err)
 	}
 }
+
+func TestParseXMLRejectsExcessiveNesting(t *testing.T) {
+	mod := loadDT(t)
+	payload := []byte(strings.Repeat("<n>", 10001) + strings.Repeat("</n>", 10001))
+	_, err := datatree.Parse(mod, datatree.FormatXML, payload)
+	if err == nil {
+		t.Fatal("expected nesting error, got nil")
+	}
+	if !strings.Contains(err.Error(), "nesting exceeds 10000") {
+		t.Fatalf("error %q, want substring %q", err, "nesting exceeds 10000")
+	}
+}
+
+func TestParseXMLAcceptsBoundedNesting(t *testing.T) {
+	mod := loadDT(t)
+	payload := []byte(strings.Repeat("<n>", 50) + strings.Repeat("</n>", 50))
+	_, err := datatree.Parse(mod, datatree.FormatXML, payload)
+	if err == nil {
+		t.Fatal("expected bind/unknown error for 50-deep <n>, got nil")
+	}
+	if strings.Contains(err.Error(), "nesting exceeds") {
+		t.Fatalf("50-deep <n> returned nesting error: %v", err)
+	}
+}
