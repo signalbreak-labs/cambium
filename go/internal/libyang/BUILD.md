@@ -9,9 +9,7 @@ The Go layer links the **same vendored libyang + PCRE2** as the Rust layer
 bash go/internal/libyang/build.sh
 ```
 
-This runs the identical two-stage CMake build as
-`rust/cambium-libyang-sys/build.rs` (same flags → byte-identical engine, per
-`spec/ordering-invariants.md` §4):
+This runs the two-stage CMake build pinned by /VERSIONS (same flags → byte-identical engine, per spec/ordering-invariants.md §4):
 
 1. **PCRE2** → static, `-fPIC`, `PCRE2_BUILD_PCRE2_8=ON`, into
    `.build/pcre2-install`.

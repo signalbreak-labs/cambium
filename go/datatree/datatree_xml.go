@@ -40,6 +40,8 @@ type xmlQName struct {
 	ns    string
 }
 
+const maxXMLNestingDepth = 10000
+
 func parseXML(m cambium.Module, data []byte) (*Tree, error) {
 	roots, err := decodeXMLForest(data)
 	if err != nil {
@@ -67,7 +69,7 @@ func decodeXMLForest(data []byte) ([]*xmlElem, error) {
 			return nil, fmt.Errorf("datatree: xml: %w", err)
 		}
 		if se, ok := tok.(xml.StartElement); ok {
-			el, err := decodeXMLElem(dec, se)
+			el, err := decodeXMLElem(dec, se, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -86,7 +88,10 @@ func decodeXMLForest(data []byte) ([]*xmlElem, error) {
 	return roots, nil
 }
 
-func decodeXMLElem(dec *xml.Decoder, start xml.StartElement) (*xmlElem, error) {
+func decodeXMLElem(dec *xml.Decoder, start xml.StartElement, depth int) (*xmlElem, error) {
+	if depth > maxXMLNestingDepth {
+		return nil, fmt.Errorf("datatree: xml: nesting exceeds %d", maxXMLNestingDepth)
+	}
 	el := &xmlElem{local: start.Name.Local, ns: start.Name.Space}
 	var text strings.Builder
 	for {
@@ -96,7 +101,7 @@ func decodeXMLElem(dec *xml.Decoder, start xml.StartElement) (*xmlElem, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			kid, err := decodeXMLElem(dec, t)
+			kid, err := decodeXMLElem(dec, t, depth+1)
 			if err != nil {
 				return nil, err
 			}
