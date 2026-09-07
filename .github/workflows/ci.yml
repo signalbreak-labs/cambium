@@ -45,7 +45,7 @@ jobs:
       - name: Go lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
           working-directory: go
       - name: Go vet + test
         run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
@@ -76,7 +76,7 @@ jobs:
       - name: Go lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
           working-directory: go
       - name: Go vet + test
         run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
