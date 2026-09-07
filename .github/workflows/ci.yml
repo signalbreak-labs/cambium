@@ -29,7 +29,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.27.1'
           cache-dependency-path: go/go.sum
       - name: Cache vendored C build
         uses: actions/cache@v4
@@ -45,7 +45,7 @@ jobs:
       - name: Go lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
           working-directory: go
       - name: Go vet + test
         run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
@@ -62,7 +62,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.27.1'
           cache-dependency-path: go/go.sum
       - name: Cache vendored C build
         uses: actions/cache@v4
@@ -76,7 +76,7 @@ jobs:
       - name: Go lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
           working-directory: go
       - name: Go vet + test
         run: cd go && CGO_ENABLED=1 go vet ./... && CGO_ENABLED=1 go test -race ./...
@@ -101,7 +101,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.27.1'
           cache-dependency-path: go/go.sum
       - uses: goto-bus-stop/setup-zig@v2
         with:

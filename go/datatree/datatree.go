@@ -151,7 +151,7 @@ func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMess
 // only when the node is in the same module as the enclosing data node. Root
 // members are therefore always qualified, and augmentation/module-change children
 // cannot be accidentally matched by bare local-name collisions.
-func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage, parentModule string) (string, json.RawMessage, bool) {
+func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage, parentModule string) (member string, val json.RawMessage, ok bool) {
 	qualified := sn.Module().Name() + ":" + sn.Name()
 	if v, ok := raw[qualified]; ok {
 		return qualified, v, true

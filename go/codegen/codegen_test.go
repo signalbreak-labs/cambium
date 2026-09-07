@@ -12247,7 +12247,7 @@ func runGeneratedGoTest(t *testing.T, generatedSrc, testBody string) {
 	dir := t.TempDir()
 	goMod := `module generated
 
-go 1.25.0
+go 1.27.1
 `
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte(goMod), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
