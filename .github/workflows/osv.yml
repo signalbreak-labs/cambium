@@ -34,5 +34,7 @@ jobs:
           echo "${OSV_SCANNER_SHA256}  osv-scanner" | sha256sum --check
           sudo install -m 0755 osv-scanner /usr/local/bin/osv-scanner
           osv-scanner --version
+      - name: Build vendored C engine
+        run: bash go/internal/libyang/build.sh
       - name: Run OSV scanner
         run: osv-scanner --recursive .
