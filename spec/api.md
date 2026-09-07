@@ -1182,6 +1182,8 @@ requires a new version string.
   invalidating mutation — a Go runtime check; a binding with compile-time borrow checking may catch it statically).
 - `ValidationErrors` is a **list**; `error-app-tag`, `data_path`, `schema_path`, and `validation_code`
   are informational sub-fields under the stable top-level code (no renumbering).
+- `SchemaIR` — versioned value projection; callers must inspect `Errors` after rebuild (`go/cambium/schema_ir.go`).
+- `ErrContextClosed` — returned by libyangbackend operations after `Context.Close` (`go/internal/libyang/libyang.go`).
 - The same failure yields the **same rule code across bindings** — a conformance assertion.
 
 ## Conformance
