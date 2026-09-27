@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "OSV-2026-343"
+ignoreUntil = 2026-12-31T00:00:00Z
+reason = "In pcre2_compile_32; PCRE2 is built with PCRE2_BUILD_PCRE2_32=OFF. No tagged release fixes it yet."
