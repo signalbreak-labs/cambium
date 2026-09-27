@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - 156 more existing conformance cases opt into the `datatree` differential
   lane (`datatree = true`).
+- The `ietf-interfaces` conformance case opts into the `datatree`
+  differential lane.
 - `cambium.schema-ir.v2` bounded node table (`Context.SchemaIRTable`,
   `SchemaIRNodeID`, `SchemaIRNoParent`), `Context.SchemaIRStats`, and
   `Context.SchemaIRWithLimit`, which fails with a `resource_limit` diagnostic
