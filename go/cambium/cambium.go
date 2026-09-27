@@ -11,8 +11,10 @@ package cambium
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -303,6 +305,14 @@ type Context struct {
 	dirty           bool
 	frozen          bool
 	closed          bool
+	// importing holds the modules whose imports, and including the
+	// submodules whose includes, are being loaded, outermost first; an
+	// import or include of an entry closes a cycle.
+	importing []*moduleData
+	including []*yangparse.Statement
+	// build holds the per-rebuild schema node budget and resolution memos
+	// (schema_budget.go).
+	build buildState
 }
 
 type contextSnapshot struct {
@@ -1044,7 +1054,10 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	if err := c.loadIncludes(mod); err != nil {
 		return nil, err
 	}
-	if err := c.loadImports(mod); err != nil {
+	c.importing = append(c.importing, mod)
+	err = c.loadImports(mod)
+	c.importing = c.importing[:len(c.importing)-1]
+	if err != nil {
 		return nil, err
 	}
 	c.dirty = true
@@ -1462,7 +1475,7 @@ func (c *Context) loadDirectSubmoduleSource(path string, stmt *yangparse.Stateme
 	return c.loadModulePath(parentPath, implemented, requested)
 }
 
-func (c *Context) loadSubmodule(path string, stmt *yangparse.Statement, parent *moduleData) (*moduleData, error) {
+func (c *Context) loadSubmodule(path string, stmt, inc *yangparse.Statement, parent *moduleData) (*moduleData, error) {
 	info, warnings, err := validateSubmoduleSource(path, stmt, parent, c.validationMode)
 	if err != nil {
 		return nil, err
@@ -1484,15 +1497,46 @@ func (c *Context) loadSubmodule(path string, stmt *yangparse.Statement, parent *
 	}
 	for _, sub := range parent.submodules {
 		if sub.stmt != nil && sub.stmt.Argument == stmt.Argument && moduleRevision(sub.stmt) == info.revision {
+			if i := slices.Index(c.including, sub.stmt); i >= 0 {
+				chain := make([]string, 0, len(c.including)-i+1)
+				for _, including := range c.including[i:] {
+					chain = append(chain, including.Argument)
+				}
+				chain = append(chain, sub.stmt.Argument)
+				if err := parent.sourceRuleViolation(inc, nil, "include cycle %s at %s", strings.Join(chain, " -> "), locationText(inc)); err != nil {
+					return nil, err
+				}
+			}
 			return parent, nil
 		}
 	}
+	// RFC 7950 §12: a module and the submodules it includes share one YANG
+	// version.
+	if moduleVersion, submoduleVersion := sourceRootYangVersion(parent.stmt), sourceRootYangVersion(stmt); parent.stmt != nil && moduleVersion != submoduleVersion {
+		if err := parent.sourceRuleViolation(inc, nil, "YANG version %s module %q must not include YANG version %s submodule %q at %s", moduleVersion, parent.name, submoduleVersion, stmt.Argument, locationText(inc)); err != nil {
+			return nil, err
+		}
+	}
 	parent.submodules = append(parent.submodules, &submoduleData{file: path, stmt: stmt})
-	if err := c.loadSubmoduleIncludes(parent, stmt); err != nil {
+	c.including = append(c.including, stmt)
+	err = c.loadSubmoduleIncludes(parent, stmt)
+	c.including = c.including[:len(c.including)-1]
+	if err != nil {
 		return nil, err
 	}
 	c.dirty = true
 	return parent, nil
+}
+
+// sourceRuleViolation reports a source rule violation in m that leaves a
+// well-defined schema: an error, or in vendor-compatible mode a warning and a
+// nil error.
+func (m *moduleData) sourceRuleViolation(source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) error {
+	if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
+		m.recordVendorCompatibleWarning(source, related, format+"; allowed in vendor-compatible mode", args...)
+		return nil
+	}
+	return diagnosticErrorf(source, related, format, args...)
 }
 
 func (c *Context) loadIncludes(mod *moduleData) error {
@@ -1509,7 +1553,7 @@ func (c *Context) loadIncludes(mod *moduleData) error {
 		if err != nil {
 			return err
 		}
-		if err := c.loadIncludedSubmodulePath(path, mod); err != nil {
+		if err := c.loadIncludedSubmodulePath(path, inc, mod); err != nil {
 			return err
 		}
 	}
@@ -1532,7 +1576,7 @@ func (c *Context) loadSubmoduleIncludes(parent *moduleData, stmt *yangparse.Stat
 		if err != nil {
 			return err
 		}
-		if err := c.loadIncludedSubmodulePath(path, parent); err != nil {
+		if err := c.loadIncludedSubmodulePath(path, inc, parent); err != nil {
 			return err
 		}
 	}
@@ -1618,7 +1662,7 @@ func validateIncludeStatement(inc *yangparse.Statement, allowXMLPrefix bool) (st
 	return revision, nil
 }
 
-func (c *Context) loadIncludedSubmodulePath(path string, parent *moduleData) error {
+func (c *Context) loadIncludedSubmodulePath(path string, inc *yangparse.Statement, parent *moduleData) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return err
@@ -1638,7 +1682,7 @@ func (c *Context) loadIncludedSubmodulePath(path string, parent *moduleData) err
 	if stmt.Keyword != "submodule" {
 		return fmt.Errorf("%s: included file top-level statement is %q, want submodule", abs, stmt.Keyword)
 	}
-	_, err = c.loadSubmodule(abs, stmt, parent)
+	_, err = c.loadSubmodule(abs, stmt, inc, parent)
 	return err
 }
 
@@ -1730,6 +1774,25 @@ func (c *Context) loadImports(mod *moduleData) error {
 				target, loadErr = c.loadModulePath(path, c.allImplemented, false)
 				if loadErr != nil {
 					return loadErr
+				}
+			}
+			// RFC 7950 §7.1.5: there MUST NOT be any circular chains of
+			// imports.
+			if i := slices.Index(c.importing, target); i >= 0 {
+				chain := make([]string, 0, len(c.importing)-i+1)
+				for _, importing := range c.importing[i:] {
+					chain = append(chain, importing.name)
+				}
+				chain = append(chain, target.name)
+				if err := mod.sourceRuleViolation(impStmt, nil, "import cycle %s at %s", strings.Join(chain, " -> "), impStmt.Location()); err != nil {
+					return err
+				}
+			}
+			// RFC 7950 §12: a YANG version 1 module or submodule MUST NOT
+			// import a YANG version 1.1 module by revision.
+			if targetRevision != "" && target != nil && target.stmt != nil && sourceRootYangVersion(scope.root) != "1.1" && sourceRootYangVersion(target.stmt) == "1.1" {
+				if err := mod.sourceRuleViolation(impStmt, nil, "YANG version 1 %s must not import YANG version 1.1 module %q by revision at %s", scope.label, targetName, impStmt.Location()); err != nil {
+					return err
 				}
 			}
 			if c.allImplemented && target != nil && !target.implemented {
@@ -1849,25 +1912,53 @@ func (c *Context) rebuildIfDirty() error {
 	if !c.dirty {
 		return nil
 	}
+	warnings := len(c.loadWarnings)
+	for {
+		amending, err := c.rebuild()
+		if amending < 0 || c.implementedAmendingModules() == amending {
+			if err != nil {
+				return err
+			}
+			break
+		}
+		// A module implemented only after augments and deviations were
+		// applied, such as one a leafref path names, contributes its own:
+		// rebuild with it implemented. Implemented modules only accumulate,
+		// so this ends.
+		c.loadWarnings = c.loadWarnings[:warnings]
+	}
+	c.dirty = false
+	return nil
+}
+
+// rebuild materializes the schema IR of every loaded module. It returns the
+// number of implemented modules that declare augments or deviations when
+// those were applied, or -1 if it failed before applying them.
+func (c *Context) rebuild() (amending int, err error) {
+	c.beginRebuild()
+	defer func() { err = c.endRebuild(err) }()
 	for _, mod := range c.loadOrder {
 		mod.resetIR()
 		if err := mod.collectDefinitions(); err != nil {
-			return err
+			return -1, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateExtensionInstances(); err != nil {
-			return err
+			return -1, err
 		}
 	}
 	if err := c.validateEnabledFeatures(); err != nil {
-		return err
+		return -1, err
 	}
 	for _, mod := range c.loadOrder {
 		mod.validateIfFeatureExpressions()
 	}
+	for _, mod := range c.loadOrder {
+		mod.validateStatusReferences()
+	}
 	if err := c.firstSchemaError(); err != nil {
-		return err
+		return -1, err
 	}
 	for _, mod := range c.loadOrder {
 		if mod.stmt != nil {
@@ -1875,18 +1966,18 @@ func (c *Context) rebuildIfDirty() error {
 		}
 	}
 	if err := c.firstSchemaError(); err != nil {
-		return err
+		return -1, err
 	}
 	for _, mod := range c.loadOrder {
 		for _, top := range mod.sourceTopStatements() {
 			if err := mod.validateYangVersionSpecificStatements(top); err != nil {
-				return err
+				return -1, err
 			}
 		}
 	}
-	for _, mod := range c.loadOrder {
-		mod.applyAugments()
-	}
+	c.implementAmendmentTargets()
+	amending = c.implementedAmendingModules()
+	c.applyAugments()
 	for _, mod := range c.loadOrder {
 		mod.collectDeviations()
 	}
@@ -1903,66 +1994,70 @@ func (c *Context) rebuildIfDirty() error {
 		mod.validateDefaultRules()
 	}
 	if err := c.firstSchemaError(); err != nil {
-		return err
+		return amending, err
 	}
 	for _, mod := range c.loadOrder {
 		if err := mod.parseTypes(); err != nil {
-			return err
+			return amending, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateGroupingBodyTypes(); err != nil {
-			return err
+			return amending, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateTypedefTypes(); err != nil {
-			return err
+			return amending, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateTypedefDefaultValues(); err != nil {
-			return err
+			return amending, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateListConstraintTypes(); err != nil {
-			return err
+			return amending, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		mod.resolveLeafRefs()
 	}
+	if err := c.validateLeafrefCycles(); err != nil {
+		return amending, err
+	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateDefaultValues(); err != nil {
-			return err
+			return amending, err
 		}
 	}
 	for _, mod := range c.loadOrder {
 		mod.resolveIdentities()
 	}
 	if err := c.firstSchemaError(); err != nil {
-		return err
+		return amending, err
 	}
 	for _, mod := range c.loadOrder {
 		mod.applyRefImplementedPolicy()
 	}
-	c.dirty = false
-	return nil
+	return amending, nil
 }
 
+// validateEnabledFeatures reports the first unknown enabled feature, visiting
+// modules in load order and each module's features by name, so the error does
+// not depend on map iteration order.
 func (c *Context) validateEnabledFeatures() error {
 	if c == nil {
 		return nil
 	}
-	for moduleName, features := range c.enabledFeatures {
-		mod := c.modules[moduleName]
-		if mod == nil || mod.stmt == nil {
+	for _, mod := range c.loadOrder {
+		if mod == nil || mod.stmt == nil || c.modules[mod.name] != mod {
 			continue
 		}
-		for feature := range features {
+		for _, feature := range slices.Sorted(maps.Keys(c.enabledFeatures[mod.name])) {
 			if mod.featureMap[feature] == nil {
-				return fmt.Errorf("unknown feature %q for module %q", feature, moduleName)
+				return fmt.Errorf("unknown feature %q for module %q", feature, mod.name)
 			}
 		}
 	}

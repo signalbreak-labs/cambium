@@ -47,6 +47,10 @@ func (g *goEmitter) emitValidationMethods(name string, fields []fieldInfo, sourc
 	}
 	out.WriteString("\treturn nil\n")
 	out.WriteString("}\n\n")
+
+	if g.emittedAnyData {
+		g.emitXMLFormCheck(name, fields, rootPath, out)
+	}
 }
 
 func (g *goEmitter) emitMetadataValidation(fields []fieldInfo, out *strings.Builder) {
@@ -57,16 +61,16 @@ func (g *goEmitter) emitMetadataValidation(fields []fieldInfo, out *strings.Buil
 	out.WriteString("\tfor metadataNode := range n.CambiumMetadata {\n")
 	out.WriteString("\t\tswitch metadataNode {\n")
 	for _, f := range targets {
-		fmt.Fprintf(out, "\t\tcase %q:\n", f.wire)
+		fmt.Fprintf(out, "\t\tcase %q:\n", f.metaKey)
 	}
 	out.WriteString("\t\tdefault:\n")
 	out.WriteString("\t\t\treturn cambiumValidationError(cambiumJoinPath(path, metadataNode), \"metadata for unknown data node\")\n")
 	out.WriteString("\t\t}\n")
 	out.WriteString("\t}\n")
 	for _, f := range targets {
-		fmt.Fprintf(out, "\tif len(n.CambiumMetadata[%q]) > 0 {\n", f.wire)
+		fmt.Fprintf(out, "\tif len(n.CambiumMetadata[%q]) > 0 {\n", f.metaKey)
 		fmt.Fprintf(out, "\t\tif !(%s) { return cambiumValidationError(cambiumJoinPath(path, %q), %q) }\n", fieldPresentExpr("n", f), f.wire, "metadata for absent data node")
-		fmt.Fprintf(out, "\t\tfor _, item := range n.CambiumMetadata[%q] {\n", f.wire)
+		fmt.Fprintf(out, "\t\tfor _, item := range n.CambiumMetadata[%q] {\n", f.metaKey)
 		fmt.Fprintf(out, "\t\t\tif err := cambiumValidateMetadataAnnotation(item); err != nil { return cambiumValidationError(cambiumJoinPath(path, %q), err.Error()) }\n", f.wire)
 		out.WriteString("\t\t}\n")
 		out.WriteString("\t}\n")
@@ -272,6 +276,17 @@ func (g *goEmitter) emitFieldValidation(f fieldInfo, out *strings.Builder) {
 			fmt.Fprintf(out, "\tfor _, v := range %s {\n", itemsExpr)
 			fmt.Fprintf(out, "\t\tif err := v.validate(%s); err != nil { return err }\n", pathExpr)
 			out.WriteString("\t}\n")
+		}
+	}
+
+	if f.jsonKind == "AnyData" {
+		pathExpr := fmt.Sprintf("cambiumJoinPath(path, %q)", wire)
+		if f.optional {
+			fmt.Fprintf(out, "\tif n.%s != nil {\n", f.ident)
+			fmt.Fprintf(out, "\t\tif err := n.%s.validate(%s); err != nil { return err }\n", f.ident, pathExpr)
+			out.WriteString("\t}\n")
+		} else {
+			fmt.Fprintf(out, "\tif err := n.%s.validate(%s); err != nil { return err }\n", f.ident, pathExpr)
 		}
 	}
 

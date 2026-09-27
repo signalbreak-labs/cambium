@@ -1,0 +1,17 @@
+module reject-choice-two-cases {
+  yang-version 1.1;
+  namespace "urn:reject-choice-two-cases";
+  prefix rctc;
+  revision 2026-09-27;
+
+  container tunnel {
+    choice mode {
+      case gre {
+        leaf remote { type string; }
+      }
+      case mpls {
+        leaf label { type uint32; }
+      }
+    }
+  }
+}

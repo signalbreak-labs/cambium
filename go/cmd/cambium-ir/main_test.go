@@ -77,6 +77,71 @@ func TestRunEmitsSchemaIRJSON(t *testing.T) {
 	}
 }
 
+func TestRunExportsResolvedRestrictionBounds(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ir-bounds.yang"), []byte(`module ir-bounds {
+  yang-version 1.1; namespace "urn:ir-bounds"; prefix irb;
+  typedef pct { type uint8 { range "1..100"; } }
+  leaf level { type pct { range "min..10 | 20..max"; } }
+  leaf name { type string { length "1..max"; } }
+  leaf dec { type decimal64 { fraction-digits 2; range "min..0"; } }
+  leaf plain { type string; }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// min/max resolve against the restricted type; 64-bit and decimal64
+	// values are canonical strings so no JSON number precision is lost.
+	want := map[string]exportType{
+		"level": {Base: "uint8", Range: []exportBound{{Min: "1", Max: "10"}, {Min: "20", Max: "100"}}},
+		"name":  {Base: "string", Length: []exportBound{{Min: "1", Max: "18446744073709551615"}}},
+		"dec":   {Base: "decimal64", Range: []exportBound{{Min: "-92233720368547758.08", Max: "0.00"}}},
+		"plain": {Base: "string"},
+	}
+	check := func(format, name string, got *exportType) {
+		t.Helper()
+		if got == nil {
+			t.Fatalf("%s %s: no type", format, name)
+		}
+		if fmt.Sprintf("%+v", *got) != fmt.Sprintf("%+v", want[name]) {
+			t.Fatalf("%s %s: type = %+v, want %+v", format, name, *got, want[name])
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-search", dir, "ir-bounds"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("v1 exit = %d, stderr = %s", code, stderr.String())
+	}
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, stdout.Bytes()); err != nil {
+		t.Fatalf("compact v1: %v", err)
+	}
+	if !bytes.Contains(compact.Bytes(), []byte(`"length":[{"min":"1","max":"18446744073709551615"}]`)) {
+		t.Fatalf("v1 JSON lacks string-encoded length bounds:\n%s", stdout.String())
+	}
+	var doc exportIR
+	if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+		t.Fatalf("decode v1: %v", err)
+	}
+	for _, node := range doc.Modules[0].Children {
+		check("v1", node.Name, node.Type)
+	}
+
+	stdout.Reset()
+	if code := run([]string{"-search", dir, "-format", "v2", "ir-bounds"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("v2 exit = %d, stderr = %s", code, stderr.String())
+	}
+	var table exportTable
+	if err := json.Unmarshal(stdout.Bytes(), &table); err != nil {
+		t.Fatalf("decode v2: %v", err)
+	}
+	if len(table.Nodes) != len(want) {
+		t.Fatalf("v2 nodes = %d, want %d", len(table.Nodes), len(want))
+	}
+	for _, node := range table.Nodes {
+		check("v2", node.Name, node.Type)
+	}
+}
+
 func TestRunRequiresModule(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	if code := run(nil, &stdout, &stderr); code == 0 {

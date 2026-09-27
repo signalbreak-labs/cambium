@@ -1,0 +1,12 @@
+{
+  "reject-duplicate-list-key:user": [
+    {
+      "name": "ada",
+      "uid": 1000
+    },
+    {
+      "name": "ada",
+      "uid": 1001
+    }
+  ]
+}

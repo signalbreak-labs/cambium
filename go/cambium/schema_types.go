@@ -21,7 +21,23 @@ func (t TypeInfo) TypedefName() (string, bool) {
 
 // TypedefChain returns the typedef names traversed to reach the base type, from
 // outermost to innermost.
-func (t TypeInfo) TypedefChain() []string { return append([]string(nil), t.typedefChain...) }
+func (t TypeInfo) TypedefChain() []string { return t.typedefChain.names() }
+
+// typedefNames is an immutable list of typedef names, outermost first. Each
+// typedef level prepends its name and shares the rest, so resolving a chain of
+// n typedefs does not copy the chain at every level.
+type typedefNames struct {
+	name string
+	next *typedefNames
+}
+
+func (l *typedefNames) names() []string {
+	var out []string
+	for ; l != nil; l = l.next {
+		out = append(out, l.name)
+	}
+	return out
+}
 
 // TypedefDefinition is a declared top-level or included YANG typedef.
 type TypedefDefinition struct {
@@ -191,8 +207,18 @@ func (m *moduleData) resolveLeafRefsInResolvedType(n *schemaNodeData, fallbackSo
 		if source == nil {
 			source = fallbackSource
 		}
+		if m.implemented {
+			// A module whose nodes an implemented module's leafref path
+			// uses is implemented (RFC 7950 §5.6.5).
+			source.implementPrefixedModules(r.path, r.sourceStmt)
+		}
 		resolveLeafRef(n, source, &r)
 		m.validateResolvedLeafRef(n, &r)
+		if m.implemented && r.target != nil {
+			if err := source.validateLeafRefPredicates(n, &r); err != nil {
+				n.recordSchemaError(err)
+			}
+		}
 		return r
 	case ResolvedUnion:
 		for i := range r.members {
@@ -201,6 +227,19 @@ func (m *moduleData) resolveLeafRefsInResolvedType(n *schemaNodeData, fallbackSo
 		return r
 	default:
 		return resolved
+	}
+}
+
+// implementPrefixedModules implements every module that a prefix in expr
+// names, resolved from the source statement from.
+func (m *moduleData) implementPrefixedModules(expr string, from *yangparse.Statement) {
+	if m == nil || m.ctx == nil {
+		return
+	}
+	for _, prefix := range referencedPrefixes(expr) {
+		if target := m.resolveSourceQNameModuleFrom(prefix+":_", from); target != nil {
+			m.ctx.markImplemented(target)
+		}
 	}
 }
 
@@ -247,6 +286,12 @@ func (m *moduleData) resolveIdentity(id *identityData) {
 		id.resolving = false
 	}()
 	baseStmts := direct(id.stmt, "base")
+	// With several bases, one visited set spans their traversals so an
+	// ancestor shared by two bases still receives id once.
+	var ancestors map[*identityData]bool
+	if len(id.baseNames) > 1 {
+		ancestors = make(map[*identityData]bool)
+	}
 	for i, q := range id.baseNames {
 		var baseStmt *yangparse.Statement
 		if i < len(baseStmts) {
@@ -270,7 +315,7 @@ func (m *moduleData) resolveIdentity(id *identityData) {
 			return
 		}
 		id.bases = append(id.bases, base)
-		appendDerivedToIdentityAncestors(base, id, make(map[*identityData]bool))
+		appendDerivedToIdentityAncestors(base, id, ancestors)
 	}
 	if len(id.baseNames) > 1 && source.yangVersionForStatement(id.stmt) != "1.1" {
 		source.recordSchemaError(fmt.Errorf("identity %q with multiple base statements requires yang-version 1.1 at %s", id.name, id.stmt.Location()))
@@ -294,6 +339,27 @@ func (m *moduleData) parseType(st *yangparse.Statement) (TypeInfo, error) {
 	return m.parseTypeSeen(st, make(map[*yangparse.Statement]bool))
 }
 
+// resolveTypedefType resolves typ, the type statement of typedef td in m. The
+// result does not depend on where td is referenced from (a cycle through td
+// fails wherever it starts), so during a rebuild each typedef is resolved once
+// and later references get a copy: a chain of n typedefs resolves in O(n)
+// rather than once per level per reference.
+func (m *moduleData) resolveTypedefType(td, typ *yangparse.Statement, seen map[*yangparse.Statement]bool) (TypeInfo, error) {
+	var memo map[typedefKey]TypeInfo
+	if m.ctx != nil {
+		memo = m.ctx.build.typedefTypes
+	}
+	key := typedefKey{module: m, stmt: td}
+	if info, ok := memo[key]; ok {
+		return cloneTypeInfo(info), nil
+	}
+	info, err := m.parseTypeSeen(typ, seen)
+	if err == nil && memo != nil {
+		memo[key] = cloneTypeInfo(info)
+	}
+	return info, err
+}
+
 func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.Statement]bool) (TypeInfo, error) {
 	name := st.Argument
 	if tdMod, td := m.lookupTypedefModuleFrom(name, st); td != nil {
@@ -313,13 +379,13 @@ func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.
 		if len(defaults) > 1 {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, fmt.Errorf("typedef %q has multiple default statements at %s", td.Argument, defaults[1].Location())
 		}
-		base, err := tdMod.parseTypeSeen(typ, seen)
+		base, err := tdMod.resolveTypedefType(td, typ, seen)
 		if err != nil {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, err
 		}
 		typedefName := localName(name)
 		base.typedefName = ptr(typedefName)
-		base.typedefChain = append([]string{typedefName}, base.typedefChain...)
+		base.typedefChain = &typedefNames{name: typedefName, next: base.typedefChain}
 		if err := validateTypeRestrictionPlacement(st, base.base); err != nil {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, err
 		}
@@ -662,6 +728,201 @@ func findLeafrefDataPath(start *schemaNodeData, source, unprefixedRoot *moduleDa
 	return cur
 }
 
+// validateLeafRefPredicates checks the predicates of lr, a leafref of n whose
+// path m declares (RFC 7950 §9.9.2 and the path-predicate rule of §14): each
+// follows a list with keys and equates one of its keys, at most once, with a
+// leaf reached from current() by a path that starts with "..". The path is
+// walked over the data tree like findLeafrefDataPath; a path that uses
+// deref() or does not resolve step by step is left to target resolution.
+func (m *moduleData) validateLeafRefPredicates(n *schemaNodeData, lr *ResolvedLeafRef) error {
+	if n == nil || lr == nil || m == nil {
+		return nil
+	}
+	parts := splitPath(lr.path)
+	cur := n
+	if strings.HasPrefix(lr.path, "/") {
+		cur = nil
+	}
+	for _, part := range parts {
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			if cur = dataParentNode(cur); cur == nil {
+				return nil
+			}
+			continue
+		}
+		if _, ok := derefArgument(part); ok {
+			return nil
+		}
+		qname := pathStepQName(part)
+		if cur = m.leafrefDataChild(cur, qname, lr.sourceStmt); cur == nil {
+			return nil
+		}
+		i := strings.IndexByte(part, '[')
+		if i < 0 {
+			continue
+		}
+		predicates, ok := splitLeafRefPredicates(part[i:])
+		if !ok {
+			return fmt.Errorf("leafref %q path %q has invalid predicate %q", n.name, lr.path, part[i:])
+		}
+		seen := make(map[*schemaNodeData]bool, len(predicates))
+		for _, predicate := range predicates {
+			if reason := m.leafRefPredicateProblem(n, cur, predicate, lr.sourceStmt, seen); reason != "" {
+				return fmt.Errorf("leafref %q path %q has invalid predicate %q: %s", n.name, lr.path, predicate, reason)
+			}
+		}
+	}
+	return nil
+}
+
+// leafrefDataChild returns the data child of parent named by qname, resolved
+// from the source statement from. From the data tree root, which is a nil or
+// module parent, a prefixed qname looks among the top-level nodes of the
+// module it names and an unprefixed one among those of parent, or of m.
+func (m *moduleData) leafrefDataChild(parent *schemaNodeData, qname string, from *yangparse.Statement) *schemaNodeData {
+	var module *moduleData
+	if hasPrefix(qname) {
+		if module = m.resolveSourceQNameModuleFrom(qname, from); module == nil {
+			return nil
+		}
+	}
+	switch {
+	case (parent == nil || parent.kind == SchemaNodeKindModule) && module != nil:
+		parent = module.root
+	case parent == nil:
+		parent = m.root
+	}
+	return dataChildNode(parent, localName(qname), module)
+}
+
+// splitLeafRefPredicates splits the predicates that follow a leafref path
+// step, each with its brackets.
+func splitLeafRefPredicates(text string) ([]string, bool) {
+	var out []string
+	for text = strings.TrimSpace(text); text != ""; text = strings.TrimSpace(text) {
+		if text[0] != '[' {
+			return nil, false
+		}
+		end := -1
+		var quote byte
+		for i := 1; i < len(text) && end < 0; i++ {
+			switch {
+			case quote != 0:
+				if text[i] == quote {
+					quote = 0
+				}
+			case text[i] == '\'' || text[i] == '"':
+				quote = text[i]
+			case text[i] == '[':
+				return nil, false
+			case text[i] == ']':
+				end = i
+			}
+		}
+		if end < 0 {
+			return nil, false
+		}
+		out = append(out, text[:end+1])
+		text = text[end+1:]
+	}
+	return out, true
+}
+
+// leafRefPredicateProblem describes what is wrong with predicate, which
+// follows list in a leafref path of n, or returns "" when it is valid. seen
+// holds the keys earlier predicates of the step constrained.
+func (m *moduleData) leafRefPredicateProblem(n, list *schemaNodeData, predicate string, from *yangparse.Statement, seen map[*schemaNodeData]bool) string {
+	if list.kind != SchemaNodeKindList {
+		return fmt.Sprintf("predicate on %s %q, which is not a list", nodeStatementKeyword(list), list.name)
+	}
+	if len(list.keys) == 0 {
+		return fmt.Sprintf("predicate on list %q, which has no keys", list.name)
+	}
+	left, right, ok := strings.Cut(predicate[1:len(predicate)-1], "=")
+	left, right = strings.TrimSpace(left), strings.TrimSpace(right)
+	if !ok || !validYangIdentifierRef(left, true) {
+		return "want key = current()/.. path"
+	}
+	var module *moduleData
+	if hasPrefix(left) {
+		module = m.resolveSourceQNameModuleFrom(left, from)
+	}
+	var key *schemaNodeData
+	for _, candidate := range list.keys {
+		if candidate.name == localName(left) && (module == nil || candidate.module == module) {
+			key = candidate
+			break
+		}
+	}
+	switch {
+	case key == nil:
+		return fmt.Sprintf("%q is not a key of list %q", left, list.name)
+	case seen[key]:
+		return fmt.Sprintf("duplicate key %q", left)
+	}
+	seen[key] = true
+	steps, ok := leafRefPathKeyExprSteps(right)
+	if !ok {
+		return fmt.Sprintf("right-hand side %q must be a current()/.. path", right)
+	}
+	cur := n
+	for _, step := range steps {
+		if step == ".." {
+			cur = dataParentNode(cur)
+		} else {
+			cur = m.leafrefDataChild(cur, step, from)
+		}
+		if cur == nil {
+			break
+		}
+	}
+	if cur == nil || cur.kind != SchemaNodeKindLeaf {
+		return fmt.Sprintf("right-hand side %q does not resolve to a leaf", right)
+	}
+	return ""
+}
+
+// leafRefPathKeyExprSteps returns the steps after current() of a
+// path-key-expr (RFC 7950 §14): one or more ".." steps followed by one or
+// more node identifiers.
+func leafRefPathKeyExprSteps(expr string) ([]string, bool) {
+	rest, ok := strings.CutPrefix(expr, "current")
+	if !ok {
+		return nil, false
+	}
+	rest, ok = strings.CutPrefix(strings.TrimSpace(rest), "(")
+	if !ok {
+		return nil, false
+	}
+	rest, ok = strings.CutPrefix(strings.TrimSpace(rest), ")")
+	if !ok {
+		return nil, false
+	}
+	rest, ok = strings.CutPrefix(strings.TrimSpace(rest), "/")
+	if !ok {
+		return nil, false
+	}
+	steps := strings.Split(rest, "/")
+	parents := 0
+	for i, step := range steps {
+		step = strings.TrimSpace(step)
+		steps[i] = step
+		switch {
+		case step == ".." && parents == i:
+			parents++
+		case !validYangIdentifierRef(step, true):
+			return nil, false
+		}
+	}
+	if parents == 0 || parents == len(steps) {
+		return nil, false
+	}
+	return steps, true
+}
+
 func dataParentNode(n *schemaNodeData) *schemaNodeData {
 	for p := n.parent; p != nil; p = p.parent {
 		if p.kind != SchemaNodeKindChoice && p.kind != SchemaNodeKindCase {
@@ -689,7 +950,7 @@ func dataChildNode(parent *schemaNodeData, name string, module *moduleData) *sch
 func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Statement, base BaseType) (ResolvedType, error) {
 	switch v := r.(type) {
 	case ResolvedInt:
-		rs, err := restrictionRanges(st, "range", base, 0)
+		rs, err := derivedRestrictionRanges(st, "range", base, 0, v.Range)
 		if err != nil {
 			return nil, err
 		}
@@ -701,7 +962,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedDecimal64:
-		rs, err := restrictionRanges(st, "range", base, v.fractionDigits.Value())
+		rs, err := derivedRestrictionRanges(st, "range", base, v.fractionDigits.Value(), v.Range)
 		if err != nil {
 			return nil, err
 		}
@@ -713,7 +974,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedString:
-		rs, err := restrictionRanges(st, "length", base, 0)
+		rs, err := derivedRestrictionRanges(st, "length", base, 0, v.Length)
 		if err != nil {
 			return nil, err
 		}
@@ -732,7 +993,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedBinary:
-		rs, err := restrictionRanges(st, "length", base, 0)
+		rs, err := derivedRestrictionRanges(st, "length", base, 0, v.Length)
 		if err != nil {
 			return nil, err
 		}
