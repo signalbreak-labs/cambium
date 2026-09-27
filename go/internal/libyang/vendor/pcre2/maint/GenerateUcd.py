@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/env python3
 
 #                   PCRE2 UNICODE PROPERTY SUPPORT
 #                   ------------------------------
@@ -262,6 +262,7 @@ from GenerateCommon import \
 
 # Some general parameters
 
+MAX_LIST = 8             # keep on sync with the value in pcre2_auto_possess.c
 MAX_UNICODE = 0x110000
 NOTACHAR = 0xffffffff
 
@@ -297,15 +298,15 @@ def get_other_case(chardata):
 # Parse a line of ScriptExtensions.txt
 
 def get_script_extension(chardata):
-  global last_script_extension
+  script_extension = tuple(script_abbrevs.index(abbrev) for abbrev in chardata[1].split(' '))
 
-  offset = len(script_lists) * script_list_item_size
-  if last_script_extension == chardata[1]:
-    return offset - script_list_item_size
+  try:
+    index = script_lists.index(script_extension)
+  except ValueError:
+    index = len(script_lists)
+    script_lists.append(script_extension)
 
-  last_script_extension = chardata[1]
-  script_lists.append(tuple(script_abbrevs.index(abbrev) for abbrev in last_script_extension.split(' ')))
-  return offset
+  return index * script_list_item_size
 
 
 # Read a whole table in memory, setting/checking the Unicode version
@@ -343,6 +344,8 @@ def read_table(file_name, get_value, default_value):
     else:
       last = int(m.group(3), 16)
     for i in range(char, last + 1):
+      if file_base == 'CaseFolding' and table[i] != default_value:
+        print("WARNING: multiple rules for other_case[0x{:X}]".format(i))
       table[i] = value
 
   file.close()
@@ -564,7 +567,6 @@ file.close()
 # characters that have no script extensions.
 
 script_lists = [[]]
-last_script_extension = ""
 scriptx_bidi_class = read_table('Unicode.tables/ScriptExtensions.txt', get_script_extension, 0)
 
 for idx in range(len(scriptx_bidi_class)):
@@ -648,7 +650,7 @@ for c in range(MAX_UNICODE):
   s = set(bprops[c])
   for i in range(len(bool_props_lists)):
     if s == set(bool_props_lists[i]):
-      break;
+      break
   else:
     bool_props_lists.append(bprops[c])
     i += 1
@@ -715,7 +717,7 @@ for c in range(MAX_UNICODE):
 
 caseless_offsets = [0] * MAX_UNICODE
 
-offset = 1;
+offset = 1
 for s in caseless_sets:
   for x in s:
     caseless_offsets[x] = offset
@@ -733,6 +735,12 @@ for s in caseless_sets:
   for x in s:
     if x > 127 and x + other_case[x] < 128:
       other_case[x] = 0  
+
+# Append a couple of extra caseless sets (unreferenced by the record objects)
+# to hold the optional Turkish case equivalences.
+turkish_dotted_i_index = offset
+caseless_sets.append([0x69, 0x0130])
+caseless_sets.append([0x49, 0x0131])
 
 # Combine all the tables
 
@@ -780,12 +788,12 @@ _pcre2_xxx to xxxx, thereby avoiding name clashes with the library. At present,
 just one of these tables is actually needed. When compiling the library, some
 headers are needed. */
 
+
 #ifndef PCRE2_PCRE2TEST
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
 #include "pcre2_internal.h"
 #endif /* PCRE2_PCRE2TEST */
+
+
 
 /* The tables herein are needed only when UCP support is built, and in PCRE2
 that happens automatically with UTF support. This module should not be
@@ -800,6 +808,8 @@ const ucd_record PRIV(ucd_records)[] = {{0,0,0,0,0,0,0}};
 const uint16_t PRIV(ucd_stage1)[] = {0};
 const uint16_t PRIV(ucd_stage2)[] = {0};
 const uint32_t PRIV(ucd_caseless_sets)[] = {0};
+const uint32_t PRIV(ucd_nocase_ranges)[] = {0};
+const uint32_t PRIV(ucd_nocase_ranges_size) = 0;
 #else
 \n""")
 
@@ -850,6 +860,17 @@ for s in caseless_sets:
   f.write('  NOTACHAR,\n')
 f.write('};\n\n')
 
+# --- Output the indices of the Turkish caseless character sets ---
+
+f.write("""\
+/* This is the index, within ucd_caseless_sets, of the additional
+Turkish case-equivalences. The dotted I ones are this offset; the
+dotless I are +3 from here. */
+
+const uint32_t PRIV(ucd_turkish_dotted_i_caseset) = %d;
+
+""" % (turkish_dotted_i_index))
+
 # --- Other tables are not needed by pcre2test ---
 
 f.write("""\
@@ -858,6 +879,40 @@ the large main UCD tables. */
 
 #ifndef PCRE2_PCRE2TEST
 \n""")
+
+# --- Output the nocase sets ---
+
+f.write("""\
+/* This table contains character ranges, where the characters in the range have
+no other case. Both start and end values are excluded from the range. */
+
+const uint32_t PRIV(ucd_nocase_ranges)[] = {
+""")
+
+range_start = 0
+size = 0
+# The range size is bigger than eight characters.
+expected_size = 8
+total = 0
+
+for c in range(1, MAX_UNICODE):
+  if other_case[c] != 0 or c in [0x0130, 0x0131]: # add the two chars that gain casing in Turkish
+    if c - range_start > expected_size:
+      range_size = c - range_start - 1
+      f.write('  0x%04x, 0x%04x, /* %d */\n' % (range_start, c, range_size))
+      total += range_size
+      size += 2
+    range_start = c
+
+# The else case is unlikely
+if other_case[MAX_UNICODE - 1] == 0 and MAX_UNICODE - range_start > expected_size:
+  range_size = MAX_UNICODE - range_start - 1
+  f.write('  0x%04x, 0x%04x, /* %d */\n' % (range_start, MAX_UNICODE, range_size))
+  total += range_size
+  size += 2
+
+f.write('  0xffffffff, 0xffffffff /* terminator */\n};\n\n');
+f.write('/* Total: %d characters. */\nconst uint32_t PRIV(ucd_nocase_ranges_size) = %d;\n\n' % (total, size))
 
 # --- Read Scripts.txt again for the sets of 10 digits. ---
 
@@ -941,6 +996,6 @@ f.write("""\
 /* End of pcre2_ucd.c */
 """)
 
-f.close
+f.close()
 
 # End
