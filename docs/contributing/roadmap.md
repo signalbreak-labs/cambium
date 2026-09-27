@@ -67,7 +67,9 @@ lands rather than adding another dated file.
   **both** engines in the differential lane (`go run ./cmd/cambium datatree-diff`),
   which byte-compares output after compact-only normalization — element and member
   order is never normalized away. Growing that flagged subset *is* the path to
-  stable.
+  stable. Today 161 of the 195 backend/data cases are flagged; the rest are the
+  scope gaps above, with-defaults output modes, RFC 7952 metadata, multi-module
+  documents, gNMI output, and one JSON escape-spelling difference.
 
 ## Not built yet
 
