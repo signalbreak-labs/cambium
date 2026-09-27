@@ -2,11 +2,19 @@
 type AnyData struct {
 	xmlValue  string
 	jsonValue string
+	jsonOnly  bool
 }
 
 // NewAnyData creates a raw anydata/anyxml value with separate XML and JSON forms.
+// Validate checks that each non-empty form is well-formed.
 func NewAnyData(xmlValue, jsonValue string) AnyData {
 	return AnyData{xmlValue: xmlValue, jsonValue: jsonValue}
+}
+
+// cambiumAnyDataFromJSON wraps content parsed from JSON_IETF. Opaque content is
+// never converted between formats, so the value has no XML form.
+func cambiumAnyDataFromJSON(jsonValue string) AnyData {
+	return AnyData{jsonValue: jsonValue, jsonOnly: true}
 }
 
 // XMLValue returns raw XML content for the anydata/anyxml value.
@@ -14,6 +22,57 @@ func (a AnyData) XMLValue() string { return a.xmlValue }
 
 // JSONValue returns raw JSON content for the anydata/anyxml value.
 func (a AnyData) JSONValue() string { return a.jsonValue }
+
+// validate checks that the XML form is a well-formed XML fragment and the JSON
+// form a single well-formed JSON value, so raw content can neither close its
+// own element or object nor inject sibling data.
+func (a AnyData) validate(path string) error {
+	if err := cambiumValidateRawXML(a.xmlValue); err != nil {
+		return cambiumValidationError(path, err.Error())
+	}
+	if strings.TrimSpace(a.jsonValue) != "" && !json.Valid([]byte(a.jsonValue)) {
+		return cambiumValidationError(path, "anydata/anyxml JSON content is not a single well-formed JSON value")
+	}
+	return nil
+}
+
+func cambiumAnyDataNoXMLForm(path string) error {
+	return cambiumValidationError(path, "anydata/anyxml value has no XML form (it was parsed from JSON_IETF); cross-format anydata/anyxml serialization is unsupported")
+}
+
+// cambiumValidateRawXML accepts element content: elements, character data,
+// comments and processing instructions, but no XML declaration or DTD, and
+// nothing that closes an element it did not open.
+func cambiumValidateRawXML(raw string) error {
+	if strings.TrimSpace(raw) == "" { return nil }
+	const wrapper = "cambium-anydata"
+	dec := xml.NewDecoder(strings.NewReader("<" + wrapper + ">" + raw + "</" + wrapper + ">"))
+	depth := 0
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return fmt.Errorf("anydata/anyxml XML content is not well-formed: %v", err)
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+		case xml.EndElement:
+			depth--
+			if depth == 0 {
+				if _, err := dec.Token(); err != io.EOF {
+					return fmt.Errorf("anydata/anyxml XML content is not a well-formed XML fragment")
+				}
+				return nil
+			}
+		case xml.ProcInst:
+			if strings.EqualFold(t.Target, "xml") {
+				return fmt.Errorf("anydata/anyxml XML content must not contain an XML declaration")
+			}
+		case xml.Directive:
+			return fmt.Errorf("anydata/anyxml XML content must not contain a DTD or directive")
+		}
+	}
+}
 
 func cambiumWriteRawXML(b *strings.Builder, depth int, raw string) {
 	raw = strings.TrimSuffix(raw, "\n")

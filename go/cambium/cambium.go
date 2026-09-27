@@ -1998,6 +1998,9 @@ func (c *Context) rebuild() (int, error) {
 	for _, mod := range c.loadOrder {
 		mod.resolveLeafRefs()
 	}
+	if err := c.validateLeafrefCycles(); err != nil {
+		return amending, err
+	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateDefaultValues(); err != nil {
 			return amending, err

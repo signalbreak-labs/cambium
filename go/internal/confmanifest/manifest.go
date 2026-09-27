@@ -11,6 +11,7 @@ package confmanifest
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -27,6 +28,18 @@ const (
 	TierSchemaIR    Tier = "schema-ir"
 )
 
+// Expect is the verdict a backend/data case expects for its input document.
+type Expect string
+
+// Expect values: ExpectAccept (the default) marks a document that must parse
+// and serialize to the golden outputs; ExpectReject marks a data document that
+// a validating parse (unknown data is an error, then full RFC 7950 validation)
+// must refuse. A reject case has no expected outputs.
+const (
+	ExpectAccept Expect = "accept"
+	ExpectReject Expect = "reject"
+)
+
 // Case is one entry in conformance/manifest.toml.
 type Case struct {
 	Name              string
@@ -37,6 +50,7 @@ type Case struct {
 	OpType            string
 	GNMIPath          string
 	SerializeDefaults string
+	Expect            Expect // verdict expected for Input; empty means ExpectAccept
 	Oracle            bool
 	DataTree          bool
 	ExpectedIR        string
@@ -54,6 +68,15 @@ func (c Case) EffectiveTier() Tier {
 		return TierBackendData
 	}
 	return c.Tier
+}
+
+// EffectiveExpect returns the explicit expected verdict, defaulting empty
+// values to ExpectAccept so existing manifest cases keep working.
+func (c Case) EffectiveExpect() Expect {
+	if c.Expect == "" {
+		return ExpectAccept
+	}
+	return c.Expect
 }
 
 // Load parses the subset of TOML used by conformance/manifest.toml:
@@ -123,6 +146,8 @@ func Load(path string) ([]Case, error) {
 			cur.GNMIPath = unquote(val)
 		case "serialize-defaults":
 			cur.SerializeDefaults = unquote(val)
+		case "expect":
+			cur.Expect = Expect(unquote(val))
 		case "oracle":
 			b, err := strconv.ParseBool(val)
 			if err != nil {
@@ -150,6 +175,9 @@ func Load(path string) ([]Case, error) {
 		if err := c.Tier.validate(); err != nil {
 			return nil, fmt.Errorf("case %q: invalid tier %q", c.Name, c.Tier)
 		}
+		if err := c.validateExpect(); err != nil {
+			return nil, fmt.Errorf("case %q: %w", c.Name, err)
+		}
 	}
 
 	return cases, nil
@@ -162,6 +190,32 @@ func (t Tier) validate() error {
 	default:
 		return fmt.Errorf("invalid tier %q", t)
 	}
+}
+
+// validateExpect checks the expect value and, for a reject case, that the case
+// is a plain data document: no expected outputs, and none of the keys that
+// select an output profile or an operation document.
+func (c Case) validateExpect() error {
+	switch c.EffectiveExpect() {
+	case ExpectAccept:
+		return nil
+	case ExpectReject:
+	default:
+		return fmt.Errorf("invalid expect %q", c.Expect)
+	}
+	switch {
+	case c.EffectiveTier() != TierBackendData:
+		return fmt.Errorf(`expect = "reject" needs the %s tier, not tier %q`, TierBackendData, c.Tier)
+	case len(c.Expected) != 0:
+		return errors.New(`expect = "reject" takes no expected outputs`)
+	case c.OpType != "":
+		return errors.New(`expect = "reject" does not support op-type`)
+	case c.SerializeDefaults != "":
+		return errors.New(`expect = "reject" does not take serialize-defaults`)
+	case c.GNMIPath != "":
+		return errors.New(`expect = "reject" does not take gnmi-path`)
+	}
+	return nil
 }
 
 func splitKeyValue(line string) (key, value string, ok bool) {

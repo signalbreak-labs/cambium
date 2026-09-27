@@ -81,6 +81,11 @@ var validateLogMu sync.Mutex
 // ErrContextClosed is returned by RawContext operations invoked after Close.
 var ErrContextClosed = errors.New("libyang: context closed")
 
+// ErrContextFrozen is returned by RawContext module loads invoked after the
+// context created its first data tree. Loading then would make libyang
+// recompile the schema and free compiled nodes that live trees point at.
+var ErrContextFrozen = errors.New("libyang: context frozen: modules cannot be loaded after a data tree was created")
+
 // pinToOSThread pins the calling goroutine to its OS thread for one libyang
 // operation plus its error retrieval. libyang stores ly_err_item lists per
 // (context, OS thread) (ly_common.h "thread-specific errors"), so the
@@ -180,6 +185,14 @@ func (t OpType) c() C.enum_lyd_type {
 // load modules during setup, then parse. Free with Close (a finalizer is a
 // backstop).
 //
+// The freeze is enforced. Loading a module can make libyang recompile the whole
+// schema (an augment or deviation of an existing module), which frees the
+// compiled nodes every existing data tree points at. So the first data tree
+// created from the context freezes it for good: LoadModule and
+// LoadModuleFromPath then fail with ErrContextFrozen before reaching libyang.
+// Until then, tree-creating calls hold loadMu shared, so a load racing the
+// first parse either finishes first or observes the freeze.
+//
 // A data tree references the context's schema and dictionary, so the context
 // must outlive every tree/diff created from it. To make that safe even when a
 // caller Closes the context before its trees are collected, the context holds a
@@ -191,6 +204,10 @@ type RawContext struct {
 	live      int64 // outstanding RawDataTree/RawDataDiff that free ctx-owned data
 	closeReq  int32 // Close() requested
 	destroyed int32 // ly_ctx_destroy performed (exactly-once)
+	frozen    int32 // a data tree was created; module loads are refused (atomic)
+	// loadMu is held exclusively by module loads and shared by tree-creating
+	// calls until the context is frozen; afterwards those read only frozen.
+	loadMu sync.RWMutex
 }
 
 // NewContext creates an empty context with no search path.
@@ -225,13 +242,19 @@ func (c *RawContext) SetSearchPath(path string) error {
 	return nil
 }
 
-// LoadModule loads a YANG module (all features) into the context.
+// LoadModule loads a YANG module (all features) into the context. It fails
+// with ErrContextFrozen once the context has created a data tree.
 func (c *RawContext) LoadModule(name string) error {
 	defer pinToOSThread()()
 	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
 		return err
 	}
 	defer c.release()
+	unlock, err := c.beginLoad()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	cname := C.CString(name)
 	defer C.free(unsafe.Pointer(cname))
 	mod := C.ly_ctx_load_module(c.ctx, cname, nil, nil)
@@ -258,6 +281,7 @@ func (c *RawContext) ParseData(format Format, parseOptions uint32, data []byte) 
 		return nil, err
 	}
 	defer c.release()
+	defer c.holdSchema()()
 	var keepAlive []byte
 	var cdata *C.char
 	if format == FormatLYB {
@@ -289,6 +313,7 @@ func (c *RawContext) ParseOp(format Format, opType OpType, data []byte) (*RawDat
 		return nil, err
 	}
 	defer c.release()
+	defer c.holdSchema()()
 	if err := checkNul(data); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
 		return nil, err
 	}
@@ -335,6 +360,7 @@ func (c *RawContext) NewData() *RawDataTree {
 		return newRawDataTree(nil, c, nil)
 	}
 	defer c.release()
+	defer c.holdSchema()()
 	return newRawDataTree(nil, c, c.ctx)
 }
 
@@ -353,6 +379,7 @@ type RawDataTree struct {
 
 func newRawDataTree(tree *C.struct_lyd_node, owner *RawContext, ctx *C.struct_ly_ctx) *RawDataTree {
 	owner.retain()
+	owner.freeze()
 	t := &RawDataTree{tree: tree, owner: owner, ctx: ctx}
 	runtime.SetFinalizer(t, (*RawDataTree).finalize)
 	return t
@@ -581,6 +608,39 @@ func (c *RawContext) acquire() error {
 	return nil
 }
 
+// holdSchema keeps module loads out while a tree-creating call reads the
+// compiled schema; call the returned func when the call is done. Before the
+// first tree exists it holds loadMu shared, so the call and a racing load are
+// ordered. Once frozen, no load can start, so it reads only the atomic.
+func (c *RawContext) holdSchema() func() {
+	if atomic.LoadInt32(&c.frozen) == 1 {
+		return func() {}
+	}
+	c.loadMu.RLock()
+	return c.loadMu.RUnlock
+}
+
+// freeze permanently refuses module loads. newRawDataTree calls it for every
+// tree, so the first tree ParseData, ParseOp, or NewData creates sets it while
+// holdSchema is held; later trees (Duplicate, UnlinkPath, ...) find it set.
+func (c *RawContext) freeze() {
+	if c != nil {
+		atomic.StoreInt32(&c.frozen, 1)
+	}
+}
+
+// beginLoad admits a module load, or returns ErrContextFrozen once a data tree
+// exists. On success the caller holds loadMu exclusively until unlock, so no
+// tree can be created while libyang (re)compiles the schema.
+func (c *RawContext) beginLoad() (unlock func(), err error) {
+	c.loadMu.Lock()
+	if atomic.LoadInt32(&c.frozen) == 1 {
+		c.loadMu.Unlock()
+		return nil, ErrContextFrozen
+	}
+	return c.loadMu.Unlock, nil
+}
+
 // release records that a data tree/diff has been freed. If Close was requested
 // and this was the last outstanding tree, the context is destroyed now — never
 // before its data, which would use-after-free the schema/dictionary.
@@ -609,7 +669,8 @@ func (c *RawContext) destroyCtx() {
 // actual ly_ctx_destroy is deferred until every data tree/diff from this
 // context has been freed, so a caller may Close the context before its trees
 // are collected without a use-after-free. After Close, SetSearchPath,
-// LoadModule, ParseData, and ParseOp return ErrContextClosed. Idempotent.
+// LoadModule, LoadModuleFromPath, ParseData, and ParseOp return
+// ErrContextClosed. Idempotent.
 func (c *RawContext) Close() {
 	defer pinToOSThread()()
 	runtime.SetFinalizer(c, nil)

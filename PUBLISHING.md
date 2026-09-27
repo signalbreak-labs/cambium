@@ -10,8 +10,9 @@ The shared layer (`/spec/`, `/conformance/`, `/VERSIONS`, `/third_party/`) is
 language-neutral. A future `/<lang>/` binding would publish on its own track —
 see AGENTS.md "Adding a language binding".
 
-Current release-candidate status is tracked in dated notes under `docs/`, such
-as `docs/release-readiness-2026-06-20.md`.
+Released versions and the pending `[Unreleased]` changes are tracked in
+`CHANGELOG.md`; each release is a `go/vX.Y.Z` tag (the latest is the newest
+dated `## [go/vX.Y.Z]` heading there).
 
 ## Prerequisites
 
@@ -51,9 +52,10 @@ time).
 
 ## Publishing workflow
 
-1. Confirm the release version. The current release candidate is `0.1.0`. The
-   module is rooted at `/go/`, so the release tag must use the subdirectory
-   prefix, for example `go/v0.1.0`.
+1. Pick the next version from `CHANGELOG.md`: bump the newest released
+   `go/vX.Y.Z` per semver for what `[Unreleased]` carries, then rename
+   `[Unreleased]` to `[go/vX.Y.Z] - YYYY-MM-DD`. The module is rooted at `/go/`,
+   so the release tag must use the subdirectory prefix `go/vX.Y.Z`.
 2. Update `/VERSIONS` if the engine SHA or CMake flags changed.
 3. Open or update a PR to `main` and require GitHub CI to pass. Branch pushes do
    not run the workflow by themselves; CI runs on `pull_request` and `main`
@@ -70,10 +72,15 @@ time).
 8. Pre-flight the tag name, then tag the Go module:
 
    ```bash
-   scripts/check-release-tags.sh go/v0.1.0   # must pass before you tag
-   git tag go/v0.1.0
-   git push origin go/v0.1.0
+   scripts/check-release-tags.sh go/vX.Y.Z   # must pass before you tag
+   git tag -s go/vX.Y.Z -m "Cambium Go vX.Y.Z"   # annotated + signed, like go/v0.4.0
+   git push origin go/vX.Y.Z
    ```
+
+9. Publish a GitHub release for the tag. That runs
+   `.github/workflows/conformance-artifact.yml`, which attaches the
+   `cambium-conformance-*.tar.gz` corpus package (and its `.sha256`) to the
+   release.
 
 > Do not publish from a tree where `vendor/` is missing or stale. The flattened
 > build is the publish gate.

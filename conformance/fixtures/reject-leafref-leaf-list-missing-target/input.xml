@@ -1,0 +1,5 @@
+<interface xmlns="urn:reject-leafref-leaf-list-missing-target">
+  <name>eth0</name>
+</interface>
+<monitored xmlns="urn:reject-leafref-leaf-list-missing-target">eth0</monitored>
+<monitored xmlns="urn:reject-leafref-leaf-list-missing-target">eth9</monitored>

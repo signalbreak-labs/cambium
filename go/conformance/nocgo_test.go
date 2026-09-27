@@ -33,8 +33,13 @@ func TestNoCGOConformanceManifestDeclaresSupportedTiers(t *testing.T) {
 			}
 		case confmanifest.TierBackendData:
 			backendData++
-			if c.Input == "" || c.InputFormat == "" || len(c.Expected) == 0 {
-				t.Fatalf("backend-data case %q missing input, input-format, or expected outputs", c.Name)
+			if c.Input == "" || c.InputFormat == "" {
+				t.Fatalf("backend-data case %q missing input or input-format", c.Name)
+			}
+			rejects := c.EffectiveExpect() == confmanifest.ExpectReject
+			if rejects != (len(c.Expected) == 0) {
+				t.Fatalf("backend-data case %q: expect %q with %d expected outputs; reject cases have none, accept cases need some",
+					c.Name, c.EffectiveExpect(), len(c.Expected))
 			}
 		default:
 			t.Fatalf("case %q has unsupported tier %q", c.Name, c.Tier)

@@ -53,3 +53,51 @@ func Example() {
 	// z
 	// a
 }
+
+// ExampleParseModules parses a document whose top-level nodes come from two
+// modules, validates the leafref that crosses them, and prints the tree as
+// XML. Top-level nodes of different modules come out grouped by module, in
+// module-name order ("ex-base" before "ex-ref"), as libyang orders them.
+func ExampleParseModules() {
+	const base = `module ex-base {
+  namespace "urn:ex-base";
+  prefix b;
+  list interface { key name; leaf name { type string; } }
+}`
+	const ref = `module ex-ref {
+  namespace "urn:ex-ref";
+  prefix r;
+  import ex-base { prefix b; }
+  leaf bound-if { type leafref { path "/b:interface/b:name"; } }
+}`
+	b, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		panic(err)
+	}
+	for _, src := range []string{base, ref} {
+		if err := b.LoadModuleStr(src); err != nil {
+			panic(err)
+		}
+	}
+	ctx, err := b.Build()
+	if err != nil {
+		panic(err)
+	}
+
+	// Bind every implemented module, as a libyang context does.
+	tree, err := datatree.ParseModules(ctx.Modules(), datatree.FormatJSONIETF,
+		[]byte(`{"ex-ref:bound-if":"eth0","ex-base:interface":[{"name":"eth0"}]}`))
+	if err != nil {
+		panic(err)
+	}
+	if err := tree.Validate(); err != nil {
+		panic(err)
+	}
+	out, err := tree.Serialize(datatree.FormatXML)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(out))
+	// Output:
+	// <interface xmlns="urn:ex-base"><name>eth0</name></interface><bound-if xmlns="urn:ex-ref">eth0</bound-if>
+}
