@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- A weekly `Fuzz` workflow runs each native fuzz target cgo-free for 5 minutes
+  and keeps any failing input as an artifact.
 
 ### Changed
 
@@ -40,6 +42,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   feature-gated nodes or reorders augments.
 - Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
   scales with unique nodes.
+- CI pins every GitHub Action to a commit SHA, reads the Go version from
+  `go/go.mod`, defaults to read-only `contents` permission (only the
+  `conformance-artifact` job that attaches the release asset can write),
+  verifies the gitleaks download checksum, and shuffles cgo-free test order.
+- Codegen tests that build generated code run in parallel, and the
+  context-deadline test no longer idles 5 s on `WaitDelay`.
+- `scripts/green-bar.sh` no longer repeats the cgo-free vet and tests that
+  `scripts/check-go-default-pure.sh` already runs.
 
 ### Fixed
 
@@ -50,6 +60,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- `scripts/check-go-default-pure.sh` listed dependencies only with
+  `CGO_ENABLED=0`, which hides cgo files, so a dependency with a pure-Go
+  fallback passed. It now also lists them with `CGO_ENABLED=1` and fails on any
+  non-standard-library package with cgo files.
+- `PUBLISHING.md` described a `0.1.0` release candidate and a deleted readiness
+  note, and `go/internal/libyang/build.sh` referenced a nonexistent Rust build
+  script.
 
 ## [go/v0.4.0] - 2026-07-02
 
