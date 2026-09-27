@@ -3,6 +3,8 @@
 
 package cambium
 
+import "fmt"
+
 // LoadReport describes what participated in a built schema context. It is for
 // observability and downstream tooling; it does not change validation behavior.
 type LoadReport struct {
@@ -15,6 +17,11 @@ type LoadReport struct {
 	SkippedModules     []ModuleLoadInfo
 	Warnings           []Diagnostic
 	SourceFiles        []string
+	// DeviationPolicy is the policy the context was built with.
+	DeviationPolicy DeviationPolicy
+	// IgnoredDeviations lists, in load order, the deviations that
+	// DeviationPolicy kept from changing the effective schema.
+	IgnoredDeviations []Deviation
 }
 
 // ModuleLoadInfo is stable metadata for one loaded module.
@@ -54,6 +61,7 @@ func (c *Context) LoadReport() LoadReport {
 	rebuildErr := c.rebuildIfDirty()
 
 	var report LoadReport
+	report.DeviationPolicy = c.deviationPolicy
 	report.Warnings = append(report.Warnings, c.loadWarnings...)
 	if rebuildErr != nil {
 		diag := DiagnosticFromError(wrap("load report: schema rebuild", rebuildErr))
@@ -83,6 +91,11 @@ func (c *Context) LoadReport() LoadReport {
 		if len(mod.deviations) > 0 {
 			report.DeviationModules = append(report.DeviationModules, info)
 		}
+		for _, dev := range mod.deviations {
+			if !dev.Applied() {
+				report.IgnoredDeviations = append(report.IgnoredDeviations, dev)
+			}
+		}
 		for _, sub := range mod.submodules {
 			if sub == nil || sub.stmt == nil {
 				continue
@@ -102,6 +115,18 @@ func (c *Context) LoadReport() LoadReport {
 				continue
 			}
 			enabled := mod.featureEnabled(feature.name)
+			if _, requested := c.enabledFeatures[mod.name][feature.name]; requested && !enabled {
+				// The caller asked for the feature, but its own if-feature
+				// condition is false, so it is effectively disabled.
+				report.Warnings = append(report.Warnings, Diagnostic{
+					Kind:       DiagnosticSemanticSchemaError,
+					Code:       RuleCodeContext,
+					Message:    fmt.Sprintf("feature %q for module %q was enabled but its if-feature condition is false; it is effectively disabled", feature.name, mod.name),
+					Module:     mod.name,
+					Source:     sourceLocation(feature.stmt),
+					Underlying: fmt.Errorf("feature %q effectively disabled", feature.name),
+				})
+			}
 			selection := FeatureSelection{Module: mod.name, Feature: feature.name, Enabled: enabled}
 			if enabled {
 				report.EnabledFeatures = append(report.EnabledFeatures, selection)
@@ -114,6 +139,21 @@ func (c *Context) LoadReport() LoadReport {
 		}
 	}
 	return report
+}
+
+// OmittedContent returns the warnings for declared schema content that a
+// vendor-compatible relaxation left out of the effective schema, in report
+// order. An empty result means no relaxation dropped declared content; callers
+// that need a complete schema should reject a non-empty result, and callers
+// that reject every relaxation should reject any Warnings.
+func (r LoadReport) OmittedContent() []Diagnostic {
+	var out []Diagnostic
+	for _, diag := range r.Warnings {
+		if diag.Kind == DiagnosticOmittedSchemaContent {
+			out = append(out, diag)
+		}
+	}
+	return out
 }
 
 func moduleLoadInfo(mod *moduleData) ModuleLoadInfo {

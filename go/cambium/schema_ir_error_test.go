@@ -54,4 +54,17 @@ func TestSchemaIRSurfacesRebuildFailure(t *testing.T) {
 		!strings.Contains(got.Message, `unknown feature "no-such-feature"`) {
 		t.Fatalf("SchemaIR error message = %q, want schema rebuild unknown feature", got.Message)
 	}
+
+	// The v2 table and the limited v1 projection carry the same diagnostic.
+	table := ctx.SchemaIRTable()
+	if table.Version != cambium.SchemaIRTableVersion || len(table.Errors) != 1 || table.Errors[0].Message != got.Message {
+		t.Fatalf("SchemaIRTable = version %q errors %#v, want the rebuild diagnostic", table.Version, table.Errors)
+	}
+	limited, err := ctx.SchemaIRWithLimit(1 << 20)
+	if err != nil {
+		t.Fatalf("SchemaIRWithLimit: %v", err)
+	}
+	if len(limited.Errors) != 1 || limited.Errors[0].Message != got.Message {
+		t.Fatalf("SchemaIRWithLimit errors = %#v, want the rebuild diagnostic", limited.Errors)
+	}
 }

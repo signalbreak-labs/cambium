@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -107,4 +108,72 @@ func stringSlicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func writeChainModule(t *testing.T, dir string, depth int) {
+	t.Helper()
+	var b bytes.Buffer
+	b.WriteString("module chain {\n  yang-version 1.1; namespace \"urn:chain\"; prefix c;\n")
+	for i := 0; i < depth; i++ {
+		fmt.Fprintf(&b, "container c%d {\n", i)
+	}
+	b.WriteString("leaf end { type string; }\n")
+	for i := 0; i < depth; i++ {
+		b.WriteString("}\n")
+	}
+	b.WriteString("}\n")
+	if err := os.WriteFile(filepath.Join(dir, "chain.yang"), b.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunV2OutputIsLinearInDepth(t *testing.T) {
+	var prev int
+	for _, depth := range []int{4, 8, 12, 16} {
+		dir := t.TempDir()
+		writeChainModule(t, dir, depth)
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{"-search", dir, "-format", "v2", "chain"}, &stdout, &stderr); code != 0 {
+			t.Fatalf("depth %d: exit %d: %s", depth, code, stderr.String())
+		}
+		var doc exportTable
+		if err := json.Unmarshal(stdout.Bytes(), &doc); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if doc.Version != cambium.SchemaIRTableVersion || len(doc.Nodes) != depth+1 {
+			t.Fatalf("depth %d: version %q, nodes %d", depth, doc.Version, len(doc.Nodes))
+		}
+		last := doc.Nodes[len(doc.Nodes)-1]
+		if last.Name != "end" || last.Parent != depth-1 || last.Type == nil || last.Type.Base != "string" {
+			t.Fatalf("depth %d: last node = %+v", depth, last)
+		}
+		// Output grows by the per-node record plus longer paths: well under
+		// doubling per four levels, unlike the nested v1 projection.
+		if prev != 0 && stdout.Len() > prev*3 {
+			t.Fatalf("depth %d: %d bytes after %d at depth-4", depth, stdout.Len(), prev)
+		}
+		t.Logf("depth %d: v2 JSON %d bytes", depth, stdout.Len())
+		prev = stdout.Len()
+	}
+}
+
+func TestRunV1RefusesOversizedProjection(t *testing.T) {
+	dir := t.TempDir()
+	writeChainModule(t, dir, 40)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"-search", dir, "chain"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr %s", code, stderr.String())
+	}
+	if stdout.Len() != 0 || !bytes.Contains(stderr.Bytes(), []byte(cambium.SchemaIRTableVersion)) {
+		t.Fatalf("stdout %d bytes, stderr %q", stdout.Len(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	writeChainModule(t, dir, 4)
+	if code := run([]string{"-search", dir, "-max-records", "31", "chain"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("depth 4 at exact limit: exit %d: %s", code, stderr.String())
+	}
+	if code := run([]string{"-search", dir, "-format", "v3", "chain"}, &stdout, &stderr); code != 2 {
+		t.Fatalf("bad format exit = %d, want 2", code)
+	}
 }

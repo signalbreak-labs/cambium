@@ -5,6 +5,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `cambium.schema-ir.v2` bounded node table (`Context.SchemaIRTable`,
+  `SchemaIRNodeID`, `SchemaIRNoParent`), `Context.SchemaIRStats`, and
+  `Context.SchemaIRWithLimit`, which fails with a `resource_limit` diagnostic
+  instead of materializing an oversized v1 projection (ADR 0006).
+- `cmd/cambium-ir -format v2` and a v1 `-max-records` limit (default
+  1,048,576).
+- `DeviationPolicy` and `ContextBuilder.SetDeviationPolicy`
+  (`IgnoreNotSupported` keeps not-supported targets, decided before reference
+  validation); `Deviation.Applied`, `Deviation.SourceLocation`,
+  `LoadReport.DeviationPolicy`, and `LoadReport.IgnoredDeviations`.
+- `LoadReport.OmittedContent()` and the `omitted_schema_content` diagnostic
+  kind for vendor relaxations that drop declared content.
+- `DefaultOrigin` and `DefaultValue.Origin()` (node, typedef, refine, or
+  deviation).
+- `SchemaChildren.ConfigOnly()` and `ProjectionOptions.ConfigOnly`.
+- A `LoadReport` warning when an explicitly enabled feature is disabled by
+  its own `if-feature`.
+- Consumer contract tests (traversal, identity, types, loading, lifetime), a
+  compiled integration example, and a check that the v2 table matches the
+  conformance goldens' ordering.
+
+### Changed
+
+- An unresolved augment or deviation target fails in every validation mode
+  unless the enabled feature set excluded the target (its own `if-feature`, an
+  enclosing `uses`, or a disabled declaring `augment`, matched by module);
+  vendor-compatible mode no longer skips typos, wrong prefixes, or missing
+  dependencies.
+- `compat` maps `IgnoreDeviateNotSupported` to the native deviation policy and
+  projects one ordered schema; with the option set it no longer shows
+  feature-gated nodes or reorders augments.
+- Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
+  scales with unique nodes.
+
+### Fixed
+
+- `compat` augment order depended on map iteration when
+  `IgnoreDeviateNotSupported` was set.
+- An ignored `deviate not-supported` in `compat` could leave references to the
+  kept node failing validation.
+- Leafrefs into `choice`/`case` data failed with `target not found`.
+- `unknown prefix` diagnostics were classified `unknown` instead of
+  `invalid_identifier`.
+
 ## [go/v0.4.0] - 2026-07-02
 
 ### Added

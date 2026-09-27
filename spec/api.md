@@ -155,14 +155,38 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     behavior by default. Covered compatibility relaxations include duplicate
     direct module/submodule `revision` dates, out-of-order top-level
     revisions, direct submodule entrypoints that can be resolved to their
-    parent module, unresolved augment targets during feature-discovery loads,
-    cross-module mandatory config augments, config false mandatory leaves that
+    parent module, augment and deviation targets excluded by the enabled
+    feature set, cross-module mandatory config augments, config false mandatory leaves that
     inherit typedef defaults, and unambiguous local-name schema-path fallbacks
     for vendor deviation/leafref paths. Duplicate revision warnings include
     the module/submodule name, duplicate revision date, the duplicate statement
     source location, and the previous declaration as a related location when
     available. Other revision defects, including malformed dates and duplicate
     dependency `revision-date` statements, remain errors.
+  - An augment or deviation whose target does not resolve fails loading in
+    every mode unless the path stops at a node the enabled feature set
+    excluded: one whose own `if-feature`, enclosing `uses`, or declaring
+    `augment` is disabled. The step must name that node's module, so a wrong
+    or unresolvable prefix is not an exclusion. Strict mode rejects that case too, naming the excluded node
+    ("excluded by feature policy"); `ValidationVendorCompatible` skips the
+    statement with a warning. A skipped augment drops declared content, so its
+    warning has kind `omitted_schema_content` and `LoadReport.OmittedContent()`
+    returns it; an empty result means no relaxation dropped declared content.
+    A typo or a missing dependency is never relaxed.
+  - `ContextBuilder.SetDeviationPolicy(DeviationPolicy)` selects how loaded
+    deviation modules change the effective schema. The zero value applies every
+    deviation. `IgnoreNotSupported` keeps nodes targeted by `deviate
+    not-supported` while still applying add/replace/delete; the decision is made
+    while deviations are collected, before any static reference is validated.
+    Omitting a deviation module is the way to apply none of its effects. Every
+    `Deviation` reports `Applied()` (false only for an ignored not-supported)
+    and `SourceLocation()` (the `deviate` or deviated property statement);
+    `LoadReport.DeviationPolicy` and `LoadReport.IgnoredDeviations` record the
+    policy and what it kept.
+  - An explicitly enabled feature whose own `if-feature` condition is false is
+    effectively disabled, reported in `DisabledFeatures`, and produces a
+    `LoadReport` warning. `SetFeatures` takes explicit feature names; there is
+    no wildcard.
   - A namespace cannot be reused by different module names in one context;
     namespace collisions fail loading with `CAMBIUM_E0001`.
   - Conflicting duplicate loads of the same module name plus revision fail with
@@ -322,6 +346,14 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     list-entry order with keys first in key-statement order. These profiles are
     schema/YANG concepts, not target-generator concepts, and each materializes an
     ordered list from Cambium's IR.
+  - No traversal profile filters state. `SchemaChildren.ConfigOnly()` keeps the
+    children whose effective config is true (inherited `config false`
+    included), preserving order, and `ProjectionOptions.ConfigOnly` applies the
+    same filter to projections; `DefaultProjectionOptions()` does not set it.
+    Under `ConfigOnly`, a config-false selection yields an empty projection
+    without error, while an unresolvable selection path is still an error.
+  - Leafref paths resolve over the data tree: `..` moves to the nearest data
+    ancestor and named steps look through choice and case nodes.
   - Bindings expose a versioned ordered schema projection for downstream schema
     consumers. The projection includes modules, schema nodes, local paths,
     module-qualified paths, namespace-expanded paths, ordered structural
@@ -525,6 +557,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     `SchemaNodeRef.TypeDefaultValue()` returns the inherited typedef default
     value, if the node's type chain defines one, without treating an explicit
     leaf or leaf-list default as a type default.
+  - `SchemaNodeRef.DefaultEntries()` carries each effective default with its
+    source module and `Origin()`: `node` (the node's own `default`), `typedef`
+    (inherited from the type chain), `refine`, or `deviation`. An explicit empty
+    string, `false`, or `0` default is present; absence is reported as no entry.
   - Illegal defaults fail schema/context construction with `CAMBIUM_E0001`:
     defaults are valid only on leaf, leaf-list, and choice nodes; leaves may not
     have multiple defaults, leaf-list default values may not be duplicated,
@@ -1167,8 +1203,38 @@ Cambium does not define a gNMI client, RPC, transport, or protobuf envelope.
 ### `cambium-ir`
 
 `go/cambium/schema_ir.go` defines the projection version string
-`cambium.schema-ir.v1`; `go/cmd/cambium-ir` emits that projection as JSON. For
-v1, the documented object layout is stable for `version`, `modules`, optional
+`cambium.schema-ir.v1`; `go/cmd/cambium-ir` emits that projection as JSON by
+default. The v1 shape embeds full copies of each node's `children`,
+`data_children`, and `list_keys` subtrees, so its size can grow exponentially
+with schema depth. `cambium-ir` therefore refuses a v1 document that would
+exceed `-max-records` node records (default 1,048,576) and exits 1 with a
+`resource_limit` diagnostic; `Context.SchemaIRWithLimit` is the Go form and
+`Context.SchemaIRStats` measures the size without materializing it. The count
+saturates at the largest `uint64`, and no limit admits a saturated count.
+
+`-format v2` emits `cambium.schema-ir.v2`
+(`go/cambium/schema_ir_table.go`, [ADR 0006](../docs/adr/0006-bounded-schemair-table.md)):
+a node table in which every schema node appears once, in pre-order of the
+structural walk over modules in context load order. Stable v2 fields are
+`version`, `modules` (the v1 module fields with `children` as node ids),
+`nodes`, and optional `errors`. Each node carries `id` (its index in `nodes`),
+`parent` (the structural parent id, or `-1` at module top level), the v1 node
+name/kind/path/type/default/config/constraint/source/provenance fields, and
+`children`, `data_children`, and `list_keys` as ordered id arrays with v1
+ordering semantics. Record count equals unique schema nodes and reference count
+equals view relationships; only absolute path strings grow with depth. The
+same v1 compatibility policy applies to v2.
+
+Both JSON versions are value projections with a deliberately narrow per-node
+contract. They carry the base type name only, defaults and must/when as
+expression strings, and deviation records without description or source
+location. Typedef chains, restrictions, union members, enum/bit values,
+presence, ordering, cardinality, description, units, status, extensions,
+constraint error metadata, and XPath prefix context are available only through
+the native Go handles (`SchemaIRNode.Ref` / `SchemaIRTableNode.Ref`). Native
+consumers never need a JSON round trip.
+
+For v1, the documented object layout is stable for `version`, `modules`, optional
 `errors`, module identity/import/include fields, ordered node path/name/kind
 fields, type/default/config/constraint fields, source location, and provenance.
 Future v1 output may add fields or enum/string values without changing existing
@@ -1182,7 +1248,7 @@ requires a new version string.
   invalidating mutation — a Go runtime check; a binding with compile-time borrow checking may catch it statically).
 - `ValidationErrors` is a **list**; `error-app-tag`, `data_path`, `schema_path`, and `validation_code`
   are informational sub-fields under the stable top-level code (no renumbering).
-- `SchemaIR` — versioned value projection; callers must inspect `Errors` after rebuild (`go/cambium/schema_ir.go`).
+- `SchemaIR` / `SchemaIRTable` — versioned value projections; callers must inspect `Errors` after rebuild (`go/cambium/schema_ir.go`, `go/cambium/schema_ir_table.go`). `SchemaIRWithLimit` fails with a `resource_limit` diagnostic before materializing an oversized v1 projection.
 - `ErrContextClosed` — returned by libyangbackend operations after `Context.Close` (`go/internal/libyang/libyang.go`).
 - The same failure yields the **same rule code across bindings** — a conformance assertion.
 

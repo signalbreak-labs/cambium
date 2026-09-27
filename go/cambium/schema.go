@@ -985,6 +985,15 @@ func (d Deviation) IfFeatures() []string {
 	return append([]string(nil), d.ifFeatures...)
 }
 
+// Applied reports whether the deviation changed the effective schema. It is
+// false only for a not-supported deviation kept by
+// DeviationPolicy.IgnoreNotSupported.
+func (d Deviation) Applied() bool { return !d.ignored }
+
+// SourceLocation returns the location of the deviate statement, or of the
+// deviated property statement when the deviate targets one.
+func (d Deviation) SourceLocation() SourceLocation { return sourceLocation(d.source) }
+
 // Import is a value type for module import metadata.
 type Import struct {
 	Prefix   string
@@ -1103,8 +1112,21 @@ type submoduleData struct {
 	stmt *yangparse.Statement
 }
 
+// featureExcludedName identifies a schema child the enabled feature set
+// excluded: its local name and the module whose namespace it would have had.
+type featureExcludedName struct {
+	module *moduleData
+	name   string
+}
+
 type schemaNodeData struct {
-	name                string
+	name string
+	// featureExcluded holds the schema children whose declaring statement
+	// (or the uses or augment that would instantiate them) was dropped by the
+	// enabled feature set. It lets augment/deviation resolution tell a target
+	// excluded by feature policy apart from a typo or missing dependency. It
+	// is a lookup list only, never a traversal source.
+	featureExcluded     []featureExcludedName
 	kind                SchemaNodeKind
 	module              *moduleData
 	sourceModule        *moduleData
@@ -2096,6 +2118,24 @@ func (m *moduleData) recordVendorCompatibleWarning(source *yangparse.Statement, 
 	}})
 }
 
+// recordOmittedContentWarning records a vendor-compatible relaxation that drops
+// declared schema content, so callers can detect an incomplete schema through
+// LoadReport.OmittedContent.
+func (m *moduleData) recordOmittedContentWarning(source *yangparse.Statement, format string, args ...any) {
+	if m == nil || m.ctx == nil {
+		return
+	}
+	message := fmt.Sprintf(format, args...)
+	m.ctx.addLoadWarnings([]Diagnostic{{
+		Kind:       DiagnosticOmittedSchemaContent,
+		Code:       RuleCodeContext,
+		Message:    message,
+		Module:     m.name,
+		Source:     sourceLocation(source),
+		Underlying: fmt.Errorf("%s", message),
+	}})
+}
+
 func (n *schemaNodeData) recordVendorCompatibleWarning(source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) {
 	mod := (*moduleData)(nil)
 	if n != nil {
@@ -2110,6 +2150,7 @@ func (n *schemaNodeData) recordVendorCompatibleWarning(source *yangparse.Stateme
 func (m *moduleData) buildIR() {
 	for _, st := range m.sourceTopStatements() {
 		if !m.featureIncluded(st) {
+			m.recordFeatureExcluded(m.root, st, m)
 			continue
 		}
 		switch {
@@ -2248,6 +2289,7 @@ func (m *moduleData) buildChildrenSeen(st *yangparse.Statement, parent *schemaNo
 	var out []*schemaNodeData
 	for _, child := range st.SubStatements() {
 		if !m.featureIncluded(child) {
+			m.recordFeatureExcluded(parent, child, owner)
 			continue
 		}
 		switch {
@@ -2273,6 +2315,7 @@ func (m *moduleData) buildChoiceSeen(st *yangparse.Statement, parent *schemaNode
 	var children []*schemaNodeData
 	for _, child := range st.SubStatements() {
 		if !m.featureIncluded(child) {
+			m.recordFeatureExcluded(n, child, owner)
 			continue
 		}
 		switch {
@@ -2303,6 +2346,51 @@ func (m *moduleData) buildChoiceSeen(st *yangparse.Statement, parent *schemaNode
 	n.children = children
 	propagateChoiceCaseWhens(n)
 	return n
+}
+
+// recordFeatureExcluded notes, on parent, the schema nodes that st would have
+// contributed in owner's namespace had its if-feature condition held. A
+// disabled uses records the nodes its grouping would instantiate, following
+// nested uses.
+func (m *moduleData) recordFeatureExcluded(parent *schemaNodeData, st *yangparse.Statement, owner *moduleData) {
+	if parent == nil || st == nil {
+		return
+	}
+	m.collectFeatureExcludedNames(parent, st, owner, make(map[*yangparse.Statement]bool))
+}
+
+// recordFeatureExcludedAugment notes the content of a feature-disabled augment
+// on its target, when the target resolves, so that paths into that content
+// are recognized as feature exclusions.
+func (m *moduleData) recordFeatureExcludedAugment(target *schemaNodeData, aug *yangparse.Statement, owner *moduleData) {
+	if target == nil || aug == nil {
+		return
+	}
+	for _, child := range aug.SubStatements() {
+		m.recordFeatureExcluded(target, child, owner)
+	}
+}
+
+func (m *moduleData) collectFeatureExcludedNames(parent *schemaNodeData, st *yangparse.Statement, owner *moduleData, seen map[*yangparse.Statement]bool) {
+	switch {
+	case st.Keyword == "uses":
+		groupMod, group := m.findGroupingFrom(st.Argument, st)
+		if group == nil || seen[group] {
+			return
+		}
+		seen[group] = true
+		for _, child := range group.SubStatements() {
+			groupMod.collectFeatureExcludedNames(parent, child, owner, seen)
+		}
+	case isSchemaChildKeyword(st.Keyword), st.Keyword == "case", st.Keyword == "rpc", st.Keyword == "notification", st.Keyword == "input", st.Keyword == "output":
+		name := featureExcludedName{module: owner, name: st.Argument}
+		for _, existing := range parent.featureExcluded {
+			if existing == name {
+				return
+			}
+		}
+		parent.featureExcluded = append(parent.featureExcluded, name)
+	}
 }
 
 func validateUsesParent(uses *yangparse.Statement, parent *schemaNodeData) error {
@@ -2359,6 +2447,7 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 	}
 	for _, aug := range direct(uses, "augment") {
 		if !m.featureIncluded(aug) {
+			m.recordFeatureExcludedAugment(findRelativeSchemaNode(m, children, strings.Split(aug.Argument, "/"), aug), aug, owner)
 			continue
 		}
 		if err := validateDescendantSchemaNodeIDStatement("augment", aug, m.yangVersionForStatement(aug) == "1.1"); err != nil {
@@ -3362,6 +3451,50 @@ func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string
 	return mod, node
 }
 
+// findDisabledAugmentTarget resolves a feature-disabled augment's target the
+// way an enabled augment would, without recording diagnostics: the augment
+// contributes nothing, so its path must not add warnings to the load report.
+func (c *Context) findDisabledAugmentTarget(source *moduleData, aug *yangparse.Statement) *schemaNodeData {
+	if c == nil || source == nil || aug == nil {
+		return nil
+	}
+	_, node, _, _ := c.findNodeBySchemaPathDetail(source, aug.Argument, true, aug)
+	if node == nil && c.validationMode == ValidationVendorCompatible {
+		_, node, _ = c.findNodeByVendorCompatibleSchemaPath(source, aug.Argument, aug)
+	}
+	return node
+}
+
+// featureExcludedSchemaPathStep reports whether an unresolved absolute schema
+// path fails at a step the enabled feature set excluded, returning that step's
+// local name. Paths that fail at an undeclared name, or under an unresolvable
+// module prefix, are not feature exclusions.
+func (c *Context) featureExcludedSchemaPathStep(source *moduleData, path string, fromStmt *yangparse.Statement) (string, bool) {
+	if c == nil || source == nil {
+		return "", false
+	}
+	mod, node, segment, from := c.findNodeBySchemaPathDetail(source, path, true, fromStmt)
+	if mod == nil || node != nil || from == nil || segment == "" {
+		return "", false
+	}
+	qname := pathStepQName(segment)
+	name := localName(qname)
+	// Match the step the way path resolution does: a prefixed step names one
+	// module's node, an unprefixed step matches by local name.
+	var want *moduleData
+	if hasPrefix(qname) {
+		if want = source.resolveSourceQNameModuleFrom(qname, fromStmt); want == nil {
+			return "", false
+		}
+	}
+	for _, excluded := range from.featureExcluded {
+		if excluded.name == name && (want == nil || excluded.module == want) {
+			return name, true
+		}
+	}
+	return "", false
+}
+
 func (c *Context) findNodeByVendorCompatibleSchemaPath(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData, string) {
 	if c == nil || source == nil || !strings.HasPrefix(path, "/") {
 		return nil, nil, ""
@@ -3913,10 +4046,43 @@ func (i Identity) Derived() []Identity {
 type DefaultValue struct {
 	value        string
 	sourceModule *moduleData
+	origin       DefaultOrigin
+}
+
+// DefaultOrigin names the statement that supplied an effective default.
+type DefaultOrigin uint8
+
+const (
+	// DefaultOriginNode is a default statement on the leaf or leaf-list itself.
+	DefaultOriginNode DefaultOrigin = iota
+	// DefaultOriginTypedef is a default inherited from the node's typedef chain.
+	DefaultOriginTypedef
+	// DefaultOriginRefine is a default set by a uses refine.
+	DefaultOriginRefine
+	// DefaultOriginDeviation is a default added or replaced by a deviation.
+	DefaultOriginDeviation
+)
+
+// String returns a stable lowercase name for the origin.
+func (o DefaultOrigin) String() string {
+	switch o {
+	case DefaultOriginTypedef:
+		return "typedef"
+	case DefaultOriginRefine:
+		return "refine"
+	case DefaultOriginDeviation:
+		return "deviation"
+	default:
+		return "node"
+	}
 }
 
 // Value returns the lexical default value.
 func (d DefaultValue) Value() string { return d.value }
+
+// Origin reports which statement supplied the default, so an explicit node
+// default can be told apart from one inherited from a typedef.
+func (d DefaultValue) Origin() DefaultOrigin { return d.origin }
 
 // SourceModule returns the module whose statement supplied the default.
 func (d DefaultValue) SourceModule() Module {

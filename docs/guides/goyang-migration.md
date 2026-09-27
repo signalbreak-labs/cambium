@@ -14,10 +14,14 @@ Package `compat` remains a cgo-free, goyang-shaped schema projection in the
 existing goyang call sites with minimal edits. `compat` mirrors the surface of
 goyang's `pkg/yang` — the `Entry` tree, the `Modules` loader, `ToEntry`, the
 `Node` AST, `YangType` — but the projection is **read-only**: a view into a
-Cambium-built ordered schema, not a mutable tree builder. There is exactly one
-behavioral difference to plan for, and it is the reason the package exists:
-ordered traversal goes through `Entry.Children()` (schema declaration order)
-rather than iterating the `Entry.Dir` map.
+Cambium-built ordered schema, not a mutable tree builder. The headline
+behavioral difference, and the reason the package exists, is that ordered
+traversal goes through `Entry.Children()` (schema declaration order) rather
+than iterating the `Entry.Dir` map. It is not the only one: compat projects
+Cambium's *effective* schema, so feature, deviation, and validation semantics
+follow Cambium, not goyang (see
+[Semantic differences](#semantic-differences-beyond-ordering)). Arbitrary goyang
+users are not drop-in compatible.
 
 The godoc is the API authority. This guide explains the shape and the one
 migration step; for the exact, current symbol set see
@@ -379,6 +383,35 @@ a symbol there before relying on it.
   tiers (see the glossary and overview for the tier split).
 - **No NETCONF / Terraform / gNMI surface.** Those are out of scope for Cambium as
   a whole; `compat` does not add them.
+
+## Semantic differences beyond ordering
+
+- **Features.** goyang keeps every `if-feature`-guarded declaration. compat
+  projects Cambium's effective schema with no features enabled, the native
+  default, so a leaf guarded by `if-feature opt` is absent and one guarded by
+  `if-feature "not opt"` is present. No compat option selects features, and no
+  other option changes feature visibility. Enabling every feature would not
+  recover goyang's view either, because `not` expressions then exclude
+  declarations. To choose features, load through the native `ContextBuilder`
+  (`SetFeatures` takes explicit names; there is no wildcard) and project with
+  `FromModule`. For raw declaration discovery, walk `ParseStatements` output;
+  that is source text, not a compiled schema.
+- **Deviations.** `DeviateOptions.IgnoreDeviateNotSupported` maps to
+  `cambium.DeviationPolicy{IgnoreNotSupported: true}`: the deviation module
+  loads, add/replace/delete effects apply, and nodes targeted by `deviate
+  not-supported` stay, before any reference is validated. With the option
+  false, the removal applies and a reference to the removed node fails
+  `Process()`. Neither value changes augment order or feature visibility.
+  To apply none of a module's deviations, do not load that module.
+- **Validation.** `Process()` uses Cambium's strict loader. Schemas goyang
+  accepted, such as an augment with a mistyped target or a pattern using a
+  non-XSD escape like `\x41`, fail with structured diagnostics.
+- **Name collisions.** `Entry.Dir` is keyed by local name, so two augmenting
+  modules that each add `status` to one container cannot both live in `Dir`.
+  `Entry.Children()` keeps both in order; use the native
+  `SchemaChildren.LookupQualified` for identity.
+- **`IgnoreSubmoduleCircularDependencies`** is accepted and has no effect.
+  Cambium tolerates submodule include cycles whatever its value.
 
 ## Practical migration path
 

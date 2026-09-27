@@ -17,7 +17,13 @@ lands rather than adding another dated file.
   is a thin vendored raw-statement lexer, kept out of the default cgo-free closure.
   The IR is exportable as versioned JSON (`cambium.schema-ir.v1`) via the pure-Go
   `cmd/cambium-ir` CLI, with rebuild failures carried in-band
-  ([ADR 0002](../adr/0002-versioned-schemair-export.md)).
+  ([ADR 0002](../adr/0002-versioned-schemair-export.md)); the bounded
+  `cambium.schema-ir.v2` node table serves deep schemas without v1's
+  exponential nesting ([ADR 0006](../adr/0006-bounded-schemair-table.md)).
+  The native handles cover the
+  [downstream schema consumer](../guides/downstream-schema-consumers.md)
+  contract: explicit feature, deviation, and validation policies, completeness
+  reporting, ordered config-only traversal, and qualified identity.
 - **libyang backend tier** (`libyangbackend`, `internal/libyang`) — the complete
   RFC-7950 data engine over a vendored, statically linked libyang: parse, full
   semantic validation, serialize, diff, merge, and LYB. The backend-tier `gnmi`
@@ -64,6 +70,13 @@ lands rather than adding another dated file.
 
 ## Not built yet
 
+- **Richer SchemaIR JSON metadata.** Both export versions carry a narrow
+  per-node contract (base type name, expression strings); typedef chains,
+  restrictions, enum/bit values, cardinality, and extensions are available only
+  through the Go handles. Widening the JSON is an additive change under the
+  ADR 0002 policy. Related schema gaps: `Build` accepts leafref cycles (the
+  chain helper reports them), length bounds stay lexical, and `must`/`when`
+  carry no source location.
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
   none exists today. The enabling step has landed: the corpus is published as a

@@ -89,3 +89,16 @@ func listEntryChildren(n SchemaNodeRef) SchemaChildren {
 	}
 	return SchemaChildren{nodes: out}
 }
+
+// ConfigOnly returns the children whose effective config is true, preserving
+// order. Effective config includes config false inherited from an ancestor.
+// No traversal profile filters state on its own; call this explicitly.
+func (c SchemaChildren) ConfigOnly() SchemaChildren {
+	out := SchemaChildren{nodes: make([]SchemaNodeRef, 0, len(c.nodes))}
+	for _, node := range c.nodes {
+		if node.Config() != ConfigRo {
+			out.nodes = append(out.nodes, node)
+		}
+	}
+	return out
+}

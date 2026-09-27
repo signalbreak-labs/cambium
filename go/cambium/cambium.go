@@ -122,6 +122,16 @@ const (
 	ValidationVendorCompatible
 )
 
+// DeviationPolicy selects how loaded deviation modules change the effective
+// schema. The zero value applies every deviation. Not loading a deviation module
+// at all is the way to apply none of its effects; IgnoreNotSupported loads the
+// module and applies its add/replace/delete effects while keeping nodes that
+// "deviate not-supported" would remove. The policy is applied while deviations
+// are collected, before any static schema reference is validated.
+type DeviationPolicy struct {
+	IgnoreNotSupported bool
+}
+
 func validValidationMode(mode ValidationMode) bool {
 	return mode == ValidationStrict || mode == ValidationVendorCompatible
 }
@@ -195,6 +205,19 @@ func (b *ContextBuilder) SetValidationMode(mode ValidationMode) error {
 		return wrap("context builder", fmt.Errorf("invalid validation mode %d", mode))
 	}
 	b.ctx.validationMode = mode
+	return nil
+}
+
+// SetDeviationPolicy selects the deviation policy for this builder. The default
+// applies every deviation of every loaded module.
+func (b *ContextBuilder) SetDeviationPolicy(policy DeviationPolicy) error {
+	if err := b.ensureMutable(); err != nil {
+		return err
+	}
+	if b.ctx.deviationPolicy != policy {
+		b.ctx.deviationPolicy = policy
+		b.ctx.dirty = true
+	}
 	return nil
 }
 
@@ -275,6 +298,7 @@ type Context struct {
 	refImplemented  bool
 	searchCwd       bool
 	validationMode  ValidationMode
+	deviationPolicy DeviationPolicy
 	loadWarnings    []Diagnostic
 	dirty           bool
 	frozen          bool

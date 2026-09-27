@@ -553,7 +553,7 @@ func (m *moduleData) typedefDefaultEntryFromSeen(qname string, from *yangparse.S
 	seen[td] = true
 	defer delete(seen, td)
 	if d := first(td, "default"); d != nil {
-		return DefaultValue{value: d.Argument, sourceModule: tdMod}, true
+		return DefaultValue{value: d.Argument, sourceModule: tdMod, origin: DefaultOriginTypedef}, true
 	}
 	if typ := first(td, "type"); typ != nil {
 		return tdMod.typedefDefaultEntryFromSeen(typ.Argument, typ, seen)
@@ -578,6 +578,10 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	} else {
 		target = findRelativeSchemaPathWithSeen(n, source, lr.path, lr.sourceStmt, seen)
 	}
+	if target == nil {
+		// A leafref path is a data path: choice and case nodes are not steps.
+		target = findLeafrefDataPath(n, source, lr.path, lr.sourceStmt)
+	}
 	if target == nil || target.typeInfo == nil {
 		return
 	}
@@ -585,6 +589,83 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	lr.target = &ref
 	rt := cloneTypeInfo(*target.typeInfo)
 	lr.realtype = &rt
+}
+
+// findLeafrefDataPath resolves a leafref path over the data tree, where ".."
+// moves to the nearest data-node ancestor and each named step matches a data
+// child, looking through choice and case nodes. It does not follow deref().
+func findLeafrefDataPath(start *schemaNodeData, source *moduleData, path string, fromStmt *yangparse.Statement) *schemaNodeData {
+	if start == nil || source == nil || source.ctx == nil {
+		return nil
+	}
+	parts := splitPath(path)
+	cur := start
+	if strings.HasPrefix(path, "/") {
+		if len(parts) == 0 {
+			return nil
+		}
+		first := pathStepQName(parts[0])
+		root := source
+		if hasPrefix(first) {
+			root = source.resolveSourceQNameModuleFrom(first, fromStmt)
+		}
+		if root == nil {
+			return nil
+		}
+		cur = root.root
+	}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			cur = dataParentNode(cur)
+			if cur == nil {
+				return nil
+			}
+			continue
+		}
+		if _, ok := derefArgument(part); ok {
+			return nil
+		}
+		qname := pathStepQName(part)
+		var wantModule *moduleData
+		if hasPrefix(qname) {
+			if wantModule = source.resolveSourceQNameModuleFrom(qname, fromStmt); wantModule == nil {
+				return nil
+			}
+		}
+		cur = dataChildNode(cur, localName(qname), wantModule)
+		if cur == nil {
+			return nil
+		}
+	}
+	return cur
+}
+
+func dataParentNode(n *schemaNodeData) *schemaNodeData {
+	for p := n.parent; p != nil; p = p.parent {
+		if p.kind != SchemaNodeKindChoice && p.kind != SchemaNodeKindCase {
+			return p
+		}
+	}
+	return nil
+}
+
+func dataChildNode(parent *schemaNodeData, name string, module *moduleData) *schemaNodeData {
+	for _, child := range parent.children {
+		if child.kind == SchemaNodeKindChoice || child.kind == SchemaNodeKindCase {
+			if found := dataChildNode(child, name, module); found != nil {
+				return found
+			}
+			continue
+		}
+		if child.name == name && (module == nil || child.module == module) {
+			return child
+		}
+	}
+	return nil
 }
 
 func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Statement, base BaseType) (ResolvedType, error) {

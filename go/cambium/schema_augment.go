@@ -14,6 +14,8 @@ import (
 type Deviation struct {
 	targetPath, sourceModule, devType, property, newValue, description, reference string
 	ifFeatures                                                                    []string
+	source                                                                        *yangparse.Statement
+	ignored                                                                       bool
 }
 
 func (m *moduleData) applyUsesAugment(aug *yangparse.Statement, roots []*schemaNodeData, owner *moduleData, groupingStack map[*yangparse.Statement]bool, groupOrigin string) bool {
@@ -35,7 +37,7 @@ func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statem
 		return
 	}
 	if len(defaults) == 1 {
-		n.defaults = []DefaultValue{{value: defaults[0].Argument, sourceModule: source}}
+		n.defaults = []DefaultValue{{value: defaults[0].Argument, sourceModule: source, origin: DefaultOriginRefine}}
 	}
 	if description := n.singletonProperty(refine, "description"); description != nil && n.textMetadataPropertyAllowed(description) {
 		n.description = description.Argument
@@ -55,7 +57,11 @@ func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statem
 
 func (m *moduleData) applyAugments() {
 	for _, aug := range m.sourceTopStatements() {
-		if aug.Keyword != "augment" || !m.featureIncluded(aug) {
+		if aug.Keyword != "augment" {
+			continue
+		}
+		if !m.featureIncluded(aug) {
+			m.recordFeatureExcludedAugment(m.ctx.findDisabledAugmentTarget(m, aug), aug, m)
 			continue
 		}
 		if err := validateAbsoluteSchemaNodeIDStatement("augment", aug, m.yangVersionForStatement(aug) == "1.1"); err != nil {
@@ -64,11 +70,18 @@ func (m *moduleData) applyAugments() {
 		}
 		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, aug.Argument, aug)
 		if target == nil || targetMod == nil {
-			if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
-				m.recordVendorCompatibleWarning(aug, nil, "augment %q target not found at %s; skipped in vendor-compatible mode", aug.Argument, aug.Location())
+			excluded, ok := m.ctx.featureExcludedSchemaPathStep(m, aug.Argument, aug)
+			if !ok {
+				// A typo or missing dependency is never relaxed: the schema
+				// would silently lose the augment's content.
+				m.recordSchemaError(fmt.Errorf("augment %q target not found at %s", aug.Argument, aug.Location()))
 				continue
 			}
-			m.recordSchemaError(fmt.Errorf("augment %q target not found at %s", aug.Argument, aug.Location()))
+			if m.ctx.validationMode == ValidationVendorCompatible {
+				m.recordOmittedContentWarning(aug, "augment %q target not found at %s: target node %q is excluded by feature policy; augment skipped in vendor-compatible mode", aug.Argument, aug.Location(), excluded)
+				continue
+			}
+			m.recordSchemaError(fmt.Errorf("augment %q target not found at %s: target node %q is excluded by feature policy", aug.Argument, aug.Location(), excluded))
 			continue
 		}
 		if m.implemented {
@@ -221,7 +234,18 @@ func (m *moduleData) collectDeviations() {
 		m.ctx.markImplemented(m)
 		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, dev.Argument, dev)
 		if targetMod == nil || target == nil {
-			m.recordSchemaError(fmt.Errorf("deviation %q target not found at %s", dev.Argument, dev.Location()))
+			excluded, ok := m.ctx.featureExcludedSchemaPathStep(m, dev.Argument, dev)
+			if !ok {
+				m.recordSchemaError(fmt.Errorf("deviation %q target not found at %s", dev.Argument, dev.Location()))
+				continue
+			}
+			if m.ctx.validationMode == ValidationVendorCompatible {
+				// The target is absent from the effective schema, so the
+				// deviation has nothing to change; no declared content is lost.
+				m.recordVendorCompatibleWarning(dev, nil, "deviation %q target not found at %s: target node %q is excluded by feature policy; deviation skipped in vendor-compatible mode", dev.Argument, dev.Location(), excluded)
+				continue
+			}
+			m.recordSchemaError(fmt.Errorf("deviation %q target not found at %s: target node %q is excluded by feature policy", dev.Argument, dev.Location(), excluded))
 			continue
 		}
 		if m.implemented {
@@ -253,10 +277,17 @@ func (m *moduleData) collectDeviations() {
 				if len(d.SubStatements()) != 0 && d.Argument != "not-supported" {
 					continue
 				}
-				one := Deviation{targetPath: dev.Argument, sourceModule: m.name, devType: d.Argument, description: desc, reference: ref, ifFeatures: ifFeatureArgs(dev)}
+				one := Deviation{targetPath: dev.Argument, sourceModule: m.name, devType: d.Argument, description: desc, reference: ref, ifFeatures: ifFeatureArgs(dev), source: d}
+				// Policy is decided here, before any static reference is
+				// validated, so an ignored removal never breaks the schema.
+				if d.Argument == "not-supported" && m.ctx.deviationPolicy.IgnoreNotSupported {
+					one.ignored = true
+				}
 				m.deviations = append(m.deviations, one)
 				target.devs = append(target.devs, one)
-				m.applyDeviation(targetMod, target, d.Argument, nil)
+				if !one.ignored {
+					m.applyDeviation(targetMod, target, d.Argument, nil)
+				}
 				continue
 			}
 			for _, prop := range props {
@@ -269,6 +300,7 @@ func (m *moduleData) collectDeviations() {
 					description:  desc,
 					reference:    ref,
 					ifFeatures:   ifFeatureArgs(dev),
+					source:       prop,
 				}
 				m.deviations = append(m.deviations, one)
 				target.devs = append(target.devs, one)
@@ -315,7 +347,7 @@ func (m *moduleData) addDeviationProperty(target *schemaNodeData, prop *yangpars
 			target.recordSchemaError(fmt.Errorf("deviate add default %q for %q already exists at %s", prop.Argument, target.name, prop.Location()))
 			return
 		}
-		target.defaults = append(target.defaults, DefaultValue{value: prop.Argument, sourceModule: m})
+		target.defaults = append(target.defaults, DefaultValue{value: prop.Argument, sourceModule: m, origin: DefaultOriginDeviation})
 	case "units":
 		if !target.unitsPropertyAllowed(prop) {
 			return
@@ -369,7 +401,7 @@ func (m *moduleData) replaceDeviationProperty(target *schemaNodeData, prop *yang
 			target.recordSchemaError(fmt.Errorf("deviate replace default for %q has no existing default at %s", target.name, prop.Location()))
 			return
 		}
-		target.defaults = []DefaultValue{{value: prop.Argument, sourceModule: m}}
+		target.defaults = []DefaultValue{{value: prop.Argument, sourceModule: m, origin: DefaultOriginDeviation}}
 	case "units":
 		if !target.unitsPropertyAllowed(prop) {
 			return
@@ -546,7 +578,9 @@ func (m Module) Deviations() []Deviation {
 	return append([]Deviation(nil), m.mod.deviations...)
 }
 
-// DeviationProvenance returns the deviations applied to this node, in apply order.
+// DeviationProvenance returns the deviations targeting this node, in apply
+// order. A not-supported deviation kept by DeviationPolicy.IgnoreNotSupported
+// is listed with Applied() == false.
 func (n SchemaNodeRef) DeviationProvenance() []Deviation {
 	if n.node == nil {
 		return nil

@@ -63,6 +63,14 @@ type ProjectionOptions struct {
 	// IgnoreInvalidFilters skips unresolved allow/ignore paths. The default is
 	// strict: invalid filters are returned as errors.
 	IgnoreInvalidFilters bool
+
+	// ConfigOnly drops nodes whose effective config is false (Config() ==
+	// ConfigRo), including inherited config false, and their subtrees. It wins
+	// over ProtectMandatory. A selected target that is itself config false
+	// contributes nothing, so the projection can be empty without error; an
+	// unresolvable selection path is still an error. DefaultProjectionOptions
+	// does not set it.
+	ConfigOnly bool
 }
 
 // DefaultProjectionOptions returns the payload-oriented defaults most callers
@@ -174,6 +182,9 @@ func ProjectSchemaPaths(mod Module, paths []string, opts ProjectionOptions) (Pro
 			return Projection{}, wrap("schema projection", fmt.Errorf("selected path %q is not a data node", path))
 		}
 		filters, err := projectionFiltersFor(target, opts)
+		if err == nil && opts.ConfigOnly && target.Config() == ConfigRo {
+			continue
+		}
 		if err != nil {
 			return Projection{}, wrap("schema projection", err)
 		}
@@ -365,6 +376,9 @@ func includeProjectionDescendants(parent *projectionBuildNode, current SchemaNod
 }
 
 func projectionChildInclusion(node SchemaNodeRef, filters projectionFilters, opts ProjectionOptions) (bool, ProjectionRole) {
+	if opts.ConfigOnly && node.Config() == ConfigRo {
+		return false, 0
+	}
 	ignored := filters.ignored(node)
 	allowed := filters.allowed(node)
 	protectedMandatory := projectionProtectsMandatory(node, filters, opts)
@@ -389,6 +403,9 @@ func projectionChildInclusion(node SchemaNodeRef, filters projectionFilters, opt
 }
 
 func projectionHasIncludedDescendant(node SchemaNodeRef, filters projectionFilters, opts ProjectionOptions) bool {
+	if opts.ConfigOnly && node.Config() == ConfigRo {
+		return false
+	}
 	for child := range node.DataChildren(opts.FlattenChoices).Iter() {
 		if include, _ := projectionChildInclusion(child, filters, opts); include {
 			return true

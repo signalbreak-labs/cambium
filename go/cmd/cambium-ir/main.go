@@ -26,11 +26,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	fs.Var(&searches, "search", "module search path; may be repeated")
 	fs.Var(&features, "feature", "enable features as module=feature[,feature]; may be repeated")
+	format := fs.String("format", "v1", "projection to emit: v1 (nested "+cambium.SchemaIRVersion+") or v2 (bounded node table "+cambium.SchemaIRTableVersion+")")
+	maxRecords := fs.Uint64("max-records", defaultMaxV1Records, "v1 only: refuse to emit when the nested projection would exceed this many node records")
 	fs.Usage = func() {
-		writef(stderr, "usage: cambium-ir [-search DIR] [-feature module=a,b] MODULE [MODULE...]\n")
+		writef(stderr, "usage: cambium-ir [-search DIR] [-feature module=a,b] [-format v1|v2] [-max-records N] MODULE [MODULE...]\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *format != "v1" && *format != "v2" {
+		writef(stderr, "error: -format must be v1 or v2, got %q\n", *format)
 		return 2
 	}
 	modules := fs.Args()
@@ -75,14 +81,29 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	defer ctx.Close()
 
+	var doc any
+	if *format == "v2" {
+		doc = exportSchemaIRTable(ctx.SchemaIRTable())
+	} else {
+		ir, err := ctx.SchemaIRWithLimit(*maxRecords)
+		if err != nil {
+			writef(stderr, "error: %v\n", err)
+			return 1
+		}
+		doc = exportSchemaIR(ir)
+	}
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(exportSchemaIR(ctx.SchemaIR())); err != nil {
+	if err := enc.Encode(doc); err != nil {
 		writef(stderr, "error: %v\n", err)
 		return 1
 	}
 	return 0
 }
+
+// defaultMaxV1Records bounds the nested v1 projection, whose size can grow
+// exponentially with schema depth.
+const defaultMaxV1Records = 1 << 20
 
 func writef(w io.Writer, format string, args ...any) {
 	_, _ = fmt.Fprintf(w, format, args...)
@@ -247,6 +268,115 @@ func exportSchemaIRNodes(nodes []cambium.SchemaIRNode) []exportNode {
 	out := make([]exportNode, 0, len(nodes))
 	for _, node := range nodes {
 		out = append(out, exportSchemaIRNode(node))
+	}
+	return out
+}
+
+type exportTable struct {
+	Version string              `json:"version"`
+	Modules []exportTableModule `json:"modules"`
+	Nodes   []exportTableNode   `json:"nodes"`
+	Errors  []exportDiagnostic  `json:"errors,omitempty"`
+}
+
+type exportTableModule struct {
+	Name        string          `json:"name"`
+	Namespace   string          `json:"namespace"`
+	Prefix      string          `json:"prefix"`
+	Revision    string          `json:"revision,omitempty"`
+	Implemented bool            `json:"implemented"`
+	Source      exportSource    `json:"source"`
+	Imports     []exportImport  `json:"imports,omitempty"`
+	Includes    []exportInclude `json:"includes,omitempty"`
+	Children    []int           `json:"children,omitempty"`
+}
+
+// exportTableNode carries the v1 node fields with views as node IDs. parent is
+// -1 at module top level.
+type exportTableNode struct {
+	ID                     int                 `json:"id"`
+	Parent                 int                 `json:"parent"`
+	Name                   string              `json:"name"`
+	Kind                   string              `json:"kind"`
+	LocalPath              string              `json:"local_path"`
+	QualifiedPath          string              `json:"qualified_path"`
+	NamespaceQualifiedPath string              `json:"namespace_qualified_path"`
+	QualifiedName          exportQualifiedName `json:"qualified_name"`
+	Children               []int               `json:"children,omitempty"`
+	DataChildren           []int               `json:"data_children,omitempty"`
+	ListKeys               []int               `json:"list_keys,omitempty"`
+	KeyNames               []string            `json:"key_names,omitempty"`
+	Type                   *exportType         `json:"type,omitempty"`
+	Defaults               []string            `json:"defaults,omitempty"`
+	Config                 string              `json:"config"`
+	Mandatory              bool                `json:"mandatory,omitempty"`
+	ReadOnly               bool                `json:"read_only,omitempty"`
+	Musts                  []string            `json:"musts,omitempty"`
+	Whens                  []string            `json:"whens,omitempty"`
+	Uniques                [][]string          `json:"uniques,omitempty"`
+	Source                 exportSource        `json:"source"`
+	Provenance             exportProvenance    `json:"provenance"`
+}
+
+func exportSchemaIRTable(table cambium.SchemaIRTable) exportTable {
+	out := exportTable{
+		Version: table.Version,
+		Errors:  exportDiagnostics(table.Errors),
+		Modules: make([]exportTableModule, 0, len(table.Modules)),
+		Nodes:   make([]exportTableNode, 0, len(table.Nodes)),
+	}
+	for _, module := range table.Modules {
+		out.Modules = append(out.Modules, exportTableModule{
+			Name:        module.Name,
+			Namespace:   module.Namespace,
+			Prefix:      module.Prefix,
+			Revision:    module.Revision,
+			Implemented: module.Implemented,
+			Source:      exportLocation(module.Source),
+			Imports:     exportImports(module.Imports),
+			Includes:    exportIncludes(module.Includes),
+			Children:    exportNodeIDs(module.Children),
+		})
+	}
+	for _, node := range table.Nodes {
+		exported := exportTableNode{
+			ID:                     int(node.ID),
+			Parent:                 int(node.Parent),
+			Name:                   node.Name,
+			Kind:                   node.Kind.String(),
+			LocalPath:              node.LocalPath,
+			QualifiedPath:          node.QualifiedPath,
+			NamespaceQualifiedPath: node.NamespaceQualifiedPath,
+			QualifiedName:          exportQName(node.QualifiedName),
+			Children:               exportNodeIDs(node.Children),
+			DataChildren:           exportNodeIDs(node.DataChildren),
+			ListKeys:               exportNodeIDs(node.ListKeys),
+			KeyNames:               append([]string(nil), node.KeyNames...),
+			Config:                 exportConfig(node.Config),
+			Mandatory:              node.Mandatory,
+			ReadOnly:               node.ReadOnly,
+			Defaults:               exportDefaults(node.Defaults),
+			Musts:                  exportMusts(node.Musts),
+			Whens:                  exportWhens(node.Whens),
+			Uniques:                exportUniques(node.Uniques),
+			Source:                 exportLocation(node.Source),
+			Provenance:             exportNodeProvenance(node.Provenance),
+		}
+		if node.Type != nil {
+			exported.Type = &exportType{Base: node.Type.Base().String()}
+		}
+		out.Nodes = append(out.Nodes, exported)
+	}
+	return out
+}
+
+func exportNodeIDs(ids []cambium.SchemaIRNodeID) []int {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]int, len(ids))
+	for i, id := range ids {
+		out[i] = int(id)
 	}
 	return out
 }
