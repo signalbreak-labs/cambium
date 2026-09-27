@@ -9,6 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - 156 more existing conformance cases opt into the `datatree` differential
   lane (`datatree = true`).
+- The `ietf-interfaces` conformance case opts into the `datatree`
+  differential lane.
 - `cambium.schema-ir.v2` bounded node table (`Context.SchemaIRTable`,
   `SchemaIRNodeID`, `SchemaIRNoParent`), `Context.SchemaIRStats`, and
   `Context.SchemaIRWithLimit`, which fails with a `resource_limit` diagnostic
@@ -128,6 +130,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- `Build` rejected an augment into another module when a mandatory node sat
+  below a presence container, a list, or a case of the augment (for example
+  `ietf-ip@2014-06-16`, RFC 7277). Only the augment's own nodes, through
+  non-presence containers, are mandatory nodes (RFC 7950 §3, §7.17), as in
+  libyang.
 - A derived `range` or `length` using `min`/`max` over a restricted typedef
   failed as "not within the base restriction"; the keywords now stand for the
   restricted type's bounds (RFC 7950 sections 9.2.4 and 9.4.4).

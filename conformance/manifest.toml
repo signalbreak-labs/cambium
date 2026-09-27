@@ -263,6 +263,7 @@ module = "corpus/ietf-interfaces"
 input = "fixtures/ietf-interfaces/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ietf-interfaces/output.xml"
 json = "golden/ietf-interfaces/output.json"

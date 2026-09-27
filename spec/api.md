@@ -117,7 +117,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     bodies, `empty` or `leafref` union member types, list key leaves with type
     `empty`, identifiers starting with `xml` in any case, and default
     statements on `leaf-list` nodes. Cross-module augments that add mandatory
-    config nodes require `yang-version 1.1` and a direct `when` statement.
+    config nodes require `yang-version 1.1` and a direct `when` statement; only
+    the augment's own nodes count, a non-presence container through its
+    children (RFC 7950 §3), not nodes below a presence container, list, or case.
     Explicit `require-instance` statements on `leafref` types also require
     `yang-version 1.1`.
   - Loaded submodules must declare a `belongs-to` parent and that `belongs-to`
