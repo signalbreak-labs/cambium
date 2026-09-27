@@ -1866,6 +1866,118 @@ func TestContextBuilderIdentityRefDefaultRejectsImportOnlyIdentity(t *testing.T)
 	}
 }
 
+// TestContextBuilderImportOnlyIdentityDefaultOnlyWhereInstantiated: the data
+// nodes of an import-only module are not part of the schema (RFC 7950 section
+// 5.6.5), and a grouping is not a data definition until a uses instantiates it
+// (section 7.13), so an identityref default in either place must not be
+// rejected for naming an identity of an import-only module. libyang does not
+// compile import-only modules or check defaults inside groupings either. The
+// same default instantiated in an implemented module is still rejected.
+func TestContextBuilderImportOnlyIdentityDefaultOnlyWhereInstantiated(t *testing.T) {
+	types := `module cambium-builder-io-types {
+    namespace "urn:cambium:builder-io-types";
+    prefix iot;
+
+    identity base;
+    identity one {
+        base base;
+    }
+}
+`
+	lib := `module cambium-builder-io-lib {
+    namespace "urn:cambium:builder-io-lib";
+    prefix iol;
+
+    import cambium-builder-io-types {
+        prefix iot;
+    }
+
+    grouping plain {
+        leaf kind { type string; }
+    }
+
+    grouping with-default {
+        leaf mode {
+            type identityref {
+                base iot:base;
+            }
+            default iot:one;
+        }
+    }
+
+    container lib-top {
+        leaf mode {
+            type identityref {
+                base iot:base;
+            }
+            default iot:one;
+        }
+    }
+}
+`
+	user := func(body string) string {
+		return `module cambium-builder-io-user {
+    namespace "urn:cambium:builder-io-user";
+    prefix iou;
+
+    import cambium-builder-io-lib {
+        prefix iol;
+    }
+
+` + body + `
+}
+`
+	}
+	build := func(body string, flags cambium.ContextFlags) (map[string]bool, error) {
+		dir := t.TempDir()
+		writeModuleFile(t, filepath.Join(dir, "cambium-builder-io-types.yang"), []byte(types))
+		writeModuleFile(t, filepath.Join(dir, "cambium-builder-io-lib.yang"), []byte(lib))
+		writeModuleFile(t, filepath.Join(dir, "cambium-builder-io-user.yang"), []byte(user(body)))
+		builder, err := cambium.NewContextBuilder(flags)
+		if err != nil {
+			t.Fatalf("NewContextBuilder: %v", err)
+		}
+		if err := builder.SearchPath(dir); err != nil {
+			t.Fatalf("SearchPath: %v", err)
+		}
+		if err := builder.LoadModule("cambium-builder-io-user", nil, nil); err != nil {
+			t.Fatalf("LoadModule: %v", err)
+		}
+		ctx, err := builder.Build()
+		if err != nil {
+			return nil, err
+		}
+		defer ctx.Close()
+		return contextModuleNameSet(ctx), nil
+	}
+	if _, err := build(`    container top { uses iol:plain; }`, cambium.ContextFlags{}); err != nil {
+		t.Fatalf("Build rejected an identity default in an import-only module's own data node: %v", err)
+	}
+	if _, err := build(`    grouping wrap {
+        container box { uses iol:with-default; }
+    }
+    container top { uses iol:plain; }`, cambium.ContextFlags{}); err != nil {
+		t.Fatalf("Build rejected an identity default in a grouping that is never instantiated: %v", err)
+	}
+	_, err := build(`    container top { uses iol:with-default; }`, cambium.ContextFlags{})
+	if err == nil {
+		t.Fatal("Build accepted an import-only identity default instantiated in an implemented module")
+	}
+	if got, want := err.Error(), `default "iot:one" references identity "one" from non-implemented module "cambium-builder-io-types"`; !strings.Contains(got, want) {
+		t.Fatalf("Build error = %q, want %q", got, want)
+	}
+	// With RefImplemented the prefixed default implements the identity's
+	// module, as libyang's LY_CTX_REF_IMPLEMENTED does, even though the
+	// grouping that wrote it belongs to an import-only module.
+	names, err := build(`    container top { uses iol:with-default; }`, cambium.ContextFlags{RefImplemented: true})
+	if err != nil {
+		t.Fatalf("Build with RefImplemented: %v", err)
+	}
+	if !names["cambium-builder-io-types"] {
+		t.Fatalf("Modules() did not include the RefImplemented identity module; got %v", names)
+	}
+}
+
 func TestContextBuilderRefImplementedMarksIdentityRefDefaultImport(t *testing.T) {
 	dir := t.TempDir()
 	target := `module cambium-builder-ref-identity-target {
