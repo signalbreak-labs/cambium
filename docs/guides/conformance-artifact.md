@@ -17,8 +17,10 @@ cd cambium-conformance-<version>
 ```
 
 Run `conformance/manifest.toml` through your binding's runner and compare against
-the files under `conformance/golden/`. Backend/data runners must also honor the
-engine pin in `VERSIONS` when they use libyang.
+the files under `conformance/golden/`. Cases with `expect = "reject"` have no
+goldens: your runner must refuse their input with a strict, validating parse
+(see the manifest header and `spec/ordering-invariants.md` §6). Backend/data
+runners must also honor the engine pin in `VERSIONS` when they use libyang.
 
 To build the same package locally:
 

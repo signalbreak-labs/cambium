@@ -1,0 +1,11 @@
+module leaflist-config-false-duplicates {
+  yang-version 1.1;
+  namespace "urn:leaflist-config-false-duplicates";
+  prefix lcfd;
+  revision 2026-09-27;
+
+  container stats {
+    config false;
+    leaf-list sample { type uint8; }
+  }
+}

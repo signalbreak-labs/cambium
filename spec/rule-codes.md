@@ -13,7 +13,7 @@ Every Cambium error carries a stable `CAMBIUM_E####` rule code. Codes are assign
 | Code | Name | Raised by (operation) | Meaning |
 |---|---|---|---|
 | `CAMBIUM_E0000` | Unknown | (fallback) | Unclassified internal error. |
-| `CAMBIUM_E0001` | Context | new context · set search path · load module · schema tree / schema path lookup | Context/schema setup failed (e.g. module not found, bad search dir, missing schema path). |
+| `CAMBIUM_E0001` | Context | new context · set search path · load module · schema tree / schema path lookup | Context/schema setup failed (e.g. module not found, bad search dir, missing schema path, module load after the context froze). |
 | `CAMBIUM_E0002` | Parse | parse · parse op | Input could not be parsed: malformed, unknown schema (strict mode), invalid UTF-8, or illegal source characters including interior NUL. |
 | `CAMBIUM_E0003` | Validate | validate · merge | RFC-7950 validation failed (`must`/`when`, `mandatory`, leafref, type restriction); also a `merge` conflict where both trees set the same leaf to different values. |
 | `CAMBIUM_E0004` | Serialize | serialize | Serialization to XML/JSON failed. |

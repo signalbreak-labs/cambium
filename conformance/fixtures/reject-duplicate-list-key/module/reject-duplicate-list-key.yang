@@ -1,0 +1,12 @@
+module reject-duplicate-list-key {
+  yang-version 1.1;
+  namespace "urn:reject-duplicate-list-key";
+  prefix rdlk;
+  revision 2026-09-27;
+
+  list user {
+    key name;
+    leaf name { type string; }
+    leaf uid { type uint32; }
+  }
+}

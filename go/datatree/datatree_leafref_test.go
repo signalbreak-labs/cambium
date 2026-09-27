@@ -51,10 +51,11 @@ func TestLeafRefPredicateSkipped(t *testing.T) {
 	mod := loadModSrc(t, `module lr3 {
         namespace "urn:lr3"; prefix lr3;
         list user { key name; leaf name { type string; } }
-        leaf admin { type leafref { path "/lr3:user[lr3:name=current()]/lr3:name"; } }
+        leaf sel { type string; }
+        leaf admin { type leafref { path "/lr3:user[lr3:name=current()/../lr3:sel]/lr3:name"; } }
     }`, "lr3")
 	// admin=zzz does not exist, but the predicate path is unsupported -> skipped.
-	if err := validateOne(t, mod, `{"lr3:user":[{"name":"a"}],"lr3:admin":"zzz"}`); err != nil {
+	if err := validateOne(t, mod, `{"lr3:user":[{"name":"a"}],"lr3:sel":"a","lr3:admin":"zzz"}`); err != nil {
 		if strings.Contains(err.Error(), "leafref") {
 			t.Fatalf("unsupported leafref path must be skipped, not reported: %v", err)
 		}

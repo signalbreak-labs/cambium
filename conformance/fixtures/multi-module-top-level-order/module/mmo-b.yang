@@ -1,0 +1,8 @@
+module mmo-b {
+  namespace "urn:mmo:1";
+  prefix p1;
+  revision 2026-09-27;
+  list b-list { key name; leaf name { type string; } }
+  leaf-list b-values { type int32; }
+  leaf b-last { type string; }
+}

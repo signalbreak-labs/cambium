@@ -17,7 +17,7 @@ import (
 // never produces a wrong verdict.
 func (t *Tree) checkMustWhen(out *[]string) {
 	root := &xnode{}
-	root.kids = buildXNodes(flattenTopLevel(t.module), t.roots, root)
+	root.kids = buildXNodes(flattenTopLevel(t.modules...), t.roots, root)
 	walkMustWhen(root, root, out)
 }
 

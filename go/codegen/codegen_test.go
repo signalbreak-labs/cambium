@@ -85,12 +85,19 @@ func TestRunGeneratedCommandHonorsContextDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	_, err := runGeneratedCommand(ctx, t.TempDir(), "/bin/sh", "-c", "sleep 5")
+	// exec replaces the shell, so the kill reaches sleep itself; a forked sleep
+	// would outlive the shell and hold the output pipe open until WaitDelay.
+	start := time.Now()
+	_, err := runGeneratedCommand(ctx, t.TempDir(), "/bin/sh", "-c", "exec sleep 5")
+	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("runGeneratedCommand completed a command past its context deadline")
 	}
 	if ctx.Err() == nil {
 		t.Fatalf("context was not canceled after runGeneratedCommand returned: %v", err)
+	}
+	if elapsed >= generatedCommandWaitDelay {
+		t.Fatalf("runGeneratedCommand returned after %s; the killed command must not leave the test idling on WaitDelay (%s)", elapsed, generatedCommandWaitDelay)
 	}
 }
 
@@ -181,6 +188,7 @@ func TestGeneratedGoFieldOrderManifestKeysFirst(t *testing.T) {
 }
 
 func TestGeneratedGoScrambledChildrenXMLMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "scrambled-children"), "module"), "order-demo")
 	defer ctx.Close()
 
@@ -209,6 +217,7 @@ func TestGeneratedOrderDemo(t *testing.T) {
 }
 
 func TestGeneratedGoScrambledChildrenJSONMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "scrambled-children"), "module"), "order-demo")
 	defer ctx.Close()
 
@@ -237,6 +246,7 @@ func TestGeneratedOrderDemoJSON(t *testing.T) {
 }
 
 func TestGeneratedGoKeysFirstXMLMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "keys-first"), "module"), "keys-first-demo")
 	defer ctx.Close()
 
@@ -271,6 +281,7 @@ func TestGeneratedKeysFirst(t *testing.T) {
 }
 
 func TestGeneratedGoKeysFirstJSONMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "keys-first"), "module"), "keys-first-demo")
 	defer ctx.Close()
 
@@ -305,6 +316,7 @@ func TestGeneratedKeysFirstJSON(t *testing.T) {
 }
 
 func TestGeneratedGoModuleNamespaceQualificationJSONMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-module-namespace-qualification"), "module"), "json-ietf-module-namespace-qualification")
 	defer ctx.Close()
 
@@ -340,6 +352,7 @@ func TestGeneratedModuleNamespaceQualificationJSON(t *testing.T) {
 }
 
 func TestGeneratedGoBooleanDefaultFalse(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-boolean-default-false"), "module"), "types-boolean-default-false")
 	defer ctx.Close()
 
@@ -389,6 +402,7 @@ func TestGeneratedBooleanDefaultFalse(t *testing.T) {
 }
 
 func TestGeneratedGoInt8(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-int-int8-range"), "module"), "types-int-int8-range")
 	defer ctx.Close()
 
@@ -437,6 +451,7 @@ func TestGeneratedInt8(t *testing.T) {
 }
 
 func TestGeneratedGoInt16Range(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-int-int16-range"), "module"), "types-int-int16-range")
 	defer ctx.Close()
 
@@ -490,6 +505,7 @@ func TestGeneratedInt16Range(t *testing.T) {
 }
 
 func TestGeneratedGoInt64Quoted(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-int-int64-range-quoted"), "module"), "types-int-int64-range-quoted")
 	defer ctx.Close()
 
@@ -525,6 +541,7 @@ func TestGeneratedInt64Quoted(t *testing.T) {
 }
 
 func TestGeneratedGoUint16RangePort(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-uint-uint16-range-port"), "module"), "types-uint-uint16-range-port")
 	defer ctx.Close()
 
@@ -568,6 +585,7 @@ func TestGeneratedUint16RangePort(t *testing.T) {
 }
 
 func TestGeneratedGoInt32RangeMultipart(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-int-int32-range-multipart"), "module"), "types-int-int32-range-multipart")
 	defer ctx.Close()
 
@@ -609,6 +627,7 @@ func TestGeneratedInt32RangeMultipart(t *testing.T) {
 }
 
 func TestGeneratedGoUint32RangeMulti(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-uint-uint32-range-multi"), "module"), "types-uint-uint32-range-multi")
 	defer ctx.Close()
 
@@ -650,6 +669,7 @@ func TestGeneratedUint32RangeMulti(t *testing.T) {
 }
 
 func TestGeneratedGoUint64Quoted(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-uint-uint64-range-quoted"), "module"), "types-uint-uint64-range-quoted")
 	defer ctx.Close()
 
@@ -701,6 +721,7 @@ func TestGeneratedUint64Quoted(t *testing.T) {
 }
 
 func TestGeneratedGoDecimal64Fraction1Range(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-decimal64-fraction1-range"), "module"), "types-decimal64-fraction1-range")
 	defer ctx.Close()
 
@@ -773,6 +794,7 @@ func TestGeneratedDecimal64Fraction1Range(t *testing.T) {
 }
 
 func TestGeneratedGoDecimal64Fraction2CanonicalRound(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-decimal64-fraction2-canonical-round"), "module"), "types-decimal64-fraction2-canonical-round")
 	defer ctx.Close()
 
@@ -817,6 +839,7 @@ func TestGeneratedDecimal64Fraction2CanonicalRound(t *testing.T) {
 }
 
 func TestGeneratedGoDecimal64Fraction3And6(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-decimal64-fraction3-and-6"), "module"), "types-decimal64-fraction3-and-6")
 	defer ctx.Close()
 
@@ -859,6 +882,7 @@ func TestGeneratedDecimal64Fraction3And6(t *testing.T) {
 }
 
 func TestGeneratedGoDecimal64Fraction9Negative(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-decimal64-fraction9-negative"), "module"), "types-decimal64-fraction9-negative")
 	defer ctx.Close()
 
@@ -896,6 +920,7 @@ func TestGeneratedDecimal64Fraction9Negative(t *testing.T) {
 }
 
 func TestGeneratedGoDecimal64Fraction18MaxMagnitude(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-decimal64-fraction18-max-magnitude"), "module"), "types-decimal64-fraction18-max-magnitude")
 	defer ctx.Close()
 
@@ -933,6 +958,7 @@ func TestGeneratedDecimal64Fraction18MaxMagnitude(t *testing.T) {
 }
 
 func TestGeneratedGoJSONIETFDecimal64CanonicalQuoting(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-decimal64-canonical-quoting"), "module"), "json-ietf-decimal64-canonical-quoting")
 	defer ctx.Close()
 
@@ -967,6 +993,7 @@ func TestGeneratedJSONIETFDecimal64CanonicalQuoting(t *testing.T) {
 }
 
 func TestGeneratedGoJSONIETFDecimal64NoExponentMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-decimal64-no-exponent"), "module"), "json-ietf-decimal64-no-exponent")
 	defer ctx.Close()
 
@@ -1004,6 +1031,7 @@ func TestGeneratedJSONIETFDecimal64NoExponentMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONStringEscapingMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-string-escaping-control-unicode"), "module"), "json-ietf-string-escaping-control-unicode")
 	defer ctx.Close()
 
@@ -1050,6 +1078,7 @@ func TestGeneratedJSONStringEscapingMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoValidateRejectsInvalidStringCharacters(t *testing.T) {
+	t.Parallel()
 	const source = `module string-validation-codegen {
     namespace "urn:string-validation-codegen";
     prefix svc;
@@ -1109,6 +1138,7 @@ func TestGeneratedValidateRejectsInvalidStringCharacters(t *testing.T) {
 }
 
 func TestGeneratedGoJSONScalarQuotingMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-scalar-quoting-int-spans"), "module"), "json-ietf-scalar-quoting-int-spans")
 	defer ctx.Close()
 
@@ -1157,6 +1187,7 @@ func TestGeneratedJSONScalarQuotingMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONNestedContainerObjectMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-nested-container-object"), "module"), "json-ietf-nested-container-object")
 	defer ctx.Close()
 
@@ -1202,6 +1233,7 @@ func TestGeneratedJSONNestedContainerObjectMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONObjectDeterminismMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-object-determinism"), "module"), "json-object-determinism")
 	defer ctx.Close()
 
@@ -1249,6 +1281,7 @@ func TestGeneratedJSONObjectDeterminismMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONLeafrefUnionResolvedFormMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-leafref-union-resolved-form"), "module"), "json-ietf-leafref-union-resolved-form")
 	defer ctx.Close()
 
@@ -1307,6 +1340,7 @@ func TestGeneratedJSONLeafrefUnionResolvedFormMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONInstanceIdentifierStringMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-instance-identifier-string"), "module"), "json-ietf-instance-identifier-string")
 	defer ctx.Close()
 
@@ -1360,6 +1394,7 @@ func TestGeneratedJSONInstanceIdentifierStringMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAnydataUntypedContainerMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "anydata-untyped-container"), "module"), "anydata-untyped-container")
 	defer ctx.Close()
 
@@ -1408,6 +1443,7 @@ func TestGeneratedAnydataUntypedContainerMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTopLevelAnydataMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	const source = `module anydata-top-level-codegen {
     yang-version 1.1;
     namespace "urn:anydata-top-level-codegen";
@@ -1455,6 +1491,7 @@ func TestGeneratedTopLevelAnydataMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAnyxmlOpaquePassthroughMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "anyxml-opaque-passthrough"), "module"), "anyxml-opaque-passthrough")
 	defer ctx.Close()
 
@@ -1503,6 +1540,7 @@ func TestGeneratedAnyxmlOpaquePassthroughMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAnyxmlAttributesNamespacedXMLMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "anyxml-attributes-namespaced"), "module"), "anyxml-attributes-namespaced")
 	defer ctx.Close()
 
@@ -1542,6 +1580,7 @@ func TestGeneratedAnyxmlAttributesNamespacedXMLMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoContainerPresenceEmptyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "container-presence-empty"), "module"), "container-presence-empty")
 	defer ctx.Close()
 
@@ -1582,6 +1621,7 @@ func TestGeneratedContainerPresenceEmptyMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeclarationOrderOutOfAlphabeticalMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "declaration-order-out-of-alphabetical"), "module"), "declaration-order-out-of-alphabetical")
 	defer ctx.Close()
 
@@ -1629,6 +1669,7 @@ func TestGeneratedDeclarationOrderOutOfAlphabeticalMatchesLibyang(t *testing.T) 
 }
 
 func TestGeneratedGoConfigFalseStateSubtreeMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "config-false-state-subtree"), "module"), "config-false-state-subtree")
 	defer ctx.Close()
 
@@ -1674,6 +1715,7 @@ func TestGeneratedConfigFalseStateSubtreeMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoMetadataYangVersionUnitsMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "metadata-yang-version-units"), "module"), "metadata-yang-version-units")
 	defer ctx.Close()
 
@@ -1720,6 +1762,7 @@ func TestGeneratedMetadataYangVersionUnitsMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoWideHeterogeneousSiblingsMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "wide-heterogeneous-siblings-all-types"), "module"), "wide-heterogeneous-siblings-all-types")
 	defer ctx.Close()
 
@@ -1772,6 +1815,7 @@ func TestGeneratedWideHeterogeneousSiblingsMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoConfigTrueSubtreeMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "config-true-subtree", "config-true-subtree")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "config-true-subtree")
 
@@ -1800,6 +1844,7 @@ func TestGeneratedConfigTrueSubtreeMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoContainerNestedDepthMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "container-nested-depth", "container-nested-depth")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "container-nested-depth")
 
@@ -1833,6 +1878,7 @@ func TestGeneratedContainerNestedDepthMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoContainerWithinListSchemaOrderMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "container-within-list-schema-order", "container-within-list-schema-order")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "container-within-list-schema-order")
 
@@ -1863,6 +1909,7 @@ func TestGeneratedContainerWithinListSchemaOrderMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoSingleKeyListFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -1941,6 +1988,7 @@ func TestGeneratedListSingleKeyStringMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoCompositeKeyListFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -2016,6 +2064,7 @@ func TestGeneratedListCompositeKeyThreeMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoMixedConfigStateNestedMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "mixed-config-state-nested", "mixed-config-state-nested")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "mixed-config-state-nested")
 
@@ -2046,6 +2095,7 @@ func TestGeneratedMixedConfigStateNestedMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoOrderedUserFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -2126,6 +2176,7 @@ func TestGeneratedOrderedUserConfigFalseStateMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoStatusCurrentDeprecatedObsoleteMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "status-current-deprecated-obsolete", "status-current-deprecated-obsolete")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "status-current-deprecated-obsolete")
 
@@ -2152,6 +2203,7 @@ func TestGeneratedStatusCurrentDeprecatedObsoleteMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONChoiceCaseTransparencyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "json-ietf-choice-case-transparency", "json-ietf-choice-case-transparency")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "json-ietf-choice-case-transparency")
 
@@ -2181,6 +2233,7 @@ func TestGeneratedJSONChoiceCaseTransparencyMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAnydataAnyxmlRepresentationMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "json-ietf-anydata-anyxml-representation", "json-ietf-anydata-anyxml-representation")
 	if !strings.Contains(src, "Metadata *AnyData") || !strings.Contains(src, "Data *AnyData") {
 		t.Fatalf("generated source should emit raw AnyData helpers for anydata and anyxml, got:\n%s", src)
@@ -2224,6 +2277,7 @@ func TestGeneratedAnydataAnyxmlRepresentationMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRFC6991InetYangTypesRoundtripMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "rfc6991-inet-yang-types-roundtrip", "rfc6991-inet-yang-types-roundtrip")
 	if !strings.Contains(src, "type Rfc6991InetYangTypesRoundtripTopAddrUnion interface") {
 		t.Fatalf("generated source should preserve imported typedef union surface, got:\n%s", src)
@@ -2258,6 +2312,7 @@ func TestGeneratedRFC6991InetYangTypesRoundtripMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -2336,6 +2391,7 @@ func TestGeneratedStringPatternModifierInvertMatchMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoExtensionFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -2463,6 +2519,7 @@ func TestGeneratedVendorExtensionJunosPassthroughMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoOrderingNestedUserCascadingMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "ordering-nested-user-cascading", "ordering-nested-user-cascading")
 	if !strings.Contains(src, "Statement UserOrderedVec[OrderingNestedUserCascadingTopStatementEntry]") ||
 		!strings.Contains(src, "Actions UserOrderedVec[string]") {
@@ -2497,6 +2554,7 @@ func TestGeneratedOrderingNestedUserCascadingMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRPCDocumentFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -2794,6 +2852,7 @@ func TestGeneratedRPCActionNotificationCoexistenceRPCMatchesLibyang(t *testing.T
 }
 
 func TestGeneratedRPCInputLeafListAllowsDuplicatePayloadValues(t *testing.T) {
+	t.Parallel()
 	const source = `module operations-rpc-leaflist-duplicates {
     namespace "urn:operations-rpc-leaflist-duplicates";
     prefix orld;
@@ -2851,6 +2910,7 @@ func TestGeneratedRPCInputLeafListAllowsDuplicatePayloadValues(t *testing.T) {
 }
 
 func TestGeneratedRPCWithInputAlsoEmitsOutputDocument(t *testing.T) {
+	t.Parallel()
 	const source = `module operations-rpc-input-output-docs {
     namespace "urn:operations-rpc-input-output-docs";
     prefix oriod;
@@ -2932,6 +2992,7 @@ func TestGeneratedRPCWithInputAlsoEmitsOutputDocument(t *testing.T) {
 }
 
 func TestGeneratedGoRPCWithAnyxmlXMLMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "rpc-io-with-anyxml", "operations-rpc-io-with-anyxml")
 	if !strings.Contains(src, "Parameters *AnyData") {
 		t.Fatalf("generated source should emit raw AnyData for RPC anyxml, got:\n%s", src)
@@ -2964,6 +3025,7 @@ func TestGeneratedRPCWithAnyxmlXMLMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoNotificationDocumentFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -3057,6 +3119,7 @@ func TestGeneratedNotificationWithContainerLeaflistMatchesLibyang(t *testing.T) 
 }
 
 func TestGeneratedGoValidConstraintDataFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -3319,6 +3382,7 @@ func TestGeneratedConstraintsUniqueCompositeMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRangeLengthConstraintConstructorsMatchRejectFixture(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "constraints-range-length-reject", "constraints-range-length-reject")
 	wantXML, wantJSON := readFixtureGoldenPair(t, "constraints-range-length-reject")
 
@@ -3367,6 +3431,7 @@ func TestGeneratedRangeLengthConstraintConstructorsMatchRejectFixture(t *testing
 }
 
 func TestGeneratedGoMetadataAnnotationRFC7952MatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "metadata-annotation-rfc7952", "metadata-annotation-rfc7952")
 	if !strings.Contains(src, "CambiumMetadata map[string][]MetadataAnnotation") {
 		t.Fatalf("generated source should expose metadata annotations, got:\n%s", src)
@@ -3537,6 +3602,7 @@ func TestGeneratedMetadataAnnotationRFC7952MatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoJSONIETFWithDefaultsModesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "json-ietf-with-defaults-modes", "json-ietf-with-defaults-modes")
 	goldenDir := filepath.Join(schemaFixtureDir(t, "json-ietf-with-defaults-modes"), "..", "..", "golden")
 	readJSONIETF := func(name string) string {
@@ -3589,6 +3655,7 @@ func TestGeneratedJSONIETFWithDefaultsModesMatchLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionDefaultJSONIETFResolvesMemberOrder(t *testing.T) {
+	t.Parallel()
 	const source = `module union-default-codegen {
     namespace "urn:union-default-codegen";
     prefix udc;
@@ -3640,6 +3707,7 @@ func TestGeneratedUnionDefaultJSONIETFResolvesMemberOrder(t *testing.T) {
 }
 
 func TestGeneratedGoScalarDefaultsUseCanonicalJSONIETFLiterals(t *testing.T) {
+	t.Parallel()
 	const source = `module scalar-default-canonical-codegen {
     namespace "urn:scalar-default-canonical-codegen";
     prefix sdcc;
@@ -3754,6 +3822,7 @@ func TestGeneratedHexOctalIntegerDefaultsUseCanonicalDecimal(t *testing.T) {
 }
 
 func TestGeneratedGoScalarDefaultsCoverBinaryEnumIdentityref(t *testing.T) {
+	t.Parallel()
 	const source = `module scalar-default-more-codegen {
     namespace "urn:scalar-default-more-codegen";
     prefix sdmc;
@@ -3825,6 +3894,7 @@ func TestGeneratedScalarDefaultsCoverBinaryEnumIdentityref(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityRefDefaultProvenance(t *testing.T) {
+	t.Parallel()
 	idents := `module idref-default-codegen-id {
     yang-version 1.1;
     namespace "urn:idref-default-codegen-id";
@@ -3985,6 +4055,7 @@ func TestGeneratedGoSchemaRejectsInvalidBitsDefaultUnicodeWhitespace(t *testing.
 }
 
 func TestGeneratedGoJSONIETFParseRoundtripDataMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "json-ietf-parse-roundtrip", "json-ietf-parse-roundtrip")
 	if !strings.Contains(src, "JsonIetfParseRoundtripTopKindEnumDerivedId") {
 		t.Fatalf("generated source should expose identityref values for parse-roundtrip fixture, got:\n%s", src)
@@ -4104,6 +4175,7 @@ func TestGeneratedGoJSONParserHasNoUnsupportedScalarFallbacks(t *testing.T) {
 }
 
 func TestGeneratedGoCrossModuleLeafrefDocumentMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "types-leafref-cross-module", "types-leafref-cross-module")
 	if !strings.Contains(src, "Interface_ []TypesLeafrefCrossModuleInterfaceEntry") {
 		t.Fatalf("generated source should include imported module top-level document data, got:\n%s", src)
@@ -4145,6 +4217,7 @@ func TestGeneratedCrossModuleLeafrefDocumentMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoSubmoduleImportContributesDocumentFields(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	base := `module submodule-import-base {
   yang-version 1.1;
@@ -4227,6 +4300,7 @@ func TestGeneratedSubmoduleImportContributesDocumentFields(t *testing.T) {
 }
 
 func TestGeneratedGoImportedTopLevelChoiceValidate(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	base := `module root-choice-base {
   yang-version 1.1;
@@ -4298,6 +4372,7 @@ func TestGeneratedImportedTopLevelChoiceValidate(t *testing.T) {
 }
 
 func TestGeneratedGoNotificationInterleavedDataMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "notification-interleaved-siblings", "operations-notification-interleaved-siblings")
 	if !strings.Contains(src, "Raised *OperationsNotificationInterleavedSiblingsAlarmsRaised") {
 		t.Fatalf("generated source should expose nested notification as opt-in operation field, got:\n%s", src)
@@ -4332,6 +4407,7 @@ func TestGeneratedNotificationInterleavedDataMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoNestedActionFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -4543,6 +4619,7 @@ func TestGeneratedActionIOHeterogeneousMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoNestedNotificationFixturesMatchLibyang(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		fixture  string
@@ -4635,6 +4712,7 @@ func TestGeneratedStringPatternValidatorAvoidsMustCompile(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDUnicodeBlock(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-unicode-block-codegen {
     namespace "urn:pattern-xsd-unicode-block-codegen";
     prefix pxubc;
@@ -4688,6 +4766,7 @@ func TestGeneratedStringPatternXSDUnicodeBlock(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDNonASCIIUnicodeBlock(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-nonascii-unicode-block-codegen {
     namespace "urn:pattern-xsd-nonascii-unicode-block-codegen";
     prefix pxnubc;
@@ -4760,6 +4839,7 @@ func TestGeneratedStringPatternXSDNonASCIIUnicodeBlock(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDMultiCharacterEscapes(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-multichar-escapes-codegen {
     namespace "urn:pattern-xsd-multichar-escapes-codegen";
     prefix pxmec;
@@ -4844,6 +4924,7 @@ func TestGeneratedStringPatternXSDMultiCharacterEscapes(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDLiteralAnchors(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-literal-anchors-codegen {
     namespace "urn:pattern-xsd-literal-anchors-codegen";
     prefix pxlac;
@@ -4897,6 +4978,7 @@ func TestGeneratedStringPatternXSDLiteralAnchors(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDClassSubtraction(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-class-subtraction-codegen {
     namespace "urn:pattern-xsd-class-subtraction-codegen";
     prefix pxcsc;
@@ -4950,6 +5032,7 @@ func TestGeneratedStringPatternXSDClassSubtraction(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDCategoryClassSubtraction(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-category-class-subtraction-codegen {
     namespace "urn:pattern-xsd-category-class-subtraction-codegen";
     prefix pxccsc;
@@ -5003,6 +5086,7 @@ func TestGeneratedStringPatternXSDCategoryClassSubtraction(t *testing.T) {
 }
 
 func TestGeneratedGoStringPatternXSDNestedClassSubtraction(t *testing.T) {
+	t.Parallel()
 	const source = `module pattern-xsd-nested-class-subtraction-codegen {
     namespace "urn:pattern-xsd-nested-class-subtraction-codegen";
     prefix pxncsc;
@@ -5082,6 +5166,7 @@ func TestGeneratedStringPatternXSDNestedClassSubtraction(t *testing.T) {
 }
 
 func TestGeneratedGoStringLengthPatternAnchorPosix(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-string-length-pattern-anchor-posix"), "module"), "types-string-length-pattern-anchor-posix")
 	defer ctx.Close()
 
@@ -5144,6 +5229,7 @@ func TestGeneratedStringLengthPatternAnchorPosix(t *testing.T) {
 }
 
 func TestGeneratedGoStringLengthCountsUnicodeCharacters(t *testing.T) {
+	t.Parallel()
 	const source = `module string-length-unicode-codegen {
     namespace "urn:string-length-unicode-codegen";
     prefix sluc;
@@ -5201,6 +5287,7 @@ func TestGeneratedStringLengthCountsUnicodeCharacters(t *testing.T) {
 }
 
 func TestGeneratedGoStaticNamespaceAttributeEscaping(t *testing.T) {
+	t.Parallel()
 	const source = `module static-namespace-escape-codegen {
     namespace "urn:static-namespace-escape&active";
     prefix snse;
@@ -5240,6 +5327,7 @@ func TestGeneratedStaticNamespaceAttributeEscaping(t *testing.T) {
 }
 
 func TestGeneratedGoRangeLengthMinMaxKeywords(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-range-length-min-max-keywords"), "module"), "types-range-length-min-max-keywords")
 	defer ctx.Close()
 
@@ -5297,6 +5385,7 @@ func TestGeneratedRangeLengthMinMaxKeywords(t *testing.T) {
 }
 
 func TestGeneratedGoJSONIETFListArrayKeysFirst(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-list-array-keys-first"), "module"), "json-ietf-list-array-keys-first")
 	defer ctx.Close()
 
@@ -5344,6 +5433,7 @@ func TestGeneratedJSONIETFListArrayKeysFirst(t *testing.T) {
 }
 
 func TestGeneratedGoEnumMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-enumeration-explicit-values-sparse"), "module"), "types-enumeration-explicit-values-sparse")
 	defer ctx.Close()
 
@@ -5389,6 +5479,7 @@ func TestGeneratedEnumMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoBitsMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-bits-explicit-positions-gaps"), "module"), "types-bits-explicit-positions-gaps")
 	defer ctx.Close()
 
@@ -5460,6 +5551,7 @@ func TestGeneratedBitsMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoEnumBitsAutoPositionMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-enum-bits-auto-position"), "module"), "types-enum-bits-auto-position")
 	defer ctx.Close()
 
@@ -5509,7 +5601,102 @@ func TestGeneratedEnumBitsAutoPositionMatchesLibyang(t *testing.T) {
 	runGeneratedGoTest(t, src, testBody)
 }
 
+// RFC 7950 section 9.7.2: the canonical bits value lists set bits ordered by
+// position, not by declaration order (libyang prints the same order). Input in
+// any order is still accepted.
+func TestGeneratedGoBitsCanonicalPositionOrder(t *testing.T) {
+	const source = `module bits-position-order {
+  yang-version 1.1;
+  namespace "urn:bits-position-order";
+  prefix bpo;
+
+  typedef scrambled {
+    type bits {
+      bit zz { position 5; }
+      bit aa { position 1; }
+      bit mm { position 3; }
+    }
+  }
+
+  container top {
+    leaf flags { type scrambled; }
+    leaf dflt {
+      type scrambled;
+      default "zz aa";
+    }
+    leaf u {
+      type union {
+        type scrambled;
+        type int32;
+      }
+    }
+  }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "bits-position-order")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	testBody := "\nconst bitsJSONInput = `{\"bits-position-order:top\":{\"flags\":\"zz mm aa\",\"u\":\"zz aa\"}}`\n" + `
+func TestGeneratedBitsCanonicalPositionOrder(t *testing.T) {
+	flags, err := NewBitsPositionOrderTopFlagsBits([]string{"zz", "mm", "aa"})
+	if err != nil {
+		t.Fatalf("new bits: %v", err)
+	}
+	if got, want := flags.String(), "aa mm zz"; got != want {
+		t.Fatalf("bits String = %q, want %q", got, want)
+	}
+	demo := BitsPositionOrder{Top: BitsPositionOrderTop{Flags: &flags}}
+	wantXML := "<top xmlns=\"urn:bits-position-order\">\n  <flags>aa mm zz</flags>\n</top>\n"
+	if got := demo.ToXML(); got != wantXML {
+		t.Fatalf("XML mismatch:\n got: %q\nwant: %q", got, wantXML)
+	}
+	wantJSON := "{\n  \"bits-position-order:top\": {\n    \"flags\": \"aa mm zz\"\n  }\n}\n"
+	if got := demo.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+
+	parsed, err := FromJSONIETF([]byte(bitsJSONInput))
+	if err != nil {
+		t.Fatalf("FromJSONIETF rejected bits in non-canonical order: %v", err)
+	}
+	wantParsed := "{\n  \"bits-position-order:top\": {\n    \"flags\": \"aa mm zz\",\n    \"u\": \"aa zz\"\n  }\n}\n"
+	if got := parsed.ToJSONIETF(); got != wantParsed {
+		t.Fatalf("parsed bits JSON mismatch:\n got: %q\nwant: %q", got, wantParsed)
+	}
+
+	wantAll := "{\n  \"bits-position-order:top\": {\n    \"flags\": \"aa mm zz\",\n    \"dflt\": \"aa zz\"\n  }\n}\n"
+	if got := demo.ToJSONIETFWithDefaults(WithDefaultsAll); got != wantAll {
+		t.Fatalf("with-defaults all JSON mismatch:\n got: %q\nwant: %q", got, wantAll)
+	}
+	dflt, err := NewBitsPositionOrderTopDfltBits([]string{"aa", "zz"})
+	if err != nil {
+		t.Fatalf("new default bits: %v", err)
+	}
+	trimmed := BitsPositionOrder{Top: BitsPositionOrderTop{Flags: &flags, Dflt: &dflt}}
+	if got := trimmed.ToJSONIETFWithDefaults(WithDefaultsTrim); got != wantJSON {
+		t.Fatalf("with-defaults trim kept a value equal to the default:\n got: %q\nwant: %q", got, wantJSON)
+	}
+}
+`
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
 func TestGeneratedGoEnumerationZeroValueMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-enumeration-zero-value-disabled"), "module"), "types-enumeration-zero-value-disabled")
 	defer ctx.Close()
 
@@ -5558,6 +5745,7 @@ func TestGeneratedEnumerationZeroValueMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUint8RangeMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-uint-uint8-range"), "module"), "types-uint-uint8-range")
 	defer ctx.Close()
 
@@ -5609,6 +5797,7 @@ func TestGeneratedUint8RangeMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoEmptyLeafMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-empty-leaf-null-json"), "module"), "types-empty-leaf-null-json")
 	defer ctx.Close()
 
@@ -5660,6 +5849,7 @@ func TestGeneratedEmptyLeafMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoBinaryLengthMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-binary-length-base64"), "module"), "types-binary-length-base64")
 	defer ctx.Close()
 
@@ -5738,6 +5928,7 @@ func TestGeneratedBinaryLengthMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoBinaryPEMNewlineParseCanonicalizes(t *testing.T) {
+	t.Parallel()
 	const source = `module binary-pem-newline-codegen {
     namespace "urn:binary-pem-newline-codegen";
     prefix bpnc;
@@ -5782,6 +5973,7 @@ func TestGeneratedBinaryPEMNewlineParseCanonicalizes(t *testing.T) {
 }
 
 func TestGeneratedGoUserOrderedListMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "list-ordered-by-user-insertion"), "module"), "list-ordered-by-user-insertion")
 	defer ctx.Close()
 
@@ -5838,6 +6030,7 @@ func TestGeneratedUserOrderedListMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoSystemLeafListCanonicalizesMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "leaflist-ordered-by-system"), "module"), "leaflist-ordered-by-system")
 	defer ctx.Close()
 
@@ -5897,6 +6090,7 @@ func TestGeneratedSystemLeafListCanonicalizesMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUserOrderedLeafListPreservesOrderMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "leaflist-ordered-by-user"), "module"), "leaflist-ordered-by-user")
 	defer ctx.Close()
 
@@ -5947,7 +6141,105 @@ func TestGeneratedUserOrderedLeafListPreservesOrderMatchesLibyang(t *testing.T) 
 	runGeneratedGoTest(t, src, testBody)
 }
 
+// A struct copy of a UserOrderedVec must not share mutable storage with the
+// original: an edit through one copy must never reorder or overwrite the
+// other's entries (I1).
+func TestGeneratedGoUserOrderedVecCopiesDoNotShareStorage(t *testing.T) {
+	src := generatedFixtureSource(t, "leaflist-ordered-by-user", "leaflist-ordered-by-user")
+	_, wantJSON := readFixtureGoldenPair(t, "leaflist-ordered-by-user")
+
+	testBody := fmt.Sprintf(`
+func userOrderedValues(v UserOrderedVec[string]) []string {
+	var out []string
+	v.Iter(func(s string) bool {
+		out = append(out, s)
+		return true
+	})
+	return out
+}
+
+func expectUserOrdered(t *testing.T, label string, v UserOrderedVec[string], want ...string) {
+	t.Helper()
+	got := userOrderedValues(v)
+	if len(got) != len(want) {
+		t.Fatalf("%%s = %%q, want %%q", label, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("%%s = %%q, want %%q", label, got, want)
+		}
+	}
+}
+
+func TestGeneratedUserOrderedVecCopiesDoNotShareStorage(t *testing.T) {
+	input := []string{"c", "a", "b"}
+	adopted := NewUserOrderedVec(input)
+	input[0] = "mutated"
+	expectUserOrdered(t, "NewUserOrderedVec after caller edits its slice", adopted, "c", "a", "b")
+
+	bases := map[string]func() UserOrderedVec[string]{
+		"exact capacity": func() UserOrderedVec[string] { return NewUserOrderedVec([]string{"c", "a", "b"}) },
+		"spare capacity": func() UserOrderedVec[string] {
+			var v UserOrderedVec[string]
+			v.InsertLast("c")
+			v.InsertLast("a")
+			v.InsertLast("b")
+			v.InsertLast("tail")
+			v.Remove(3)
+			return v
+		},
+	}
+	mutators := []struct {
+		name   string
+		mutate func(*UserOrderedVec[string])
+		want   []string
+	}{
+		{"InsertFirst", func(v *UserOrderedVec[string]) { v.InsertFirst("x") }, []string{"x", "c", "a", "b"}},
+		{"InsertLast", func(v *UserOrderedVec[string]) { v.InsertLast("x") }, []string{"c", "a", "b", "x"}},
+		{"InsertBefore", func(v *UserOrderedVec[string]) { v.InsertBefore(1, "x") }, []string{"c", "x", "a", "b"}},
+		{"InsertAfter", func(v *UserOrderedVec[string]) { v.InsertAfter(0, "x") }, []string{"c", "x", "a", "b"}},
+		{"MoveBefore", func(v *UserOrderedVec[string]) { v.MoveBefore(2, 0) }, []string{"b", "c", "a"}},
+		{"MoveAfter", func(v *UserOrderedVec[string]) { v.MoveAfter(0, 2) }, []string{"a", "b", "c"}},
+		{"Remove", func(v *UserOrderedVec[string]) { v.Remove(0) }, []string{"a", "b"}},
+	}
+	for _, baseName := range []string{"exact capacity", "spare capacity"} {
+		for _, m := range mutators {
+			orig := bases[baseName]()
+			cp := orig
+			m.mutate(&cp)
+			expectUserOrdered(t, baseName+" "+m.name+" on copy", cp, m.want...)
+			expectUserOrdered(t, baseName+" original after "+m.name+" on copy", orig, "c", "a", "b")
+
+			orig = bases[baseName]()
+			cp = orig
+			m.mutate(&orig)
+			expectUserOrdered(t, baseName+" copy after "+m.name+" on original", cp, "c", "a", "b")
+		}
+
+		orig := bases[baseName]()
+		left, right := orig, orig
+		left.InsertLast("left")
+		right.InsertLast("right")
+		expectUserOrdered(t, baseName+" sibling copy after both append", left, "c", "a", "b", "left")
+		expectUserOrdered(t, baseName+" other sibling copy after both append", right, "c", "a", "b", "right")
+		expectUserOrdered(t, baseName+" original after sibling appends", orig, "c", "a", "b")
+	}
+
+	demo := LeaflistOrderedByUser{Top: LeaflistOrderedByUserTop{Actions: bases["spare capacity"]()}}
+	edited := demo
+	edited.Top.Actions.Remove(0)
+	edited.Top.Actions.MoveBefore(1, 0)
+	if got, want := demo.ToJSONIETF(), %q; got != want {
+		t.Fatalf("original JSON changed by edits to a copy (I1):\n got: %%q\nwant: %%q", got, want)
+	}
+}
+`, wantJSON)
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
 func TestGeneratedGoSystemListCanonicalizesNumericKeyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "list-ordered-by-system-canonical"), "module"), "list-ordered-by-system-canonical")
 	defer ctx.Close()
 
@@ -6020,6 +6312,7 @@ func TestGeneratedSystemListCanonicalizesNumericKeyMatchesLibyang(t *testing.T) 
 }
 
 func TestGeneratedGoSystemListCanonicalizesStringKeyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "system-list-canonical"), "module"), "system-list-demo")
 	defer ctx.Close()
 
@@ -6068,6 +6361,7 @@ func TestGeneratedSystemListCanonicalizesStringKeyMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoMixedLeafListOrderingMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-leaflist-array-user-system"), "module"), "json-ietf-leaflist-array-user-system")
 	defer ctx.Close()
 
@@ -6113,6 +6407,7 @@ func TestGeneratedMixedLeafListOrderingMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafListWithinUserOrderedListEntryMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "leaf-list-within-list-entry"), "module"), "leaf-list-within-list-entry")
 	defer ctx.Close()
 
@@ -6157,6 +6452,7 @@ func TestGeneratedLeafListWithinUserOrderedListEntryMatchesLibyang(t *testing.T)
 }
 
 func TestGeneratedGoOrderingCompositeKeyWideMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "ordering-composite-key-wide"), "module"), "ordering-composite-key-wide")
 	defer ctx.Close()
 
@@ -6207,6 +6503,7 @@ func TestGeneratedOrderingCompositeKeyWideMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoCompositeKeyWithInterleavedContainersMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "composite-key-with-interleaved-containers"), "module"), "composite-key-with-interleaved-containers")
 	defer ctx.Close()
 
@@ -6255,6 +6552,7 @@ func TestGeneratedCompositeKeyWithInterleavedContainersMatchesLibyang(t *testing
 }
 
 func TestGeneratedGoLeafListDefaultsMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "leaflist-with-defaults"), "module"), "leaflist-with-defaults")
 	defer ctx.Close()
 
@@ -6310,6 +6608,7 @@ func TestGeneratedLeafListDefaultsMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoGroupingConfigStateMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-grouping-config-state"), "module"), "linkage-grouping-config-state")
 	defer ctx.Close()
 
@@ -6362,6 +6661,7 @@ func TestGeneratedGroupingConfigStateMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRefineDefaultMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-refine-default"), "module"), "linkage-refine-default")
 	defer ctx.Close()
 
@@ -6407,6 +6707,7 @@ func TestGeneratedRefineDefaultMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRefinePresenceMustMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-refine-presence-must"), "module"), "linkage-refine-presence-must")
 	defer ctx.Close()
 
@@ -6453,6 +6754,7 @@ func TestGeneratedRefinePresenceMustMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRefineMinMaxIfFeatureMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-refine-min-max-iffeature"), "module"), "linkage-refine-min-max-iffeature")
 	defer ctx.Close()
 
@@ -6460,8 +6762,10 @@ func TestGeneratedGoRefineMinMaxIfFeatureMatchesLibyang(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	if !strings.Contains(src, "Tags []string") || !strings.Contains(src, "AdvancedOpt *string") {
-		t.Fatalf("generated source should keep grouped nodes while skipping properties from disabled refine if-feature, got:\n%s", src)
+	// RFC 7950 §7.13.2 (and libyang): a refine's if-feature is added to its
+	// target, so the disabled "advanced" feature removes advanced-opt.
+	if !strings.Contains(src, "Tags []string") || strings.Contains(src, "AdvancedOpt") {
+		t.Fatalf("generated source should keep grouped nodes and drop the node gated by a disabled refine if-feature, got:\n%s", src)
 	}
 
 	wantXML, err := os.ReadFile(goldenPath(t, "linkage-refine-min-max-iffeature", "output.xml"))
@@ -6500,6 +6804,7 @@ func TestGeneratedRefineMinMaxIfFeatureMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoFeatureIfFeatureMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "constraints-feature-iffeature"), "module"), "constraints-feature-iffeature")
 	defer ctx.Close()
 
@@ -6544,6 +6849,7 @@ func TestGeneratedFeatureIfFeatureMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoFeaturePresenceMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "constraints-feature-presence"), "module"), "constraints-feature-presence")
 	defer ctx.Close()
 
@@ -6584,6 +6890,7 @@ func TestGeneratedFeaturePresenceMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoFeatureDependencyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "constraints-feature-dependency"), "module"), "constraints-feature-dependency")
 	defer ctx.Close()
 
@@ -6628,6 +6935,7 @@ func TestGeneratedFeatureDependencyMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoListKeylessPositionalMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "list-keyless-positional"), "module"), "list-keyless-positional")
 	defer ctx.Close()
 
@@ -6676,6 +6984,7 @@ func TestGeneratedListKeylessPositionalMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityStandaloneMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "identity-standalone"), "module"), "identity-standalone")
 	defer ctx.Close()
 
@@ -6728,6 +7037,7 @@ func TestGeneratedIdentityStandaloneMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityHierarchyWithIdentityrefMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "identity-hierarchy-with-identityref"), "module"), "identity-hierarchy-with-identityref")
 	defer ctx.Close()
 
@@ -6780,6 +7090,7 @@ func TestGeneratedIdentityHierarchyWithIdentityrefMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoForeignIdentityrefMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-identityref-foreign-module-prefix"), "module"), "types-identityref-foreign-module-prefix")
 	defer ctx.Close()
 
@@ -6831,6 +7142,7 @@ func TestGeneratedForeignIdentityrefMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIANAIdentityrefForeignMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, schemaCorpusDir(t, "identityref-iana-if-type-foreign"), "identityref-iana-if-type-foreign")
 	defer ctx.Close()
 
@@ -6883,6 +7195,7 @@ func TestGeneratedIANAIdentityrefForeignMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIETFInterfacesMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx, err := cambium.NewContext()
 	if err != nil {
 		t.Fatalf("new context: %v", err)
@@ -6960,6 +7273,7 @@ func TestGeneratedIETFInterfacesMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityrefSingleBaseMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-identityref-single-base"), "module"), "types-identityref-single-base")
 	defer ctx.Close()
 
@@ -7012,6 +7326,7 @@ func TestGeneratedIdentityrefSingleBaseMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityrefMultipleBasesMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-identityref-multiple-bases"), "module"), "types-identityref-multiple-bases")
 	defer ctx.Close()
 
@@ -7053,6 +7368,7 @@ func TestGeneratedIdentityrefMultipleBasesMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityrefDerivedHierarchyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-identityref-derived-hierarchy"), "module"), "types-identityref-derived-hierarchy")
 	defer ctx.Close()
 
@@ -7094,6 +7410,7 @@ func TestGeneratedIdentityrefDerivedHierarchyMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityCrossModuleDerivationMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "identity-cross-module-derivation"), "module"), "identity-cross-module-derivation")
 	defer ctx.Close()
 
@@ -7139,6 +7456,7 @@ func TestGeneratedIdentityCrossModuleDerivationMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityMultiBaseCrossModuleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "identity-multi-base-cross-module"), "module"), "identity-multi-base-cross-module")
 	defer ctx.Close()
 
@@ -7184,6 +7502,7 @@ func TestGeneratedIdentityMultiBaseCrossModuleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentityrefDuplicateLocalNamesSortVariants(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for name, source := range map[string]string{
 		"z-ident.yang": `module z-ident {
@@ -7261,6 +7580,7 @@ func TestIdentityrefDuplicateLocalNamesSortVariants(t *testing.T) {
 }
 
 func TestGeneratedGoUnionScalarAllMembersMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-scalar-all-members"), "module"), "types-union-scalar-all-members")
 	defer ctx.Close()
 
@@ -7366,6 +7686,7 @@ func TestGeneratedUnionScalarAllMembersMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionEnumAndScalarMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-enum-and-scalar"), "module"), "types-union-enum-and-scalar")
 	defer ctx.Close()
 
@@ -7407,6 +7728,7 @@ func TestGeneratedUnionEnumAndScalarMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionMemberResolutionOrderMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-member-resolution-order"), "module"), "types-union-member-resolution-order")
 	defer ctx.Close()
 
@@ -7452,6 +7774,7 @@ func TestGeneratedUnionMemberResolutionOrderMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionHeterogeneousQuotingMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-heterogeneous-members-quoting"), "module"), "types-union-heterogeneous-members-quoting")
 	defer ctx.Close()
 
@@ -7500,6 +7823,7 @@ func TestGeneratedUnionHeterogeneousQuotingMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionLeafrefMemberMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-leafref-member"), "module"), "types-union-leafref-member")
 	defer ctx.Close()
 
@@ -7545,6 +7869,7 @@ func TestGeneratedUnionLeafrefMemberMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionIdentityrefMemberMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-identityref-member"), "module"), "types-union-identityref-member")
 	defer ctx.Close()
 
@@ -7615,6 +7940,7 @@ func TestGeneratedUnionIdentityrefMemberMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionNestedTypedefChainMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-nested-typedef-chain"), "module"), "types-union-nested-typedef-chain")
 	defer ctx.Close()
 
@@ -7673,6 +7999,7 @@ func TestGeneratedUnionNestedTypedefChainMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefUnionCompositionMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-union-composition"), "module"), "types-typedef-union-composition")
 	defer ctx.Close()
 
@@ -7719,6 +8046,7 @@ func TestGeneratedTypedefUnionCompositionMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefSubmoduleCrossFileMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-submodule-cross-file"), "module"), "main")
 	defer ctx.Close()
 
@@ -7760,6 +8088,7 @@ func TestGeneratedTypedefSubmoduleCrossFileMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefSimpleBaseMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-simple-base"), "module"), "types-typedef-simple-base")
 	defer ctx.Close()
 
@@ -7804,6 +8133,7 @@ func TestGeneratedTypedefSimpleBaseMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefChainTwoDeepMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-chain-2deep"), "module"), "types-typedef-chain-2deep")
 	defer ctx.Close()
 
@@ -7844,6 +8174,7 @@ func TestGeneratedTypedefChainTwoDeepMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefChainThreeDeepMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-chain-3deep"), "module"), "types-typedef-chain-3deep")
 	defer ctx.Close()
 
@@ -7884,6 +8215,7 @@ func TestGeneratedTypedefChainThreeDeepMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefRestrictionNarrowingMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-restriction-narrowing"), "module"), "types-typedef-restriction-narrowing")
 	defer ctx.Close()
 
@@ -7928,6 +8260,7 @@ func TestGeneratedTypedefRestrictionNarrowingMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoTypedefDefaultInheritanceMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-typedef-default-inheritance"), "module"), "types-typedef-default-inheritance")
 	defer ctx.Close()
 
@@ -7981,6 +8314,7 @@ func TestGeneratedTypedefDefaultInheritanceMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoUnionTwoIdentityrefsMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-union-two-identityrefs-distinct-bases"), "module"), "types-union-two-identityrefs-distinct-bases")
 	defer ctx.Close()
 
@@ -8022,6 +8356,7 @@ func TestGeneratedUnionTwoIdentityrefsMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefToListKeyMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-to-list-key"), "module"), "types-leafref-to-list-key")
 	defer ctx.Close()
 
@@ -8067,6 +8402,7 @@ func TestGeneratedLeafrefToListKeyMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefAbsolutePathMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-absolute-path"), "module"), "types-leafref-absolute-path")
 	defer ctx.Close()
 
@@ -8111,6 +8447,7 @@ func TestGeneratedLeafrefAbsolutePathMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefToLeafListMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-to-leaf-list"), "module"), "types-leafref-to-leaf-list")
 	defer ctx.Close()
 
@@ -8151,6 +8488,7 @@ func TestGeneratedLeafrefToLeafListMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefRequireInstanceFalseMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-require-instance-false"), "module"), "types-leafref-require-instance-false")
 	defer ctx.Close()
 
@@ -8190,6 +8528,7 @@ func TestGeneratedLeafrefRequireInstanceFalseMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRelativeLeafrefMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-relative-parent-path"), "module"), "types-leafref-relative-parent-path")
 	defer ctx.Close()
 
@@ -8234,6 +8573,7 @@ func TestGeneratedRelativeLeafrefMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefChainMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-to-leafref-chain"), "module"), "types-leafref-to-leafref-chain")
 	defer ctx.Close()
 
@@ -8277,6 +8617,7 @@ func TestGeneratedLeafrefChainMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefCurrentContextMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-current-context"), "module"), "types-leafref-current-context")
 	defer ctx.Close()
 
@@ -8324,6 +8665,7 @@ func TestGeneratedLeafrefCurrentContextMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoLeafrefDerefMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-leafref-deref-function"), "module"), "types-leafref-deref-function")
 	defer ctx.Close()
 
@@ -8371,6 +8713,7 @@ func TestGeneratedLeafrefDerefMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoInstanceIdentifierRequireDefaultMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-instance-identifier-require-default"), "module"), "types-instance-identifier-require-default")
 	defer ctx.Close()
 
@@ -8480,6 +8823,7 @@ func TestGeneratedInstanceIdentifierRequireDefaultMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoInstanceIdentifierNoRequireMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-instance-identifier-no-require"), "module"), "types-instance-identifier-no-require")
 	defer ctx.Close()
 
@@ -8526,6 +8870,7 @@ func TestGeneratedInstanceIdentifierNoRequireMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoInstanceIdentifierComplexPathMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-instance-identifier-complex-path"), "module"), "types-instance-identifier-complex-path")
 	defer ctx.Close()
 
@@ -8581,6 +8926,7 @@ func TestGeneratedInstanceIdentifierComplexPathMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceSingleNodeCaseMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "choice-single-node-case"), "module"), "choice-single-node-case")
 	defer ctx.Close()
 
@@ -8621,6 +8967,7 @@ func TestGeneratedChoiceSingleNodeCaseMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceInterleavedSiblingsMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "choice-cases-interleaved-siblings"), "module"), "choice-cases-interleaved-siblings")
 	defer ctx.Close()
 
@@ -8668,6 +9015,7 @@ func TestGeneratedChoiceInterleavedSiblingsMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoListEntryChoiceOrderMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "list-entry-with-choice-schema-order"), "module"), "list-entry-with-choice-schema-order")
 	defer ctx.Close()
 
@@ -8713,6 +9061,7 @@ func TestGeneratedListEntryChoiceOrderMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceNestedInCaseMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "choice-nested-in-case"), "module"), "choice-nested-in-case")
 	defer ctx.Close()
 
@@ -8753,6 +9102,7 @@ func TestGeneratedChoiceNestedInCaseMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceShorthandLeaflistListMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "choice-shorthand-leaflist-list"), "module"), "choice-shorthand-leaflist-list")
 	defer ctx.Close()
 
@@ -8793,6 +9143,7 @@ func TestGeneratedChoiceShorthandLeaflistListMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceWithLeaflistBranchMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "choice-with-leaflist-branch"), "module"), "choice-with-leaflist-branch")
 	defer ctx.Close()
 
@@ -8835,6 +9186,7 @@ func TestGeneratedChoiceWithLeaflistBranchMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceMultipleCasesDefaultMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "choice-multiple-cases-default"), "module"), "choice-multiple-cases-default")
 	defer ctx.Close()
 
@@ -8875,6 +9227,7 @@ func TestGeneratedChoiceMultipleCasesDefaultMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceDefaultCaseWithDefaultsOnlyWhenSelected(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-default-codegen {
     namespace "urn:choice-default-codegen";
     prefix cdc;
@@ -8929,6 +9282,7 @@ func TestGeneratedChoiceDefaultCaseWithDefaultsOnlyWhenSelected(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceDefaultCaseContainerWithDefaultsOnlyWhenSelected(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-default-container-codegen {
     namespace "urn:choice-default-container-codegen";
     prefix cdcc;
@@ -8985,6 +9339,7 @@ func TestGeneratedChoiceDefaultCaseContainerWithDefaultsOnlyWhenSelected(t *test
 }
 
 func TestGeneratedGoChoiceNonDefaultCaseDefaultsDoNotCreateContainer(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-nondefault-container-codegen {
     namespace "urn:choice-nondefault-container-codegen";
     prefix cncc;
@@ -9044,6 +9399,7 @@ func TestGeneratedChoiceNonDefaultCaseDefaultsDoNotCreateContainer(t *testing.T)
 }
 
 func TestGeneratedGoChoiceDefaultCaseMandatoryDescendantRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-default-mandatory-codegen {
     namespace "urn:choice-default-mandatory-codegen";
     prefix cdmc;
@@ -9070,51 +9426,20 @@ func TestGeneratedGoChoiceDefaultCaseMandatoryDescendantRejects(t *testing.T) {
 	if err := builder.LoadModuleStr(source); err != nil {
 		t.Fatalf("LoadModuleStr: %v", err)
 	}
+	// RFC 7950 §7.9.3: no mandatory node directly under the default case, so
+	// the schema is rejected before any code is generated.
 	ctx, err := builder.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	defer ctx.Close()
-	src, err := codegen.GenerateGo(ctx, "choice-default-mandatory-codegen")
-	if err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-
-	testBody := `
-func TestGeneratedChoiceDefaultCaseMandatoryDescendantRejects(t *testing.T) {
-	empty := ChoiceDefaultMandatoryCodegen{}
-	err := empty.Validate()
 	if err == nil {
-		t.Fatal("Validate accepted missing mandatory descendant in default choice case")
+		ctx.Close()
+		t.Fatal("Build accepted a mandatory node under the choice default case")
 	}
-	if got, want := err.Error(), "/choice-default-mandatory-codegen/auth/password/username: missing mandatory field"; got != want {
-		t.Fatalf("Validate error = %q, want %q", got, want)
+	if want := `choice "auth" default case "password" must not contain mandatory node "username"`; !strings.Contains(err.Error(), want) {
+		t.Fatalf("Build error = %v, want it to contain %q", err, want)
 	}
-	if _, err := FromJSONIETF([]byte("{}")); err == nil {
-		t.Fatal("FromJSONIETF accepted missing mandatory descendant in default choice case")
-	} else if got, want := err.Error(), "/choice-default-mandatory-codegen/auth/password/username: missing mandatory field"; got != want {
-		t.Fatalf("FromJSONIETF error = %q, want %q", got, want)
-	}
-
-	alternate := ChoiceDefaultMandatoryCodegen{Token: ptr("tok-123")}
-	if err := alternate.Validate(); err != nil {
-		t.Fatalf("Validate rejected alternate case: %v", err)
-	}
-	if _, err := FromJSONIETF([]byte("{\"choice-default-mandatory-codegen:token\":\"tok-123\"}")); err != nil {
-		t.Fatalf("FromJSONIETF rejected alternate case: %v", err)
-	}
-
-	selectedDefault := ChoiceDefaultMandatoryCodegen{Username: ptr("alice")}
-	if err := selectedDefault.Validate(); err != nil {
-		t.Fatalf("Validate rejected default case with mandatory descendant: %v", err)
-	}
-}
-`
-
-	runGeneratedGoTest(t, src, testBody)
 }
 
 func TestGeneratedGoGroupingSimpleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-grouping-simple"), "module"), "linkage-grouping-simple")
 	defer ctx.Close()
 
@@ -9162,6 +9487,7 @@ func TestGeneratedGroupingSimpleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoGroupingNestedUsesMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-grouping-nested-uses"), "module"), "linkage-grouping-nested-uses")
 	defer ctx.Close()
 
@@ -9209,6 +9535,7 @@ func TestGeneratedGroupingNestedUsesMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoGroupingCrossModuleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-grouping-cross-module"), "module"), "linkage-grouping-cross-module")
 	defer ctx.Close()
 
@@ -9254,6 +9581,7 @@ func TestGeneratedGroupingCrossModuleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoRefineMandatoryConfigMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-refine-mandatory-config"), "module"), "linkage-refine-mandatory-config")
 	defer ctx.Close()
 
@@ -9298,6 +9626,7 @@ func TestGeneratedRefineMandatoryConfigMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAugmentIntraModuleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-augment-intra-module"), "module"), "linkage-augment-intra-module")
 	defer ctx.Close()
 
@@ -9346,6 +9675,7 @@ func TestGeneratedAugmentIntraModuleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAugmentInterModuleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-augment-inter-module"), "module"), "linkage-augment-inter-module")
 	defer ctx.Close()
 
@@ -9394,6 +9724,7 @@ func TestGeneratedAugmentInterModuleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAugmentContainerLeafListMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-augment-container-leaf-list"), "module"), "linkage-augment-container-leaf-list")
 	defer ctx.Close()
 
@@ -9444,6 +9775,7 @@ func TestGeneratedAugmentContainerLeafListMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAugmentNestedMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-augment-nested"), "module"), "linkage-augment-nested")
 	defer ctx.Close()
 
@@ -9492,6 +9824,7 @@ func TestGeneratedAugmentNestedMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAugmentChoiceCaseMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-augment-choice-case"), "module"), "linkage-augment-choice-case")
 	defer ctx.Close()
 
@@ -9537,6 +9870,7 @@ func TestGeneratedAugmentChoiceCaseMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoAugmentCrossModuleIdentCollisionMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "augment-cross-module-ident-collision"), "module"), "augment-cross-module-ident-collision")
 	defer ctx.Close()
 
@@ -9587,7 +9921,252 @@ func TestGeneratedAugmentCrossModuleIdentCollisionMatchesLibyang(t *testing.T) {
 	runGeneratedGoTest(t, src, testBody)
 }
 
+// A leaf augmented into a list from another module may share a key leaf's
+// local name. It is a distinct schema node: it must keep its own field, stay in
+// effective schema order after the keys (I2/I3), and never stand in for the key.
+func TestGeneratedGoListAugmentedLeafNamedLikeKeyKeepsQualifiedIdentity(t *testing.T) {
+	const base = `module list-key-augment-base {
+  yang-version 1.1;
+  namespace "urn:list-key-augment-base";
+  prefix lkab;
+
+  import ietf-yang-metadata { prefix md; }
+
+  md:annotation note { type string; }
+
+  container top {
+    list ent {
+      key "k2 k1";
+      leaf other { type string; }
+      leaf k1 { type string; }
+      leaf mid { type int64; }
+      leaf k2 { type uint32; }
+    }
+  }
+}`
+	const ext = `module list-key-augment-ext {
+  yang-version 1.1;
+  namespace "urn:list-key-augment-ext";
+  prefix lkae;
+
+  import list-key-augment-base { prefix lkab; }
+
+  augment "/lkab:top/lkab:ent" {
+    leaf k1 { type string; }
+    leaf aug { type string; }
+  }
+}`
+	metadataModule, err := os.ReadFile(filepath.Join(schemaFixtureDir(t, "metadata-annotation-rfc7952"), "module", "ietf-yang-metadata.yang"))
+	if err != nil {
+		t.Fatalf("read ietf-yang-metadata: %v", err)
+	}
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{string(metadataModule), base, ext} {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr: %v", err)
+		}
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "list-key-augment-base")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		again, err := codegen.GenerateGo(ctx, "list-key-augment-base")
+		if err != nil {
+			t.Fatalf("generate again: %v", err)
+		}
+		if again != src {
+			t.Fatalf("codegen output changed between runs (iteration %d)", i)
+		}
+	}
+	if want := `var ListKeyAugmentBaseTopEntEntryFieldOrder = []string{"k2", "k1", "other", "mid", "k1", "aug"}`; !strings.Contains(src, want) {
+		t.Fatalf("generated field-order manifest should keep the augmented same-named leaf after the keys, want %s in:\n%s", want, src)
+	}
+
+	testBody := `
+func TestGeneratedListAugmentedLeafNamedLikeKeyKeepsQualifiedIdentity(t *testing.T) {
+	demo := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "x", K12: ptr("y"), Aug: ptr("z")},
+	}}}
+	wantJSON := "{\n  \"list-key-augment-base:top\": {\n    \"ent\": [\n      {\n        \"k2\": 1,\n        \"k1\": \"x\",\n        \"list-key-augment-ext:k1\": \"y\",\n        \"list-key-augment-ext:aug\": \"z\"\n      }\n    ]\n  }\n}\n"
+	if got := demo.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+	wantXML := "<top xmlns=\"urn:list-key-augment-base\">\n  <ent>\n    <k2>1</k2>\n    <k1>x</k1>\n    <k1 xmlns=\"urn:list-key-augment-ext\">y</k1>\n    <aug xmlns=\"urn:list-key-augment-ext\">z</aug>\n  </ent>\n</top>\n"
+	if got := demo.ToXML(); got != wantXML {
+		t.Fatalf("XML mismatch:\n got: %q\nwant: %q", got, wantXML)
+	}
+	parsed, err := FromJSONIETF([]byte("{\"list-key-augment-base:top\":{\"ent\":[{\"list-key-augment-ext:aug\":\"z\",\"list-key-augment-ext:k1\":\"y\",\"k1\":\"x\",\"k2\":1}]}}"))
+	if err != nil {
+		t.Fatalf("FromJSONIETF rejected the augmented same-named leaf: %v", err)
+	}
+	if got := parsed.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("parsed JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+
+	// Canonical (ordered-by system) entry order sorts by the real keys, not
+	// by the augmented leaf that shares a key's local name.
+	sorted := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "b", K12: ptr("a")},
+		{K2: 1, K1: "a", K12: ptr("b")},
+	}}}
+	wantSorted := "{\n  \"list-key-augment-base:top\": {\n    \"ent\": [\n      {\n        \"k2\": 1,\n        \"k1\": \"a\",\n        \"list-key-augment-ext:k1\": \"b\"\n      },\n      {\n        \"k2\": 1,\n        \"k1\": \"b\",\n        \"list-key-augment-ext:k1\": \"a\"\n      }\n    ]\n  }\n}\n"
+	if got := sorted.ToJSONIETF(); got != wantSorted {
+		t.Fatalf("system-ordered JSON mismatch:\n got: %q\nwant: %q", got, wantSorted)
+	}
+	if err := sorted.Validate(); err != nil {
+		t.Fatalf("Validate distinct keys sharing the augmented leaf value: %v", err)
+	}
+
+	dup := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "x", K12: ptr("a")},
+		{K2: 1, K1: "x", K12: ptr("b")},
+	}}}
+	if err := dup.Validate(); err == nil {
+		t.Fatal("Validate accepted duplicate keys that differ only in the augmented same-named leaf")
+	} else if got, want := err.Error(), "/list-key-augment-base/top/ent: duplicate key violation"; got != want {
+		t.Fatalf("Validate error = %q, want %q", got, want)
+	}
+	sameAug := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "x", K12: ptr("same")},
+		{K2: 1, K1: "y", K12: ptr("same")},
+	}}}
+	if err := sameAug.Validate(); err != nil {
+		t.Fatalf("Validate rejected distinct keys that share the augmented leaf value: %v", err)
+	}
+
+	// RFC 7952 metadata stays attached to its own node: the augmented leaf is
+	// keyed by its module-qualified name, the key leaf by its local name.
+	note := func(value string) MetadataAnnotation {
+		return NewMetadataAnnotation("lkab", "urn:list-key-augment-base", "list-key-augment-base:note", value)
+	}
+	annotated := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{{
+		K2: 1, K1: "x", K12: ptr("y"),
+		CambiumMetadata: map[string][]MetadataAnnotation{
+			"k1":                      {note("key")},
+			"list-key-augment-ext:k1": {note("aug")},
+		},
+	}}}}
+	if err := annotated.Validate(); err != nil {
+		t.Fatalf("Validate metadata on key and augmented same-named leaf: %v", err)
+	}
+	wantAnnotatedJSON := "{\n  \"list-key-augment-base:top\": {\n    \"ent\": [\n      {\n        \"k2\": 1,\n        \"k1\": \"x\",\n        \"@k1\": {\n          \"list-key-augment-base:note\": \"key\"\n        },\n        \"list-key-augment-ext:k1\": \"y\",\n        \"@list-key-augment-ext:k1\": {\n          \"list-key-augment-base:note\": \"aug\"\n        }\n      }\n    ]\n  }\n}\n"
+	if got := annotated.ToJSONIETF(); got != wantAnnotatedJSON {
+		t.Fatalf("annotated JSON mismatch:\n got: %q\nwant: %q", got, wantAnnotatedJSON)
+	}
+	wantAnnotatedXML := "<top xmlns=\"urn:list-key-augment-base\">\n  <ent>\n    <k2>1</k2>\n    <k1 xmlns:lkab=\"urn:list-key-augment-base\" lkab:note=\"key\">x</k1>\n    <k1 xmlns=\"urn:list-key-augment-ext\" xmlns:lkab=\"urn:list-key-augment-base\" lkab:note=\"aug\">y</k1>\n  </ent>\n</top>\n"
+	if got := annotated.ToXML(); got != wantAnnotatedXML {
+		t.Fatalf("annotated XML mismatch:\n got: %q\nwant: %q", got, wantAnnotatedXML)
+	}
+	reparsed, err := FromJSONIETF([]byte(wantAnnotatedJSON))
+	if err != nil {
+		t.Fatalf("FromJSONIETF annotated JSON: %v", err)
+	}
+	if got := reparsed.ToJSONIETF(); got != wantAnnotatedJSON {
+		t.Fatalf("reparsed annotated JSON mismatch:\n got: %q\nwant: %q", got, wantAnnotatedJSON)
+	}
+}
+`
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
+// Same-named container siblings from different modules each keep their own
+// field and RFC 7952 metadata, and the generated code compiles.
+func TestGeneratedGoContainerAugmentedSameNameSiblingKeepsOwnMetadata(t *testing.T) {
+	const base = `module sibling-augment-base {
+  yang-version 1.1;
+  namespace "urn:sibling-augment-base";
+  prefix sab;
+
+  import ietf-yang-metadata { prefix md; }
+
+  md:annotation note { type string; }
+
+  container top {
+    leaf name { type string; }
+  }
+}`
+	const ext = `module sibling-augment-ext {
+  yang-version 1.1;
+  namespace "urn:sibling-augment-ext";
+  prefix sae;
+
+  import sibling-augment-base { prefix sab; }
+
+  augment "/sab:top" {
+    leaf name { type string; }
+  }
+}`
+	metadataModule, err := os.ReadFile(filepath.Join(schemaFixtureDir(t, "metadata-annotation-rfc7952"), "module", "ietf-yang-metadata.yang"))
+	if err != nil {
+		t.Fatalf("read ietf-yang-metadata: %v", err)
+	}
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{string(metadataModule), base, ext} {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr: %v", err)
+		}
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "sibling-augment-base")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	testBody := `
+func TestGeneratedContainerAugmentedSameNameSiblingKeepsOwnMetadata(t *testing.T) {
+	note := func(value string) MetadataAnnotation {
+		return NewMetadataAnnotation("sab", "urn:sibling-augment-base", "sibling-augment-base:note", value)
+	}
+	demo := SiblingAugmentBase{Top: SiblingAugmentBaseTop{
+		Name: ptr("base"), Name2: ptr("ext"),
+		CambiumMetadata: map[string][]MetadataAnnotation{
+			"name":                     {note("b")},
+			"sibling-augment-ext:name": {note("e")},
+		},
+	}}
+	if err := demo.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	wantJSON := "{\n  \"sibling-augment-base:top\": {\n    \"name\": \"base\",\n    \"@name\": {\n      \"sibling-augment-base:note\": \"b\"\n    },\n    \"sibling-augment-ext:name\": \"ext\",\n    \"@sibling-augment-ext:name\": {\n      \"sibling-augment-base:note\": \"e\"\n    }\n  }\n}\n"
+	if got := demo.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+	wantXML := "<top xmlns=\"urn:sibling-augment-base\">\n  <name xmlns:sab=\"urn:sibling-augment-base\" sab:note=\"b\">base</name>\n  <name xmlns=\"urn:sibling-augment-ext\" xmlns:sab=\"urn:sibling-augment-base\" sab:note=\"e\">ext</name>\n</top>\n"
+	if got := demo.ToXML(); got != wantXML {
+		t.Fatalf("XML mismatch:\n got: %q\nwant: %q", got, wantXML)
+	}
+	parsed, err := FromJSONIETF([]byte(wantJSON))
+	if err != nil {
+		t.Fatalf("FromJSONIETF: %v", err)
+	}
+	if got := parsed.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("parsed JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+}
+`
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
 func TestGeneratedGoAugmentWhenTargetContextMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "augment-when-target-context"), "module"), "augment-when-target-context")
 	defer ctx.Close()
 
@@ -9636,6 +10215,7 @@ func TestGeneratedAugmentWhenTargetContextMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoConditionalMandatoryAugmentIsOptional(t *testing.T) {
+	t.Parallel()
 	const base = `module mandatory-augment-codegen-base {
     yang-version 1.1;
     namespace "urn:mandatory-augment-codegen-base";
@@ -9705,6 +10285,7 @@ func TestGeneratedConditionalMandatoryAugmentIsOptional(t *testing.T) {
 }
 
 func TestGeneratedGoCrossModuleAugmentDeviationWhenMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-cross-module-augment-deviation-when"), "module"), "json-ietf-cross-module-aug")
 	defer ctx.Close()
 
@@ -9761,6 +10342,7 @@ func TestGeneratedCrossModuleAugmentDeviationWhenMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeviationNotSupportedMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-deviation-not-supported"), "module"), "linkage-deviation-not-supported-dev")
 	defer ctx.Close()
 
@@ -9805,6 +10387,7 @@ func TestGeneratedDeviationNotSupportedMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeviationAddMandatoryMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-deviation-add"), "module"), "linkage-deviation-add-dev")
 	defer ctx.Close()
 
@@ -9849,6 +10432,7 @@ func TestGeneratedDeviationAddMandatoryMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeviationDeleteDefaultMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-deviation-delete"), "module"), "linkage-deviation-delete-dev")
 	defer ctx.Close()
 
@@ -9889,6 +10473,7 @@ func TestGeneratedDeviationDeleteDefaultMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeviationReplaceTypeMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-deviation-replace-type"), "module"), "linkage-deviation-replace-type-dev")
 	defer ctx.Close()
 
@@ -9937,6 +10522,7 @@ func TestGeneratedDeviationReplaceTypeMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeviationReplaceDefaultConfigMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-deviation-replace-default-config"), "module"), "linkage-deviation-replace-default-config-dev")
 	defer ctx.Close()
 
@@ -9984,6 +10570,7 @@ func TestGeneratedDeviationReplaceDefaultConfigMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoDeviationMultiMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-deviation-multi"), "module"), "linkage-deviation-multi-dev")
 	defer ctx.Close()
 
@@ -10033,6 +10620,7 @@ func TestGeneratedDeviationMultiMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoImportPrefixMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-import-prefix"), "module"), "linkage-import-prefix")
 	defer ctx.Close()
 
@@ -10077,6 +10665,7 @@ func TestGeneratedImportPrefixMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoImportMultipleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-import-multiple"), "module"), "linkage-import-multiple")
 	defer ctx.Close()
 
@@ -10123,6 +10712,7 @@ func TestGeneratedImportMultipleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoImportRevisionDateMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-import-revision-date"), "module"), "linkage-import-revision-date")
 	defer ctx.Close()
 
@@ -10163,6 +10753,7 @@ func TestGeneratedImportRevisionDateMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoSubmoduleSimpleMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-submodule-simple"), "module"), "linkage-submodule-simple")
 	defer ctx.Close()
 
@@ -10208,6 +10799,7 @@ func TestGeneratedSubmoduleSimpleMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoSubmoduleMultiMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-submodule-multi"), "module"), "linkage-submodule-multi")
 	defer ctx.Close()
 
@@ -10253,6 +10845,7 @@ func TestGeneratedSubmoduleMultiMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoSubmoduleImportsForeignMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "linkage-submodule-imports-foreign"), "module"), "linkage-submodule-imports-foreign")
 	defer ctx.Close()
 
@@ -10298,6 +10891,7 @@ func TestGeneratedSubmoduleImportsForeignMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoPresenceVsNonpresenceJSONMatchesLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "json-ietf-presence-vs-nonpresence"), "module"), "json-ietf-presence-vs-nonpresence")
 	defer ctx.Close()
 
@@ -10330,6 +10924,7 @@ func TestGeneratedPresenceVsNonpresenceJSONMatchesLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoKeywordIdentifiersCompileAndMatchLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "idents-keywords-go"), "module"), "idents-keywords-go")
 	defer ctx.Close()
 
@@ -10381,6 +10976,7 @@ func TestGeneratedKeywordIdentifiersCompileAndMatchLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoIdentifierCollisionsCompileAndMatchLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "idents-collision-hyphen-underscore"), "module"), "idents-collision-hyphen-underscore")
 	defer ctx.Close()
 
@@ -10429,6 +11025,7 @@ func TestGeneratedIdentifierCollisionsCompileAndMatchLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoContainerLeafIdentifierEdgesCompileAndMatchLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "idents-container-leaf-collision"), "module"), "idents-container-leaf-collision")
 	defer ctx.Close()
 
@@ -10480,6 +11077,7 @@ func TestGeneratedContainerLeafIdentifierEdgesCompileAndMatchLibyang(t *testing.
 }
 
 func TestGeneratedGoEnumValueIdentifierCollisionsCompileAndMatchLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "idents-enum-value-collision"), "module"), "idents-enum-value-collision")
 	defer ctx.Close()
 
@@ -10525,6 +11123,7 @@ func TestGeneratedEnumValueIdentifierCollisionsCompileAndMatchLibyang(t *testing
 }
 
 func TestGeneratedGoLongIdentifiersCompileAndMatchLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "idents-long-name"), "module"), "idents-long-name")
 	defer ctx.Close()
 
@@ -10570,6 +11169,7 @@ func TestGeneratedLongIdentifiersCompileAndMatchLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoMixedCaseIdentifiersCompileAndMatchLibyang(t *testing.T) {
+	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "idents-unicode-mixed-case"), "module"), "idents-unicode-mixed-case")
 	defer ctx.Close()
 
@@ -10617,6 +11217,7 @@ func TestGeneratedMixedCaseIdentifiersCompileAndMatchLibyang(t *testing.T) {
 }
 
 func TestGeneratedGoMinElementsValidateRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "min-elements-reject", "min-elements-reject")
 
 	testBody := `
@@ -10647,6 +11248,7 @@ func TestGeneratedMinElementsValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoListKeyDuplicateValidateRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "list-single-key-string", "list-single-key-string")
 
 	testBody := `
@@ -10684,6 +11286,7 @@ func TestGeneratedListKeyDuplicateValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoCompositeListKeyDuplicateValidateRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "list-composite-key-two", "list-composite-key-two")
 
 	testBody := `
@@ -10721,6 +11324,7 @@ func TestGeneratedCompositeListKeyDuplicateValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoCompositeListKeyDelimiterCollision(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "list-composite-key-two", "list-composite-key-two")
 	if !strings.Contains(src, `key := strings.Join([]string{cambiumJSONEscape(entry.SrcIp), cambiumJSONEscape(entry.DstIp)}, "\x00")`) {
 		t.Fatalf("generated composite key validation should use escaped JSON literal key parts, got:\n%s", src)
@@ -10746,6 +11350,7 @@ func TestGeneratedCompositeListKeyDelimiterCollision(t *testing.T) {
 }
 
 func TestGeneratedGoYang11EmptyListKeyCompilesAndValidates(t *testing.T) {
+	t.Parallel()
 	const source = `module list-empty-key-yang11 {
     yang-version 1.1;
     namespace "urn:list-empty-key-yang11";
@@ -10807,6 +11412,7 @@ func TestGeneratedYang11EmptyListKeyValidates(t *testing.T) {
 }
 
 func TestGeneratedGoLeafListDuplicateValidateRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module leaflist-duplicate-reject {
     namespace "urn:leaflist-duplicate-reject";
     prefix lldr;
@@ -10860,6 +11466,7 @@ func TestGeneratedLeafListDuplicateValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoYang11StateLeafListAllowsDuplicateValues(t *testing.T) {
+	t.Parallel()
 	const source = `module leaflist-state-duplicate-yang11 {
     yang-version 1.1;
     namespace "urn:leaflist-state-duplicate-yang11";
@@ -10913,6 +11520,7 @@ func TestGeneratedYang11StateLeafListAllowsDuplicateValues(t *testing.T) {
 }
 
 func TestGeneratedGoJSONParseMissingListKeyRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "list-single-key-string", "list-single-key-string")
 
 	testBody := `
@@ -10937,6 +11545,7 @@ func TestGeneratedJSONParseMissingListKeyRejects(t *testing.T) {
 }
 
 func TestGeneratedGoJSONParseRejectsOversizedInput(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "json-ietf-parse-roundtrip", "json-ietf-parse-roundtrip")
 
 	testBody := `
@@ -10956,6 +11565,7 @@ func TestGeneratedJSONParseRejectsOversizedInput(t *testing.T) {
 }
 
 func TestGeneratedGoJSONParseRejectsExcessiveNesting(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "json-ietf-parse-roundtrip", "json-ietf-parse-roundtrip")
 
 	testBody := `
@@ -10981,6 +11591,7 @@ func TestGeneratedJSONParseRejectsExcessiveNesting(t *testing.T) {
 }
 
 func TestGeneratedGoJSONParseMissingCompositeListKeyRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "list-composite-key-two", "list-composite-key-two")
 
 	testBody := `
@@ -11006,6 +11617,7 @@ func TestGeneratedJSONParseMissingCompositeListKeyRejects(t *testing.T) {
 }
 
 func TestGeneratedGoJSONParseMissingMandatoryLeafRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "constraints-mandatory-interaction", "constraints-mandatory-interaction")
 
 	testBody := `
@@ -11063,6 +11675,7 @@ func TestGeneratedJSONParseMissingMandatoryLeafRejects(t *testing.T) {
 }
 
 func TestGeneratedGoMaxElementsValidateRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "max-elements-reject", "max-elements-reject")
 
 	testBody := `
@@ -11087,6 +11700,7 @@ func TestGeneratedMaxElementsValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoUniqueConstraintValidateRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "constraints-unique-violation-reject", "constraints-unique-violation-reject")
 
 	testBody := `
@@ -11116,6 +11730,7 @@ func TestGeneratedUniqueConstraintValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoDescendantUniqueConstraintValidateRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module unique-descendant-codegen {
     namespace "urn:unique-descendant-codegen";
     prefix udc;
@@ -11179,6 +11794,7 @@ func TestGeneratedDescendantUniqueConstraintValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseUniqueConstraintValidateRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module unique-choice-codegen {
     namespace "urn:unique-choice-codegen";
     prefix ucc;
@@ -11241,6 +11857,7 @@ func TestGeneratedChoiceCaseUniqueConstraintValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoDefaultedUniqueConstraintValidateRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module unique-default-codegen {
     namespace "urn:unique-default-codegen";
     prefix udc;
@@ -11299,6 +11916,7 @@ func TestGeneratedDefaultedUniqueConstraintValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoMandatoryChoiceValidateRejects(t *testing.T) {
+	t.Parallel()
 	src := generatedFixtureSource(t, "choice-mandatory-reject", "choice-mandatory-reject")
 
 	testBody := `
@@ -11338,6 +11956,7 @@ func TestGeneratedMandatoryChoiceValidateRejects(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseMandatoryDescendantRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-mandatory-descendant {
     namespace "urn:choice-case-mandatory-descendant";
     prefix ccmd;
@@ -11408,6 +12027,7 @@ func TestGeneratedChoiceCaseMandatoryDescendantRejects(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseMinElementsOnlyWhenSelected(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-min-elements {
     namespace "urn:choice-case-min-elements";
     prefix ccme;
@@ -11496,6 +12116,7 @@ func TestGeneratedChoiceCaseMinElementsOnlyWhenSelected(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseNestedMandatoryDescendantRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-nested-mandatory {
     namespace "urn:choice-case-nested-mandatory";
     prefix ccnm;
@@ -11577,6 +12198,7 @@ func TestGeneratedChoiceCaseNestedMandatoryDescendantRejects(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseNonPresenceContainerDoesNotSelectEmptyCase(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-nonpresence-container {
     namespace "urn:choice-case-nonpresence-container";
     prefix ccnpc;
@@ -11661,6 +12283,7 @@ func TestGeneratedChoiceCaseNonPresenceContainerDoesNotSelectEmptyCase(t *testin
 }
 
 func TestGeneratedGoChoiceCaseNestedMinElementsOnlyWhenSelected(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-nested-min-elements {
     namespace "urn:choice-case-nested-min-elements";
     prefix ccnme;
@@ -11764,6 +12387,7 @@ func TestGeneratedChoiceCaseNestedMinElementsOnlyWhenSelected(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseMaxElementsUsesSelectedCasePath(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-max-elements {
     namespace "urn:choice-case-max-elements";
     prefix ccme;
@@ -11834,6 +12458,7 @@ func TestGeneratedChoiceCaseMaxElementsUsesSelectedCasePath(t *testing.T) {
 }
 
 func TestGeneratedGoNestedMandatoryChoiceOnlyWhenParentCaseSelected(t *testing.T) {
+	t.Parallel()
 	const source = `module nested-mandatory-choice-in-case {
     namespace "urn:nested-mandatory-choice-in-case";
     prefix nmcic;
@@ -11920,6 +12545,7 @@ func TestGeneratedNestedMandatoryChoiceOnlyWhenParentCaseSelected(t *testing.T) 
 }
 
 func TestGeneratedGoNestedMandatoryChoiceInsideCaseContainerOnlyWhenSelected(t *testing.T) {
+	t.Parallel()
 	const source = `module nested-mandatory-choice-in-container {
     namespace "urn:nested-mandatory-choice-in-container";
     prefix nmcic;
@@ -12023,6 +12649,7 @@ func TestGeneratedNestedMandatoryChoiceInsideCaseContainerOnlyWhenSelected(t *te
 }
 
 func TestGeneratedGoChoiceCaseScalarValidationUsesSelectedCasePath(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-scalar-validation {
     namespace "urn:choice-case-scalar-validation";
     prefix ccsv;
@@ -12086,6 +12713,7 @@ func TestGeneratedChoiceCaseScalarValidationUsesSelectedCasePath(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseListMandatoryEntryDescendantRejects(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-list-mandatory {
     namespace "urn:choice-case-list-mandatory";
     prefix cclm;
@@ -12206,6 +12834,7 @@ func TestGeneratedChoiceCaseListMandatoryEntryDescendantRejects(t *testing.T) {
 }
 
 func TestGeneratedGoChoiceCaseNestedMaxElementsUsesSelectedCasePath(t *testing.T) {
+	t.Parallel()
 	const source = `module choice-case-nested-max-elements {
     namespace "urn:choice-case-nested-max-elements";
     prefix ccnme;
@@ -12288,6 +12917,10 @@ func TestGeneratedChoiceCaseNestedMaxElementsUsesSelectedCasePath(t *testing.T) 
 
 const generatedGoCommandTimeout = 5 * time.Minute
 
+// generatedCommandWaitDelay bounds how long a killed command's output pipes may
+// stay open (for example, held by an orphaned grandchild) before Wait gives up.
+const generatedCommandWaitDelay = 5 * time.Second
+
 func runGeneratedGoTest(t *testing.T, generatedSrc, testBody string) {
 	t.Helper()
 
@@ -12349,7 +12982,7 @@ func runGeneratedCommand(ctx context.Context, dir, name string, args ...string) 
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Env = generatedCommandEnv(os.Environ())
-	cmd.WaitDelay = 5 * time.Second
+	cmd.WaitDelay = generatedCommandWaitDelay
 	return cmd.CombinedOutput()
 }
 

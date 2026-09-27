@@ -4,6 +4,14 @@
 # Cambium serializes to every file listed in `expected` byte-for-byte. When
 # `oracle = true` the runner also checks the output against an independent
 # `yanglint` invocation.
+#
+# A case with `expect = "reject"` (the default is "accept") holds a data
+# document that breaks an RFC 7950 rule instead: a validating parse (unknown
+# data is an error, then full validation of the datastore) must refuse it. It
+# has no `expected` outputs, no op-type, serialize-defaults, or gnmi-path, and
+# at least one top-level data node. With `oracle = true` yanglint must refuse it
+# too, and with `datatree = true` so must the pure-Go datatree. Runners compare
+# the verdict, never the error text.
 
 
 
@@ -228,6 +236,7 @@ module = "fixtures/system-list-canonical/module"
 input = "fixtures/system-list-canonical/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/system-list-canonical/output.xml"
 json = "golden/system-list-canonical/output.json"
@@ -254,6 +263,7 @@ module = "corpus/ietf-interfaces"
 input = "fixtures/ietf-interfaces/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ietf-interfaces/output.xml"
 json = "golden/ietf-interfaces/output.json"
@@ -280,6 +290,7 @@ module = "fixtures/types-int-int8-range/module"
 input = "fixtures/types-int-int8-range/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-int-int8-range/output.xml"
 json = "golden/types-int-int8-range/output.json"
@@ -307,6 +318,7 @@ module = "fixtures/types-int-int16-range/module"
 input = "fixtures/types-int-int16-range/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-int-int16-range/output.xml"
 json = "golden/types-int-int16-range/output.json"
@@ -334,6 +346,7 @@ module = "fixtures/types-int-int32-range-multipart/module"
 input = "fixtures/types-int-int32-range-multipart/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-int-int32-range-multipart/output.xml"
 json = "golden/types-int-int32-range-multipart/output.json"
@@ -361,6 +374,7 @@ module = "fixtures/types-int-int64-range-quoted/module"
 input = "fixtures/types-int-int64-range-quoted/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-int-int64-range-quoted/output.xml"
 json = "golden/types-int-int64-range-quoted/output.json"
@@ -388,6 +402,7 @@ module = "fixtures/types-uint-uint8-range/module"
 input = "fixtures/types-uint-uint8-range/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-uint-uint8-range/output.xml"
 json = "golden/types-uint-uint8-range/output.json"
@@ -415,6 +430,7 @@ module = "fixtures/types-uint-uint16-range-port/module"
 input = "fixtures/types-uint-uint16-range-port/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-uint-uint16-range-port/output.xml"
 json = "golden/types-uint-uint16-range-port/output.json"
@@ -442,6 +458,7 @@ module = "fixtures/types-uint-uint32-range-multi/module"
 input = "fixtures/types-uint-uint32-range-multi/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-uint-uint32-range-multi/output.xml"
 json = "golden/types-uint-uint32-range-multi/output.json"
@@ -469,6 +486,7 @@ module = "fixtures/types-uint-uint64-range-quoted/module"
 input = "fixtures/types-uint-uint64-range-quoted/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-uint-uint64-range-quoted/output.xml"
 json = "golden/types-uint-uint64-range-quoted/output.json"
@@ -496,6 +514,7 @@ module = "fixtures/types-decimal64-fraction1-range/module"
 input = "fixtures/types-decimal64-fraction1-range/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-decimal64-fraction1-range/output.xml"
 json = "golden/types-decimal64-fraction1-range/output.json"
@@ -523,6 +542,7 @@ module = "fixtures/types-decimal64-fraction2-canonical-round/module"
 input = "fixtures/types-decimal64-fraction2-canonical-round/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-decimal64-fraction2-canonical-round/output.xml"
 json = "golden/types-decimal64-fraction2-canonical-round/output.json"
@@ -550,6 +570,7 @@ module = "fixtures/types-decimal64-fraction3-and-6/module"
 input = "fixtures/types-decimal64-fraction3-and-6/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-decimal64-fraction3-and-6/output.xml"
 json = "golden/types-decimal64-fraction3-and-6/output.json"
@@ -577,6 +598,7 @@ module = "fixtures/types-decimal64-fraction9-negative/module"
 input = "fixtures/types-decimal64-fraction9-negative/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-decimal64-fraction9-negative/output.xml"
 json = "golden/types-decimal64-fraction9-negative/output.json"
@@ -604,6 +626,7 @@ module = "fixtures/types-decimal64-fraction18-max-magnitude/module"
 input = "fixtures/types-decimal64-fraction18-max-magnitude/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-decimal64-fraction18-max-magnitude/output.xml"
 json = "golden/types-decimal64-fraction18-max-magnitude/output.json"
@@ -631,6 +654,7 @@ module = "fixtures/types-empty-leaf-null-json/module"
 input = "fixtures/types-empty-leaf-null-json/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-empty-leaf-null-json/output.xml"
 json = "golden/types-empty-leaf-null-json/output.json"
@@ -658,6 +682,7 @@ module = "fixtures/types-enumeration-explicit-values-sparse/module"
 input = "fixtures/types-enumeration-explicit-values-sparse/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-enumeration-explicit-values-sparse/output.xml"
 json = "golden/types-enumeration-explicit-values-sparse/output.json"
@@ -685,6 +710,7 @@ module = "fixtures/types-enumeration-zero-value-disabled/module"
 input = "fixtures/types-enumeration-zero-value-disabled/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-enumeration-zero-value-disabled/output.xml"
 json = "golden/types-enumeration-zero-value-disabled/output.json"
@@ -712,6 +738,7 @@ module = "fixtures/types-enum-bits-auto-position/module"
 input = "fixtures/types-enum-bits-auto-position/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-enum-bits-auto-position/output.xml"
 json = "golden/types-enum-bits-auto-position/output.json"
@@ -739,6 +766,7 @@ module = "fixtures/types-bits-explicit-positions-gaps/module"
 input = "fixtures/types-bits-explicit-positions-gaps/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-bits-explicit-positions-gaps/output.xml"
 json = "golden/types-bits-explicit-positions-gaps/output.json"
@@ -766,6 +794,7 @@ module = "fixtures/types-binary-length-base64/module"
 input = "fixtures/types-binary-length-base64/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-binary-length-base64/output.xml"
 json = "golden/types-binary-length-base64/output.json"
@@ -793,6 +822,7 @@ module = "fixtures/types-boolean-default-false/module"
 input = "fixtures/types-boolean-default-false/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-boolean-default-false/output.xml"
 json = "golden/types-boolean-default-false/output.json"
@@ -820,6 +850,7 @@ module = "fixtures/types-string-pattern-modifier-invert-match/module"
 input = "fixtures/types-string-pattern-modifier-invert-match/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-string-pattern-modifier-invert-match/output.xml"
 json = "golden/types-string-pattern-modifier-invert-match/output.json"
@@ -847,6 +878,7 @@ module = "fixtures/types-string-multiple-patterns-conjunction/module"
 input = "fixtures/types-string-multiple-patterns-conjunction/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-string-multiple-patterns-conjunction/output.xml"
 json = "golden/types-string-multiple-patterns-conjunction/output.json"
@@ -874,6 +906,7 @@ module = "fixtures/types-string-length-pattern-anchor-posix/module"
 input = "fixtures/types-string-length-pattern-anchor-posix/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-string-length-pattern-anchor-posix/output.xml"
 json = "golden/types-string-length-pattern-anchor-posix/output.json"
@@ -901,6 +934,7 @@ module = "fixtures/constraints-range-length-reject/module"
 input = "fixtures/constraints-range-length-reject/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-range-length-reject/output.xml"
 json = "golden/constraints-range-length-reject/output.json"
@@ -928,6 +962,7 @@ module = "fixtures/types-range-length-min-max-keywords/module"
 input = "fixtures/types-range-length-min-max-keywords/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-range-length-min-max-keywords/output.xml"
 json = "golden/types-range-length-min-max-keywords/output.json"
@@ -955,6 +990,7 @@ module = "fixtures/json-ietf-decimal64-no-exponent/module"
 input = "fixtures/json-ietf-decimal64-no-exponent/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-decimal64-no-exponent/output.xml"
 json = "golden/json-ietf-decimal64-no-exponent/output.json"
@@ -982,6 +1018,7 @@ module = "fixtures/types-typedef-simple-base/module"
 input = "fixtures/types-typedef-simple-base/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-simple-base/output.xml"
 json = "golden/types-typedef-simple-base/output.json"
@@ -1009,6 +1046,7 @@ module = "fixtures/types-typedef-chain-2deep/module"
 input = "fixtures/types-typedef-chain-2deep/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-chain-2deep/output.xml"
 json = "golden/types-typedef-chain-2deep/output.json"
@@ -1036,6 +1074,7 @@ module = "fixtures/types-typedef-chain-3deep/module"
 input = "fixtures/types-typedef-chain-3deep/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-chain-3deep/output.xml"
 json = "golden/types-typedef-chain-3deep/output.json"
@@ -1063,6 +1102,7 @@ module = "fixtures/types-typedef-restriction-narrowing/module"
 input = "fixtures/types-typedef-restriction-narrowing/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-restriction-narrowing/output.xml"
 json = "golden/types-typedef-restriction-narrowing/output.json"
@@ -1090,6 +1130,7 @@ module = "fixtures/types-typedef-default-inheritance/module"
 input = "fixtures/types-typedef-default-inheritance/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-default-inheritance/output.xml"
 json = "golden/types-typedef-default-inheritance/output.json"
@@ -1117,6 +1158,7 @@ module = "fixtures/types-typedef-union-composition/module"
 input = "fixtures/types-typedef-union-composition/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-union-composition/output.xml"
 json = "golden/types-typedef-union-composition/output.json"
@@ -1144,6 +1186,7 @@ module = "fixtures/types-typedef-submodule-cross-file/module"
 input = "fixtures/types-typedef-submodule-cross-file/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-typedef-submodule-cross-file/output.xml"
 json = "golden/types-typedef-submodule-cross-file/output.json"
@@ -1171,6 +1214,7 @@ module = "fixtures/types-union-heterogeneous-members-quoting/module"
 input = "fixtures/types-union-heterogeneous-members-quoting/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-heterogeneous-members-quoting/output.xml"
 json = "golden/types-union-heterogeneous-members-quoting/output.json"
@@ -1198,6 +1242,7 @@ module = "fixtures/types-union-scalar-all-members/module"
 input = "fixtures/types-union-scalar-all-members/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-scalar-all-members/output.xml"
 json = "golden/types-union-scalar-all-members/output.json"
@@ -1225,6 +1270,7 @@ module = "fixtures/types-union-member-resolution-order/module"
 input = "fixtures/types-union-member-resolution-order/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-member-resolution-order/output.xml"
 json = "golden/types-union-member-resolution-order/output.json"
@@ -1252,6 +1298,7 @@ module = "fixtures/types-union-nested-typedef-chain/module"
 input = "fixtures/types-union-nested-typedef-chain/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-nested-typedef-chain/output.xml"
 json = "golden/types-union-nested-typedef-chain/output.json"
@@ -1279,6 +1326,7 @@ module = "fixtures/types-union-leafref-member/module"
 input = "fixtures/types-union-leafref-member/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-leafref-member/output.xml"
 json = "golden/types-union-leafref-member/output.json"
@@ -1306,6 +1354,7 @@ module = "fixtures/types-union-identityref-member/module"
 input = "fixtures/types-union-identityref-member/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-identityref-member/output.xml"
 json = "golden/types-union-identityref-member/output.json"
@@ -1333,6 +1382,7 @@ module = "fixtures/types-union-two-identityrefs-distinct-bases/module"
 input = "fixtures/types-union-two-identityrefs-distinct-bases/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-two-identityrefs-distinct-bases/output.xml"
 json = "golden/types-union-two-identityrefs-distinct-bases/output.json"
@@ -1360,6 +1410,7 @@ module = "fixtures/types-union-enum-and-scalar/module"
 input = "fixtures/types-union-enum-and-scalar/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-union-enum-and-scalar/output.xml"
 json = "golden/types-union-enum-and-scalar/output.json"
@@ -1387,6 +1438,7 @@ module = "fixtures/types-leafref-absolute-path/module"
 input = "fixtures/types-leafref-absolute-path/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-absolute-path/output.xml"
 json = "golden/types-leafref-absolute-path/output.json"
@@ -1414,6 +1466,7 @@ module = "fixtures/types-leafref-relative-parent-path/module"
 input = "fixtures/types-leafref-relative-parent-path/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-relative-parent-path/output.xml"
 json = "golden/types-leafref-relative-parent-path/output.json"
@@ -1441,6 +1494,7 @@ module = "fixtures/types-leafref-current-context/module"
 input = "fixtures/types-leafref-current-context/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-current-context/output.xml"
 json = "golden/types-leafref-current-context/output.json"
@@ -1468,6 +1522,7 @@ module = "fixtures/types-leafref-to-list-key/module"
 input = "fixtures/types-leafref-to-list-key/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-to-list-key/output.xml"
 json = "golden/types-leafref-to-list-key/output.json"
@@ -1495,6 +1550,7 @@ module = "fixtures/types-leafref-to-leaf-list/module"
 input = "fixtures/types-leafref-to-leaf-list/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-to-leaf-list/output.xml"
 json = "golden/types-leafref-to-leaf-list/output.json"
@@ -1522,6 +1578,7 @@ module = "fixtures/types-leafref-to-leafref-chain/module"
 input = "fixtures/types-leafref-to-leafref-chain/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-to-leafref-chain/output.xml"
 json = "golden/types-leafref-to-leafref-chain/output.json"
@@ -1549,6 +1606,7 @@ module = "fixtures/types-leafref-require-instance-false/module"
 input = "fixtures/types-leafref-require-instance-false/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-require-instance-false/output.xml"
 json = "golden/types-leafref-require-instance-false/output.json"
@@ -1572,6 +1630,7 @@ json_ietf = "golden/types-leafref-require-instance-false/output.json_ietf"
 
 [[case]]
 name = "types-leafref-cross-module"
+datatree = true
 module = "fixtures/types-leafref-cross-module/module"
 input = "fixtures/types-leafref-cross-module/input.xml"
 input-format = "xml"
@@ -1603,6 +1662,7 @@ module = "fixtures/types-identityref-single-base/module"
 input = "fixtures/types-identityref-single-base/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-identityref-single-base/output.xml"
 json = "golden/types-identityref-single-base/output.json"
@@ -1630,6 +1690,7 @@ module = "fixtures/types-identityref-multiple-bases/module"
 input = "fixtures/types-identityref-multiple-bases/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-identityref-multiple-bases/output.xml"
 json = "golden/types-identityref-multiple-bases/output.json"
@@ -1657,6 +1718,7 @@ module = "fixtures/types-identityref-derived-hierarchy/module"
 input = "fixtures/types-identityref-derived-hierarchy/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-identityref-derived-hierarchy/output.xml"
 json = "golden/types-identityref-derived-hierarchy/output.json"
@@ -1684,6 +1746,7 @@ module = "fixtures/types-identityref-foreign-module-prefix/module"
 input = "fixtures/types-identityref-foreign-module-prefix/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-identityref-foreign-module-prefix/output.xml"
 json = "golden/types-identityref-foreign-module-prefix/output.json"
@@ -1711,6 +1774,7 @@ module = "corpus/identityref-iana-if-type-foreign"
 input = "fixtures/identityref-iana-if-type-foreign/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/identityref-iana-if-type-foreign/output.xml"
 json = "golden/identityref-iana-if-type-foreign/output.json"
@@ -1738,6 +1802,7 @@ module = "fixtures/types-instance-identifier-require-default/module"
 input = "fixtures/types-instance-identifier-require-default/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-instance-identifier-require-default/output.xml"
 json = "golden/types-instance-identifier-require-default/output.json"
@@ -1765,6 +1830,7 @@ module = "fixtures/types-instance-identifier-complex-path/module"
 input = "fixtures/types-instance-identifier-complex-path/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-instance-identifier-complex-path/output.xml"
 json = "golden/types-instance-identifier-complex-path/output.json"
@@ -1792,6 +1858,7 @@ module = "fixtures/types-instance-identifier-no-require/module"
 input = "fixtures/types-instance-identifier-no-require/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-instance-identifier-no-require/output.xml"
 json = "golden/types-instance-identifier-no-require/output.json"
@@ -1819,6 +1886,7 @@ module = "fixtures/types-leafref-deref-function/module"
 input = "fixtures/types-leafref-deref-function/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/types-leafref-deref-function/output.xml"
 json = "golden/types-leafref-deref-function/output.json"
@@ -1845,6 +1913,7 @@ module = "fixtures/identity-standalone/module"
 input = "fixtures/identity-standalone/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/identity-standalone/output.xml"
 json = "golden/identity-standalone/output.json"
@@ -1871,6 +1940,7 @@ module = "fixtures/identity-cross-module-derivation/module"
 input = "fixtures/identity-cross-module-derivation/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/identity-cross-module-derivation/output.xml"
 json = "golden/identity-cross-module-derivation/output.json"
@@ -1897,6 +1967,7 @@ module = "fixtures/identity-multi-base-cross-module/module"
 input = "fixtures/identity-multi-base-cross-module/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/identity-multi-base-cross-module/output.xml"
 json = "golden/identity-multi-base-cross-module/output.json"
@@ -1923,6 +1994,7 @@ module = "fixtures/identity-hierarchy-with-identityref/module"
 input = "fixtures/identity-hierarchy-with-identityref/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/identity-hierarchy-with-identityref/output.xml"
 json = "golden/identity-hierarchy-with-identityref/output.json"
@@ -1937,6 +2009,7 @@ module = "fixtures/constraints-when-must/module"
 input = "fixtures/constraints-when-must/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-when-must/output.xml"
 json = "golden/constraints-when-must/output.json"
@@ -1979,6 +2052,7 @@ module = "fixtures/constraints-must-multiple/module"
 input = "fixtures/constraints-must-multiple/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-must-multiple/output.xml"
 json = "golden/constraints-must-multiple/output.json"
@@ -1993,6 +2067,7 @@ module = "fixtures/constraints-unique-composite/module"
 input = "fixtures/constraints-unique-composite/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-unique-composite/output.xml"
 json = "golden/constraints-unique-composite/output.json"
@@ -2007,6 +2082,7 @@ module = "fixtures/constraints-unique-violation-reject/module"
 input = "fixtures/constraints-unique-violation-reject/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-unique-violation-reject/output.xml"
 json = "golden/constraints-unique-violation-reject/output.json"
@@ -2021,6 +2097,7 @@ module = "fixtures/constraints-mandatory-interaction/module"
 input = "fixtures/constraints-mandatory-interaction/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-mandatory-interaction/output.xml"
 json = "golden/constraints-mandatory-interaction/output.json"
@@ -2035,6 +2112,7 @@ module = "fixtures/constraints-default-types/module"
 input = "fixtures/constraints-default-types/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-default-types/output.xml"
 json = "golden/constraints-default-types/output.json"
@@ -2049,6 +2127,7 @@ module = "fixtures/constraints-feature-iffeature/module"
 input = "fixtures/constraints-feature-iffeature/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-feature-iffeature/output.xml"
 json = "golden/constraints-feature-iffeature/output.json"
@@ -2063,6 +2142,7 @@ module = "fixtures/constraints-feature-dependency/module"
 input = "fixtures/constraints-feature-dependency/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-feature-dependency/output.xml"
 json = "golden/constraints-feature-dependency/output.json"
@@ -2077,6 +2157,7 @@ module = "fixtures/constraints-feature-presence/module"
 input = "fixtures/constraints-feature-presence/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/constraints-feature-presence/output.xml"
 json = "golden/constraints-feature-presence/output.json"
@@ -2091,6 +2172,7 @@ module = "fixtures/container-presence-empty/module"
 input = "fixtures/container-presence-empty/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/container-presence-empty/output.xml"
 json = "golden/container-presence-empty/output.json"
@@ -2105,6 +2187,7 @@ module = "fixtures/container-nested-depth/module"
 input = "fixtures/container-nested-depth/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/container-nested-depth/output.xml"
 json = "golden/container-nested-depth/output.json"
@@ -2119,6 +2202,7 @@ module = "fixtures/list-single-key-string/module"
 input = "fixtures/list-single-key-string/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-single-key-string/output.xml"
 json = "golden/list-single-key-string/output.json"
@@ -2133,6 +2217,7 @@ module = "fixtures/list-single-key-numeric/module"
 input = "fixtures/list-single-key-numeric/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-single-key-numeric/output.xml"
 json = "golden/list-single-key-numeric/output.json"
@@ -2147,6 +2232,7 @@ module = "fixtures/list-composite-key-two/module"
 input = "fixtures/list-composite-key-two/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-composite-key-two/output.xml"
 json = "golden/list-composite-key-two/output.json"
@@ -2161,6 +2247,7 @@ module = "fixtures/list-composite-key-three/module"
 input = "fixtures/list-composite-key-three/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-composite-key-three/output.xml"
 json = "golden/list-composite-key-three/output.json"
@@ -2175,6 +2262,7 @@ module = "fixtures/ordering-composite-key-wide/module"
 input = "fixtures/ordering-composite-key-wide/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ordering-composite-key-wide/output.xml"
 json = "golden/ordering-composite-key-wide/output.json"
@@ -2189,6 +2277,7 @@ module = "fixtures/composite-key-with-interleaved-containers/module"
 input = "fixtures/composite-key-with-interleaved-containers/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/composite-key-with-interleaved-containers/output.xml"
 json = "golden/composite-key-with-interleaved-containers/output.json"
@@ -2204,6 +2293,7 @@ module = "fixtures/list-keyless-positional/module"
 input = "fixtures/list-keyless-positional/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-keyless-positional/output.xml"
 json = "golden/list-keyless-positional/output.json"
@@ -2218,6 +2308,7 @@ module = "fixtures/min-elements-reject/module"
 input = "fixtures/min-elements-reject/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/min-elements-reject/output.xml"
 json = "golden/min-elements-reject/output.json"
@@ -2232,6 +2323,7 @@ module = "fixtures/max-elements-reject/module"
 input = "fixtures/max-elements-reject/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/max-elements-reject/output.xml"
 json = "golden/max-elements-reject/output.json"
@@ -2246,6 +2338,7 @@ module = "fixtures/choice-multiple-cases-default/module"
 input = "fixtures/choice-multiple-cases-default/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-multiple-cases-default/output.xml"
 json = "golden/choice-multiple-cases-default/output.json"
@@ -2260,6 +2353,7 @@ module = "fixtures/choice-mandatory-reject/module"
 input = "fixtures/choice-mandatory-reject/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-mandatory-reject/output.xml"
 json = "golden/choice-mandatory-reject/output.json"
@@ -2274,6 +2368,7 @@ module = "fixtures/choice-single-node-case/module"
 input = "fixtures/choice-single-node-case/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-single-node-case/output.xml"
 json = "golden/choice-single-node-case/output.json"
@@ -2288,6 +2383,7 @@ module = "fixtures/choice-nested-in-case/module"
 input = "fixtures/choice-nested-in-case/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-nested-in-case/output.xml"
 json = "golden/choice-nested-in-case/output.json"
@@ -2302,6 +2398,7 @@ module = "fixtures/choice-cases-interleaved-siblings/module"
 input = "fixtures/choice-cases-interleaved-siblings/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-cases-interleaved-siblings/output.xml"
 json = "golden/choice-cases-interleaved-siblings/output.json"
@@ -2316,6 +2413,7 @@ module = "fixtures/choice-with-leaflist-branch/module"
 input = "fixtures/choice-with-leaflist-branch/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-with-leaflist-branch/output.xml"
 json = "golden/choice-with-leaflist-branch/output.json"
@@ -2330,6 +2428,7 @@ module = "fixtures/choice-shorthand-leaflist-list/module"
 input = "fixtures/choice-shorthand-leaflist-list/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/choice-shorthand-leaflist-list/output.xml"
 json = "golden/choice-shorthand-leaflist-list/output.json"
@@ -2344,6 +2443,7 @@ module = "fixtures/list-entry-with-choice-schema-order/module"
 input = "fixtures/list-entry-with-choice-schema-order/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-entry-with-choice-schema-order/output.xml"
 json = "golden/list-entry-with-choice-schema-order/output.json"
@@ -2358,6 +2458,7 @@ module = "fixtures/container-within-list-schema-order/module"
 input = "fixtures/container-within-list-schema-order/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/container-within-list-schema-order/output.xml"
 json = "golden/container-within-list-schema-order/output.json"
@@ -2372,6 +2473,7 @@ module = "fixtures/leaf-list-within-list-entry/module"
 input = "fixtures/leaf-list-within-list-entry/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/leaf-list-within-list-entry/output.xml"
 json = "golden/leaf-list-within-list-entry/output.json"
@@ -2386,6 +2488,7 @@ module = "fixtures/config-true-subtree/module"
 input = "fixtures/config-true-subtree/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/config-true-subtree/output.xml"
 json = "golden/config-true-subtree/output.json"
@@ -2400,6 +2503,7 @@ module = "fixtures/config-false-state-subtree/module"
 input = "fixtures/config-false-state-subtree/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/config-false-state-subtree/output.xml"
 json = "golden/config-false-state-subtree/output.json"
@@ -2414,6 +2518,7 @@ module = "fixtures/mixed-config-state-nested/module"
 input = "fixtures/mixed-config-state-nested/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/mixed-config-state-nested/output.xml"
 json = "golden/mixed-config-state-nested/output.json"
@@ -2427,6 +2532,7 @@ module = "fixtures/status-current-deprecated-obsolete/module"
 input = "fixtures/status-current-deprecated-obsolete/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/status-current-deprecated-obsolete/output.xml"
 json = "golden/status-current-deprecated-obsolete/output.json"
@@ -2474,6 +2580,7 @@ module = "fixtures/list-ordered-by-user-insertion/module"
 input = "fixtures/list-ordered-by-user-insertion/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-ordered-by-user-insertion/output.xml"
 json = "golden/list-ordered-by-user-insertion/output.json"
@@ -2496,6 +2603,7 @@ module = "fixtures/list-ordered-by-system-canonical/module"
 input = "fixtures/list-ordered-by-system-canonical/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/list-ordered-by-system-canonical/output.xml"
 json = "golden/list-ordered-by-system-canonical/output.json"
@@ -2507,6 +2615,7 @@ module = "fixtures/leaflist-ordered-by-user/module"
 input = "fixtures/leaflist-ordered-by-user/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/leaflist-ordered-by-user/output.xml"
 json = "golden/leaflist-ordered-by-user/output.json"
@@ -2518,6 +2627,7 @@ module = "fixtures/leaflist-ordered-by-system/module"
 input = "fixtures/leaflist-ordered-by-system/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/leaflist-ordered-by-system/output.xml"
 json = "golden/leaflist-ordered-by-system/output.json"
@@ -2529,6 +2639,7 @@ module = "fixtures/leaflist-with-defaults/module"
 input = "fixtures/leaflist-with-defaults/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/leaflist-with-defaults/output.xml"
 json = "golden/leaflist-with-defaults/output.json"
@@ -2541,6 +2652,7 @@ module = "fixtures/ordering-nested-user-cascading/module"
 input = "fixtures/ordering-nested-user-cascading/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ordering-nested-user-cascading/output.xml"
 json = "golden/ordering-nested-user-cascading/output.json"
@@ -2552,6 +2664,7 @@ module = "fixtures/ordered-user-config-false-state/module"
 input = "fixtures/ordered-user-config-false-state/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/ordered-user-config-false-state/output.xml"
 json = "golden/ordered-user-config-false-state/output.json"
@@ -2563,6 +2676,7 @@ module = "fixtures/declaration-order-out-of-alphabetical/module"
 input = "fixtures/declaration-order-out-of-alphabetical/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/declaration-order-out-of-alphabetical/output.xml"
 json = "golden/declaration-order-out-of-alphabetical/output.json"
@@ -2574,6 +2688,7 @@ module = "fixtures/wide-heterogeneous-siblings-all-types/module"
 input = "fixtures/wide-heterogeneous-siblings-all-types/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/wide-heterogeneous-siblings-all-types/output.xml"
 json = "golden/wide-heterogeneous-siblings-all-types/output.json"
@@ -2586,6 +2701,7 @@ module = "fixtures/json-object-determinism/module"
 input = "fixtures/json-object-determinism/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-object-determinism/output.xml"
 json = "golden/json-object-determinism/output.json"
@@ -2597,6 +2713,7 @@ module = "fixtures/json-ietf-module-namespace-qualification/module"
 input = "fixtures/json-ietf-module-namespace-qualification/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-module-namespace-qualification/output.xml"
 json = "golden/json-ietf-module-namespace-qualification/output.json"
@@ -2608,6 +2725,7 @@ module = "fixtures/json-ietf-scalar-quoting-int-spans/module"
 input = "fixtures/json-ietf-scalar-quoting-int-spans/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-scalar-quoting-int-spans/output.xml"
 json = "golden/json-ietf-scalar-quoting-int-spans/output.json"
@@ -2619,6 +2737,7 @@ module = "fixtures/json-ietf-decimal64-canonical-quoting/module"
 input = "fixtures/json-ietf-decimal64-canonical-quoting/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-decimal64-canonical-quoting/output.xml"
 json = "golden/json-ietf-decimal64-canonical-quoting/output.json"
@@ -2641,6 +2760,7 @@ module = "fixtures/json-ietf-leaflist-array-user-system/module"
 input = "fixtures/json-ietf-leaflist-array-user-system/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-leaflist-array-user-system/output.xml"
 json = "golden/json-ietf-leaflist-array-user-system/output.json"
@@ -2652,6 +2772,7 @@ module = "fixtures/json-ietf-list-array-keys-first/module"
 input = "fixtures/json-ietf-list-array-keys-first/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-list-array-keys-first/output.xml"
 json = "golden/json-ietf-list-array-keys-first/output.json"
@@ -2663,6 +2784,7 @@ module = "fixtures/json-ietf-nested-container-object/module"
 input = "fixtures/json-ietf-nested-container-object/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-nested-container-object/output.xml"
 json = "golden/json-ietf-nested-container-object/output.json"
@@ -2674,6 +2796,7 @@ module = "fixtures/json-ietf-choice-case-transparency/module"
 input = "fixtures/json-ietf-choice-case-transparency/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-choice-case-transparency/output.xml"
 json = "golden/json-ietf-choice-case-transparency/output.json"
@@ -2685,6 +2808,7 @@ module = "fixtures/json-ietf-presence-vs-nonpresence/module"
 input = "fixtures/json-ietf-presence-vs-nonpresence/input.xml"
 input-format = "xml"
 oracle = false
+datatree = true
 [case.expected]
 json_ietf = "golden/json-ietf-presence-vs-nonpresence/output.json_ietf"
 
@@ -2694,6 +2818,7 @@ module = "fixtures/json-ietf-instance-identifier-string/module"
 input = "fixtures/json-ietf-instance-identifier-string/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-instance-identifier-string/output.xml"
 json = "golden/json-ietf-instance-identifier-string/output.json"
@@ -2705,6 +2830,7 @@ module = "fixtures/json-ietf-leafref-union-resolved-form/module"
 input = "fixtures/json-ietf-leafref-union-resolved-form/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-leafref-union-resolved-form/output.xml"
 json = "golden/json-ietf-leafref-union-resolved-form/output.json"
@@ -2727,6 +2853,7 @@ module = "fixtures/json-ietf-parse-roundtrip/module"
 input = "fixtures/json-ietf-parse-roundtrip/input.json"
 input-format = "json"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-parse-roundtrip/output.xml"
 json = "golden/json-ietf-parse-roundtrip/output.json"
@@ -2778,6 +2905,7 @@ module = "fixtures/json-ietf-cross-module-augment-deviation-when/module"
 input = "fixtures/json-ietf-cross-module-augment-deviation-when/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/json-ietf-cross-module-augment-deviation-when/output.xml"
 json = "golden/json-ietf-cross-module-augment-deviation-when/output.json"
@@ -2789,6 +2917,7 @@ module = "fixtures/idents-keywords-rust/module"
 input = "fixtures/idents-keywords-rust/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-keywords-rust/output.xml"
 json = "golden/idents-keywords-rust/output.json"
@@ -2800,6 +2929,7 @@ module = "fixtures/idents-keywords-go/module"
 input = "fixtures/idents-keywords-go/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-keywords-go/output.xml"
 json = "golden/idents-keywords-go/output.json"
@@ -2811,6 +2941,7 @@ module = "fixtures/idents-collision-hyphen-underscore/module"
 input = "fixtures/idents-collision-hyphen-underscore/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-collision-hyphen-underscore/output.xml"
 json = "golden/idents-collision-hyphen-underscore/output.json"
@@ -2822,6 +2953,7 @@ module = "fixtures/idents-enum-value-collision/module"
 input = "fixtures/idents-enum-value-collision/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-enum-value-collision/output.xml"
 json = "golden/idents-enum-value-collision/output.json"
@@ -2833,6 +2965,7 @@ module = "fixtures/idents-container-leaf-collision/module"
 input = "fixtures/idents-container-leaf-collision/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-container-leaf-collision/output.xml"
 json = "golden/idents-container-leaf-collision/output.json"
@@ -2844,6 +2977,7 @@ module = "fixtures/idents-long-name/module"
 input = "fixtures/idents-long-name/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-long-name/output.xml"
 json = "golden/idents-long-name/output.json"
@@ -2855,6 +2989,7 @@ module = "fixtures/idents-unicode-mixed-case/module"
 input = "fixtures/idents-unicode-mixed-case/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/idents-unicode-mixed-case/output.xml"
 json = "golden/idents-unicode-mixed-case/output.json"
@@ -2866,6 +3001,7 @@ module = "fixtures/metadata-yang-version-units/module"
 input = "fixtures/metadata-yang-version-units/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/metadata-yang-version-units/output.xml"
 json = "golden/metadata-yang-version-units/output.json"
@@ -2877,6 +3013,7 @@ module = "fixtures/extension-definition-and-usage/module"
 input = "fixtures/extension-definition-and-usage/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/extension-definition-and-usage/output.xml"
 json = "golden/extension-definition-and-usage/output.json"
@@ -2888,6 +3025,7 @@ module = "fixtures/extension-yin-element-modes/module"
 input = "fixtures/extension-yin-element-modes/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/extension-yin-element-modes/output.xml"
 json = "golden/extension-yin-element-modes/output.json"
@@ -2899,6 +3037,7 @@ module = "fixtures/vendor-extension-junos-passthrough/module"
 input = "fixtures/vendor-extension-junos-passthrough/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/vendor-extension-junos-passthrough/output.xml"
 json = "golden/vendor-extension-junos-passthrough/output.json"
@@ -2910,6 +3049,7 @@ module = "fixtures/extension-and-typedef-collision/module"
 input = "fixtures/extension-and-typedef-collision/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/extension-and-typedef-collision/output.xml"
 json = "golden/extension-and-typedef-collision/output.json"
@@ -2932,6 +3072,7 @@ module = "fixtures/rfc6991-inet-yang-types-roundtrip/module"
 input = "fixtures/rfc6991-inet-yang-types-roundtrip/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/rfc6991-inet-yang-types-roundtrip/output.xml"
 json = "golden/rfc6991-inet-yang-types-roundtrip/output.json"
@@ -2943,6 +3084,7 @@ module = "fixtures/linkage-grouping-simple/module"
 input = "fixtures/linkage-grouping-simple/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-grouping-simple/output.xml"
 json = "golden/linkage-grouping-simple/output.json"
@@ -2954,6 +3096,7 @@ module = "fixtures/linkage-grouping-nested-uses/module"
 input = "fixtures/linkage-grouping-nested-uses/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-grouping-nested-uses/output.xml"
 json = "golden/linkage-grouping-nested-uses/output.json"
@@ -2965,6 +3108,7 @@ module = "fixtures/linkage-grouping-config-state/module"
 input = "fixtures/linkage-grouping-config-state/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-grouping-config-state/output.xml"
 json = "golden/linkage-grouping-config-state/output.json"
@@ -2976,6 +3120,7 @@ module = "fixtures/linkage-grouping-cross-module/module"
 input = "fixtures/linkage-grouping-cross-module/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-grouping-cross-module/output.xml"
 json = "golden/linkage-grouping-cross-module/output.json"
@@ -2987,6 +3132,7 @@ module = "fixtures/linkage-refine-mandatory-config/module"
 input = "fixtures/linkage-refine-mandatory-config/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-refine-mandatory-config/output.xml"
 json = "golden/linkage-refine-mandatory-config/output.json"
@@ -2998,6 +3144,7 @@ module = "fixtures/linkage-refine-presence-must/module"
 input = "fixtures/linkage-refine-presence-must/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-refine-presence-must/output.xml"
 json = "golden/linkage-refine-presence-must/output.json"
@@ -3009,6 +3156,7 @@ module = "fixtures/linkage-refine-min-max-iffeature/module"
 input = "fixtures/linkage-refine-min-max-iffeature/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-refine-min-max-iffeature/output.xml"
 json = "golden/linkage-refine-min-max-iffeature/output.json"
@@ -3020,6 +3168,7 @@ module = "fixtures/linkage-augment-intra-module/module"
 input = "fixtures/linkage-augment-intra-module/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-augment-intra-module/output.xml"
 json = "golden/linkage-augment-intra-module/output.json"
@@ -3031,6 +3180,7 @@ module = "fixtures/linkage-augment-container-leaf-list/module"
 input = "fixtures/linkage-augment-container-leaf-list/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-augment-container-leaf-list/output.xml"
 json = "golden/linkage-augment-container-leaf-list/output.json"
@@ -3042,6 +3192,7 @@ module = "fixtures/linkage-augment-choice-case/module"
 input = "fixtures/linkage-augment-choice-case/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-augment-choice-case/output.xml"
 json = "golden/linkage-augment-choice-case/output.json"
@@ -3053,6 +3204,7 @@ module = "fixtures/linkage-augment-nested/module"
 input = "fixtures/linkage-augment-nested/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-augment-nested/output.xml"
 json = "golden/linkage-augment-nested/output.json"
@@ -3064,6 +3216,7 @@ module = "fixtures/linkage-augment-inter-module/module"
 input = "fixtures/linkage-augment-inter-module/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-augment-inter-module/output.xml"
 json = "golden/linkage-augment-inter-module/output.json"
@@ -3075,6 +3228,7 @@ module = "fixtures/augment-cross-module-ident-collision/module"
 input = "fixtures/augment-cross-module-ident-collision/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/augment-cross-module-ident-collision/output.xml"
 json = "golden/augment-cross-module-ident-collision/output.json"
@@ -3086,6 +3240,7 @@ module = "fixtures/augment-when-target-context/module"
 input = "fixtures/augment-when-target-context/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/augment-when-target-context/output.xml"
 json = "golden/augment-when-target-context/output.json"
@@ -3097,6 +3252,7 @@ module = "fixtures/linkage-deviation-not-supported/module"
 input = "fixtures/linkage-deviation-not-supported/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-deviation-not-supported/output.xml"
 json = "golden/linkage-deviation-not-supported/output.json"
@@ -3108,6 +3264,7 @@ module = "fixtures/linkage-deviation-replace-type/module"
 input = "fixtures/linkage-deviation-replace-type/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-deviation-replace-type/output.xml"
 json = "golden/linkage-deviation-replace-type/output.json"
@@ -3119,6 +3276,7 @@ module = "fixtures/linkage-deviation-add/module"
 input = "fixtures/linkage-deviation-add/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-deviation-add/output.xml"
 json = "golden/linkage-deviation-add/output.json"
@@ -3130,6 +3288,7 @@ module = "fixtures/linkage-deviation-multi/module"
 input = "fixtures/linkage-deviation-multi/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-deviation-multi/output.xml"
 json = "golden/linkage-deviation-multi/output.json"
@@ -3141,6 +3300,7 @@ module = "fixtures/linkage-import-prefix/module"
 input = "fixtures/linkage-import-prefix/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-import-prefix/output.xml"
 json = "golden/linkage-import-prefix/output.json"
@@ -3152,6 +3312,7 @@ module = "fixtures/linkage-import-revision-date/module"
 input = "fixtures/linkage-import-revision-date/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-import-revision-date/output.xml"
 json = "golden/linkage-import-revision-date/output.json"
@@ -3163,6 +3324,7 @@ module = "fixtures/linkage-import-multiple/module"
 input = "fixtures/linkage-import-multiple/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-import-multiple/output.xml"
 json = "golden/linkage-import-multiple/output.json"
@@ -3174,6 +3336,7 @@ module = "fixtures/linkage-submodule-simple/module"
 input = "fixtures/linkage-submodule-simple/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-submodule-simple/output.xml"
 json = "golden/linkage-submodule-simple/output.json"
@@ -3185,6 +3348,7 @@ module = "fixtures/linkage-submodule-multi/module"
 input = "fixtures/linkage-submodule-multi/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-submodule-multi/output.xml"
 json = "golden/linkage-submodule-multi/output.json"
@@ -3196,6 +3360,7 @@ module = "fixtures/linkage-submodule-imports-foreign/module"
 input = "fixtures/linkage-submodule-imports-foreign/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/linkage-submodule-imports-foreign/output.xml"
 json = "golden/linkage-submodule-imports-foreign/output.json"
@@ -3433,6 +3598,7 @@ module = "fixtures/notification-interleaved-siblings/module"
 input = "fixtures/notification-interleaved-siblings/input.xml"
 input-format = "xml"
 oracle = true
+datatree = true
 [case.expected]
 xml = "golden/notification-interleaved-siblings/output.xml"
 json = "golden/notification-interleaved-siblings/output.json"
@@ -3449,3 +3615,261 @@ oracle = true
 xml = "golden/rpc-action-notification-coexistence/output.xml"
 json = "golden/rpc-action-notification-coexistence/output.json"
 json_ietf = "golden/rpc-action-notification-coexistence/output.json_ietf"
+
+[[case]]
+name = "multi-module-top-level-order"
+datatree = true
+invariants = ["I2"]
+module = "fixtures/multi-module-top-level-order/module"
+input = "fixtures/multi-module-top-level-order/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/multi-module-top-level-order/output.xml"
+json = "golden/multi-module-top-level-order/output.json"
+
+# Must-reject cases (expect = "reject"): each input violates one RFC 7950 rule,
+# so a validating parse must refuse it. They have no goldens; the runners
+# compare verdicts, never error texts.
+
+[[case]]
+name = "reject-choice-two-cases"
+expect = "reject"
+module = "fixtures/reject-choice-two-cases/module"
+input = "fixtures/reject-choice-two-cases/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-choice-two-cases-xml"
+expect = "reject"
+module = "fixtures/reject-choice-two-cases/module"
+input = "fixtures/reject-choice-two-cases/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-choice-mandatory-missing"
+expect = "reject"
+module = "fixtures/reject-choice-mandatory-missing/module"
+input = "fixtures/reject-choice-mandatory-missing/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-choice-mandatory-missing-xml"
+expect = "reject"
+module = "fixtures/reject-choice-mandatory-missing/module"
+input = "fixtures/reject-choice-mandatory-missing/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-unique-violation"
+expect = "reject"
+module = "fixtures/reject-unique-violation/module"
+input = "fixtures/reject-unique-violation/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-unique-violation-xml"
+expect = "reject"
+module = "fixtures/constraints-unique-violation-reject/module"
+input = "fixtures/constraints-unique-violation-reject/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-mandatory-under-absent-container"
+expect = "reject"
+module = "fixtures/reject-mandatory-under-absent-container/module"
+input = "fixtures/reject-mandatory-under-absent-container/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-mandatory-under-absent-container-xml"
+expect = "reject"
+module = "fixtures/reject-mandatory-under-absent-container/module"
+input = "fixtures/reject-mandatory-under-absent-container/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leafref-leaf-list-missing-target"
+expect = "reject"
+module = "fixtures/reject-leafref-leaf-list-missing-target/module"
+input = "fixtures/reject-leafref-leaf-list-missing-target/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leafref-leaf-list-missing-target-xml"
+expect = "reject"
+module = "fixtures/reject-leafref-leaf-list-missing-target/module"
+input = "fixtures/reject-leafref-leaf-list-missing-target/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leaflist-canonical-duplicate"
+expect = "reject"
+module = "fixtures/reject-leaflist-canonical-duplicate/module"
+input = "fixtures/reject-leaflist-canonical-duplicate/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leaflist-canonical-duplicate-xml"
+expect = "reject"
+module = "fixtures/reject-leaflist-canonical-duplicate/module"
+input = "fixtures/reject-leaflist-canonical-duplicate/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-decimal64-implicit-range"
+expect = "reject"
+module = "fixtures/reject-decimal64-implicit-range/module"
+input = "fixtures/reject-decimal64-implicit-range/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-decimal64-implicit-range-xml"
+expect = "reject"
+module = "fixtures/reject-decimal64-implicit-range/module"
+input = "fixtures/reject-decimal64-implicit-range/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-mandatory-leaf-missing"
+expect = "reject"
+module = "fixtures/reject-mandatory-leaf-missing/module"
+input = "fixtures/reject-mandatory-leaf-missing/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-min-elements"
+expect = "reject"
+module = "fixtures/min-elements-reject/module"
+input = "fixtures/min-elements-reject/input-invalid.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-min-elements-xml"
+expect = "reject"
+module = "fixtures/min-elements-reject/module"
+input = "fixtures/min-elements-reject/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-max-elements"
+expect = "reject"
+module = "fixtures/max-elements-reject/module"
+input = "fixtures/max-elements-reject/input-invalid.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-max-elements-xml"
+expect = "reject"
+module = "fixtures/max-elements-reject/module"
+input = "fixtures/max-elements-reject/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-pattern-violation"
+expect = "reject"
+module = "fixtures/reject-pattern-violation/module"
+input = "fixtures/reject-pattern-violation/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-range-violation"
+expect = "reject"
+module = "fixtures/reject-range-violation/module"
+input = "fixtures/reject-range-violation/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-duplicate-list-key"
+expect = "reject"
+module = "fixtures/reject-duplicate-list-key/module"
+input = "fixtures/reject-duplicate-list-key/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-duplicate-list-key-xml"
+expect = "reject"
+module = "fixtures/reject-duplicate-list-key/module"
+input = "fixtures/reject-duplicate-list-key/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-must-violation-xml"
+expect = "reject"
+module = "fixtures/constraints-when-must/module"
+input = "fixtures/constraints-when-must/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+# Accept counterparts: data RFC 7950 permits that datatree once rejected.
+
+[[case]]
+name = "leaflist-config-false-duplicates"
+module = "fixtures/leaflist-config-false-duplicates/module"
+input = "fixtures/leaflist-config-false-duplicates/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+[case.expected]
+xml = "golden/leaflist-config-false-duplicates/output.xml"
+json = "golden/leaflist-config-false-duplicates/output.json"
+json_ietf = "golden/leaflist-config-false-duplicates/output.json_ietf"
+
+[[case]]
+name = "choice-unselected-case-mandatory"
+module = "fixtures/choice-unselected-case-mandatory/module"
+input = "fixtures/choice-unselected-case-mandatory/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+[case.expected]
+xml = "golden/choice-unselected-case-mandatory/output.xml"
+json = "golden/choice-unselected-case-mandatory/output.json"
+json_ietf = "golden/choice-unselected-case-mandatory/output.json_ietf"
