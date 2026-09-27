@@ -105,6 +105,59 @@ func canonicalToken(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium
 	return raw
 }
 
+// valueKey returns the comparison key of a canonical value token of type ti,
+// so two values compare equal exactly when they are the same value, as
+// libyang compares them: the token itself, except that an identityref names
+// its identity with the module it belongs to — the JSON_IETF form leaves the
+// leaf's own module implicit, so the same identity reads "one" in a leaf of
+// its module and "m:one" in a leaf of another. leafModule is the name of the
+// module of the leaf holding the value.
+func valueKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) string {
+	if !valueKeyQualifies(ti) {
+		return string(raw)
+	}
+	switch r := ti.Resolved().(type) {
+	case cambium.ResolvedIdentityRef:
+		if s, ok := jsonStringValue(raw); ok && !strings.Contains(s, ":") {
+			return string(jsonStringToken(leafModule + ":" + s))
+		}
+	case cambium.ResolvedLeafRef:
+		if rt, ok := r.Realtype(); ok && rt != nil {
+			return valueKey(*rt, raw, leafModule)
+		}
+	case cambium.ResolvedUnion:
+		for _, member := range r.Members() {
+			var trial []string
+			validateLeafValue(member, raw, "", leafModule, &trial)
+			if len(trial) == 0 {
+				return valueKey(member, raw, leafModule) // first matching member wins
+			}
+		}
+	}
+	return string(raw)
+}
+
+// valueKeyQualifies reports whether a value of type ti may name an identity,
+// so its comparison key can differ from its token.
+func valueKeyQualifies(ti cambium.TypeInfo) bool {
+	switch ti.Base() {
+	case cambium.BaseTypeIdentityRef, cambium.BaseTypeLeafRef, cambium.BaseTypeUnion:
+		return true
+	default:
+		return false
+	}
+}
+
+// leafValueKey returns the comparison key of a value of the leaf or leaf-list
+// sn (see valueKey).
+func leafValueKey(sn cambium.SchemaNodeRef, raw json.RawMessage) string {
+	ti, ok := sn.LeafType()
+	if !ok {
+		return string(raw)
+	}
+	return valueKey(ti, raw, sn.Module().Name())
+}
+
 // parseDecimal64 returns s as a decimal64 scaled by 10^fractionDigits (the
 // integer libyang stores), rejecting non-lexical input, more fraction digits
 // than the type allows, and values outside the int64 range.

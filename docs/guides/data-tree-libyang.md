@@ -111,6 +111,24 @@ if err := ctx.LoadModule("ordered-user-demo"); err != nil {
 }
 ```
 
+The freeze is enforced. The first data tree the context creates (a successful
+`Parse` or `ParseOp`, or any `NewData`) freezes it for good. After that,
+`LoadModule` and `LoadModuleFromPath` return an `*Error` with `RuleCodeContext`
+(`CAMBIUM_E0001`) that wraps `ErrContextFrozen`, and the schema is left
+unchanged. Loading a module that augments or deviates an existing one makes
+libyang recompile the schema and free the compiled nodes live trees point at, so
+allowing it would crash later `Serialize` or `Validate` calls. Closing every tree
+does not lift the freeze; build a new `Context` for a different module set.
+Schema reads (`Schema`, `Modules`) and a failed parse do not freeze the context,
+but `Module` and `SchemaNodeRef` handles taken before a later load describe the
+earlier schema, so fetch them again.
+
+```go
+if err := ctx.LoadModule("late-module"); errors.Is(err, cambium.ErrContextFrozen) {
+    // A tree already exists: load every module before parsing.
+}
+```
+
 The concurrency contract is explicit:
 
 - A **frozen `Context` is safe to share for reads** across goroutines — load all
