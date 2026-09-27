@@ -131,10 +131,44 @@ printed as the string it was written as.
 
 ## Validation and defaults
 
-- `(*Tree).Validate() error` checks mandatory nodes, cardinality
-  (`min`/`max-elements`), uniqueness and list-key uniqueness, leafref instance
-  existence, and `must`/`when` constraints over a growing XPath subset.
-- `(*Tree).ApplyDefaults()` fills absent leaves with their schema defaults.
+- `(*Tree).Validate() error` checks value types, mandatory leaves and choices,
+  cardinality (`min`/`max-elements`), choice/case exclusivity, leaf-list value
+  uniqueness, list-key and `unique`-statement uniqueness, leafref instance
+  existence (leaves and leaf-lists), and `must`/`when` constraints over a
+  growing XPath subset. It returns a `*ValidationError` listing every violation.
+- `(*Tree).ApplyDefaults()` fills absent leaves and leaf-lists with their schema
+  defaults inside the data that is present.
+
+Validation follows the data model RFC 7950 describes, with the verdicts libyang
+gives:
+
+- **choice / case** (§7.9) — at most one case of a choice may have data, a
+  mandatory choice needs one, and only the case whose data exists is validated:
+  a mandatory leaf or `min-elements` list in another case does not apply. Nested
+  choices follow the same rule inside the selected case. An empty non-presence
+  container does not select its case.
+- **Non-presence containers** (§7.5.1) exist whenever their parent does, so the
+  constraints below an absent one still apply: a mandatory leaf under it is
+  reported. An absent presence container, a false `when`, or a case that is not
+  selected switches that off.
+- **`unique`** (§7.8.3) compares the referenced leaves, including leaves with a
+  default value in use, across the list entries in which all of them have a
+  value; entries missing one are not constrained.
+- **Leaf-list duplicates** are an error in configuration data only; state
+  (`config false`) leaf-lists may repeat a value (§7.7.1).
+- **decimal64** values must fit the type's implicit range: an int64 scaled by
+  10^`fraction-digits` (§9.3.4).
+- **Comparisons** — leaf-list and `unique` duplicates and leafref targets —
+  compare canonical values, so `"01"` equals `"1"` and an identityref names the
+  same identity with or without its module (`"one"` in its own module's leaf,
+  `"m:one"` elsewhere).
+
+Defaults are in use as RFC 7950 §7.6.1 and §7.9.3 define: in a choice, only in
+the case whose data exists or, when no case has data, in the default case
+(recursively through nested choices). `ordered-by system` leaf-list defaults are
+put in canonical order. `must` and `when` do not yet see default values or
+absent non-presence containers the way libyang, which instantiates them before
+validating, does.
 
 ## Supported scope and limitations
 
