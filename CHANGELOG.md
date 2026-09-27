@@ -31,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `ToXMLChecked() (string, error)` on every struct. It returns an error for an
   anydata/anyxml value parsed from JSON_IETF, which has no XML form, instead of
   writing an empty element.
+- A weekly `Fuzz` workflow runs each native fuzz target cgo-free for 5 minutes
+  and keeps any failing input as an artifact.
+- `libyangbackend.ErrContextFrozen`, the sentinel for a module load after the
+  context created a data tree.
 
 ### Changed
 
@@ -60,6 +64,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   well-formed XML fragment (no XML declaration or DTD) or a single JSON value.
 - Anydata/anyxml JSON parsed by generated code and nested more than 16 levels
   is written back compact instead of indented.
+- CI pins every GitHub Action to a commit SHA, reads the Go version from
+  `go/go.mod`, defaults to read-only `contents` permission (only the
+  `conformance-artifact` job that attaches the release asset can write),
+  verifies the gitleaks download checksum, and shuffles cgo-free test order.
+- Codegen tests that build generated code run in parallel, and the
+  context-deadline test no longer idles 5 s on `WaitDelay`.
+- `scripts/green-bar.sh` no longer repeats the cgo-free vet and tests that
+  `scripts/check-go-default-pure.sh` already runs.
 
 ### Fixed
 
@@ -100,6 +112,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Generated anydata/anyxml `Validate` did not check content, so raw content
   could inject sibling XML or JSON. A deeply nested anydata value parsed from
   JSON_IETF re-serialized with quadratic indentation (54 KB in, 162 MB out).
+- `scripts/check-go-default-pure.sh` listed dependencies only with
+  `CGO_ENABLED=0`, which hides cgo files, so a dependency with a pure-Go
+  fallback passed. It now also lists them with `CGO_ENABLED=1` and fails on any
+  non-standard-library package with cgo files.
+- `PUBLISHING.md` described a `0.1.0` release candidate and a deleted readiness
+  note, and `go/internal/libyang/build.sh` referenced a nonexistent Rust build
+  script.
+- `libyangbackend` `LoadModule`/`LoadModuleFromPath` after the context had
+  created a data tree let libyang recompile the schema under live trees, so a
+  later `Serialize` failed and `Validate` crashed (SIGSEGV). The first data
+  tree (`Parse`, `ParseOp`, `NewData`) now freezes the context permanently, and
+  later loads fail with `ErrContextFrozen` (`CAMBIUM_E0001`), leaving the
+  schema unchanged. Load every module before creating data.
+- `LoadModuleFromPath` after `Close` now returns `ErrContextClosed` instead of
+  passing a destroyed context to libyang.
 
 ## [go/v0.4.0] - 2026-07-02
 
