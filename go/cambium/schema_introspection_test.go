@@ -10479,8 +10479,10 @@ func TestIdentityMetadataAccessors(t *testing.T) {
         status deprecated;
     }
 
+    identity current-base;
+
     identity child {
-        base base;
+        base current-base;
     }
 }`
 
@@ -11270,6 +11272,7 @@ func TestEnumBitValueMetadataAccessors(t *testing.T) {
 
 func TestDerivedEnumBitsRestrictionsNarrowValues(t *testing.T) {
 	source := `module cambium-derived-enum-bits-restrict {
+    yang-version 1.1;
     namespace "urn:cambium:derived-enum-bits-restrict";
     prefix cdebr;
 
@@ -15478,7 +15481,9 @@ func writeGroupingModule(t *testing.T) (dir, groupingPath string) {
         leaf direct-leaf {
             type string;
         }
-        uses common-grouping;
+        uses common-grouping {
+            status deprecated;
+        }
     }
 }
 `

@@ -160,7 +160,13 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     parent module, augment and deviation targets excluded by the enabled
     feature set, cross-module mandatory config augments, config false mandatory leaves that
     inherit typedef defaults, unambiguous local-name schema-path fallbacks
-    for vendor deviation/leafref paths, and leafref cycles. Duplicate revision warnings include
+    for vendor deviation/leafref paths, leafref cycles, import and include cycles (RFC 7950
+    §7.1.5, §7.1.6), a module and submodule with different `yang-version`s or a
+    YANG 1.0 module importing a YANG 1.1 module by revision (§12), and
+    same-module references from a current definition to a deprecated or
+    obsolete one, or from a deprecated to an obsolete one, through `type`,
+    `uses`, `base`, or `if-feature` (§7.21.2; a definition without `status`
+    takes its closest ancestor's). Duplicate revision warnings include
     the module/submodule name, duplicate revision date, the duplicate statement
     source location, and the previous declaration as a related location when
     available. Other revision defects, including malformed dates and duplicate
@@ -200,8 +206,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     implicit current-working-directory module lookup. Without it, `LoadModule`
     searches `.` before configured search paths. `ContextFlags.AllImplemented`
     marks implicitly imported modules as implemented so `Modules()` includes
-    them; without that flag, imported modules targeted by leafrefs, augments,
-    or deviations are still promoted to implemented status. `ContextFlags.RefImplemented`
+    them; without that flag, imported modules that an implemented module's
+    leafref paths, augments, or deviations name are still promoted to
+    implemented status. Only implemented modules contribute augments and
+    deviations (RFC 7950 §5.6.5): an import-only module's own augments and
+    deviations are not applied, so a deviation module must be loaded
+    explicitly. `ContextFlags.RefImplemented`
     extends promotion to imported modules referenced by explicit prefixes in
     `must`, `when`, and default values. `NoYangLibrary` is a pure-Go no-op
     because the default context does not auto-load an internal yang-library module.
@@ -586,7 +596,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     leaf-list defaults require `yang-version 1.1`, leaf-lists with
     `min-elements` greater than zero may not have defaults, mandatory leaves may
     not have defaults, list key leaves may not have defaults, choice defaults must name an existing case, mandatory choices may
-    not have defaults, and typedef definitions may not carry multiple default
+    not have defaults, the default case of the effective schema (after
+    `refine`, augments, and deviations) may not directly contain a mandatory
+    node as RFC 7950 §3 defines it, whatever its config, and typedef definitions may not carry multiple default
     statements whether or not the typedef is referenced. Typedef default values
     must satisfy the typedef's effective type even when the typedef is unused.
     `refine` defaults are singleton statements and preserve the exact argument,
@@ -599,7 +611,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     tokens; string defaults must satisfy effective length
     restrictions; binary defaults must be base64 and satisfy effective decoded
     length restrictions; identityref defaults must resolve to an identity
-    derived from the effective base set; `empty` types cannot have defaults;
+    derived from the effective base set, not a base itself; `empty` types
+    cannot have defaults;
     union defaults must be accepted by at least one effective member type;
     leafref defaults are validated against the resolved target real type when
     resolvable.
@@ -760,7 +773,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     final parent value, not the pre-refine/pre-deviation build value.
     `presence` is valid only on container nodes, including when introduced by
     `refine`. `status` is valid only on data, choice, case, rpc, action, and
-    notification nodes. Operation `input` and `output` nodes are valid only
+    notification nodes. `SchemaNodeRef.Status()` reports the node's own
+    `status` statement, or `current` without one; RFC 7950 defines no status
+    inheritance, so an ancestor's status is not reported. Operation `input` and `output` nodes are valid only
     under rpc or action nodes, and `action` nodes are valid only under
     container or list nodes. `notification` nodes are valid only at module top
     level or under container or list nodes. `action` and `notification` nodes
@@ -844,6 +859,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     valid in YANG 1.0. Typedef-derived leafref and instance-identifier
     restrictions preserve explicit `require-instance` overrides. Config leafrefs
     with effective `require-instance true` cannot target state data.
+    In an implemented module, each leafref path predicate must have the form
+    `key = current()/../path` (RFC 7950 §9.9.2): it must sit on a list step,
+    name a key of that list once, and its right-hand side must resolve to a
+    leaf. Steps through `deref()` or that do not resolve are not checked.
   - Leaf and leaf-list nodes must have exactly one `type` statement, and every
     typedef definition must have exactly one `type` statement whether or not the
     typedef is referenced. Typedef type resolution, including unknown types,
@@ -865,7 +884,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - Grouping bodies are type-validated independently of `uses` expansion:
     missing/duplicate/unknown types and invalid type restrictions inside an
     unused grouping fail schema/context construction with `CAMBIUM_E0001`.
-    Duplicate sibling names, default placement/cardinality rules, and list
+    Choice and case nodes do not open an identifier namespace (RFC 7950
+    §6.2.1): a node in any case may not reuse the name of another node under
+    the same enclosing data node, in any case or outside the choice.
+    Duplicate sibling names, default
+    placement/cardinality rules, and list
     `unique` leaf type rules are also validated inside unused grouping bodies,
     without adding grouping contents to public module traversal.
     `Module.GroupingDefinitions() []GroupingDefinition` returns module-level
@@ -880,7 +903,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     and `status` metadata are singleton statements; `status` must be `current`,
     `deprecated`, or `obsolete`. Direct known non-extension children of `enum`
     and `bit` are limited to their value/position statement, `if-feature`, and
-    supported metadata. Typedef-derived enum and bits restrictions narrow the
+    supported metadata. Enum names must not be empty or have leading or
+    trailing whitespace (any Unicode `White_Space` character). Typedef-derived
+    enum and bits restrictions require `yang-version 1.1` and narrow the
     ordered value set to the declared subset while preserving base
     values/positions. `EnumValue` exposes `Name()`, `Value()`, optional
     `Description()` and `Reference()`, `IfFeatures()`, and `Status()` for both
@@ -952,6 +977,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     `Description()` / `Reference()`.
   - `Module.Includes()` returns the module statement's direct include
     statements in declaration order.
+  - Import cycles and include cycles fail loading with `CAMBIUM_E0001`, naming
+    the chain (`import cycle a -> b -> a`). So do a YANG 1.1 module including a
+    YANG 1.0 submodule or the reverse, and a YANG 1.0 module or submodule
+    importing a YANG 1.1 module by `revision-date` (RFC 7950 §12). Vendor-
+    compatible mode reports each as a warning instead.
   - Import prefixes must be explicit singleton `prefix` children and unique
     across the module/include source set. Prefixes that collide with the
     module's own prefix or self-resolving module-name alias fail schema/context
@@ -1007,6 +1037,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - `deviate add`, `deviate replace`, and `deviate delete` on `min-elements`
     and `max-elements` enforce the same existence and exact-match semantics as
     singleton deviation properties.
+  - `deviate add config` and `deviate add mandatory` fail when the target
+    already has an explicit `config` or `mandatory` statement (its own, or one
+    a `refine` or earlier deviation set); a value inherited from an ancestor or
+    a default does not count.
   - `Module.Deviations() []Deviation` returns the deviations defined by this
     module (i.e., this module is the deviation source). Each `Deviation` exposes
     `TargetPath()`, `SourceModule()`, `Type()` (`not-supported`, `add`, `replace`,

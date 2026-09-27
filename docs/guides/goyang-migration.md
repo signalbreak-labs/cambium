@@ -403,15 +403,18 @@ a symbol there before relying on it.
   false, the removal applies and a reference to the removed node fails
   `Process()`. Neither value changes augment order or feature visibility.
   To apply none of a module's deviations, do not load that module.
-- **Validation.** `Process()` uses Cambium's strict loader. Schemas goyang
+- **Validation.** `Process()` uses Cambium's strict loader (vendor-compatible
+  when `IgnoreSubmoduleCircularDependencies` is set; see below). Schemas goyang
   accepted, such as an augment with a mistyped target or a pattern using a
   non-XSD escape like `\x41`, fail with structured diagnostics.
 - **Name collisions.** `Entry.Dir` is keyed by local name, so two augmenting
   modules that each add `status` to one container cannot both live in `Dir`.
   `Entry.Children()` keeps both in order; use the native
   `SchemaChildren.LookupQualified` for identity.
-- **`IgnoreSubmoduleCircularDependencies`** is accepted and has no effect.
-  Cambium tolerates submodule include cycles whatever its value.
+- **`IgnoreSubmoduleCircularDependencies`** keeps goyang's meaning: a circular
+  submodule include fails `Process()` unless it is set. Setting it selects
+  `cambium.ValidationVendorCompatible`, so the cycle, and any other
+  vendor-compatible relaxation, is reported in `LoadReport().Warnings`.
 
 ## Practical migration path
 

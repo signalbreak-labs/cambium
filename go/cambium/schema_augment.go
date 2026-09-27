@@ -71,7 +71,54 @@ type augmentJob struct {
 	targetMod *moduleData
 }
 
-// applyAugments applies every loaded module's top-level augments. An augment
+// implementAmendmentTargets implements every module that a prefix in the
+// target path of an implemented module's augment or deviation names, until no
+// further module is implemented (RFC 7950 §5.6.5). A module that is only
+// imported contributes no augments or deviations, so its paths name nothing.
+func (c *Context) implementAmendmentTargets() {
+	for changed := true; changed; {
+		changed = false
+		for _, m := range c.loadOrder {
+			if m.stmt == nil || !m.implemented {
+				continue
+			}
+			for _, st := range m.sourceTopStatements() {
+				if (st.Keyword != "augment" && st.Keyword != "deviation") || !m.featureIncluded(st) {
+					continue
+				}
+				for _, step := range strings.Split(strings.TrimPrefix(st.Argument, "/"), "/") {
+					if !hasPrefix(step) {
+						continue
+					}
+					if target := m.resolveSourceQNameModuleFrom(step, st); target != nil && !target.implemented {
+						c.markImplemented(target)
+						changed = true
+					}
+				}
+			}
+		}
+	}
+}
+
+// implementedAmendingModules counts the implemented modules that declare a
+// top-level augment or deviation.
+func (c *Context) implementedAmendingModules() int {
+	count := 0
+	for _, m := range c.loadOrder {
+		if !m.implemented {
+			continue
+		}
+		for _, st := range m.sourceTopStatements() {
+			if st.Keyword == "augment" || st.Keyword == "deviation" {
+				count++
+				break
+			}
+		}
+	}
+	return count
+}
+
+// applyAugments applies every implemented module's top-level augments. An augment
 // may target a node that another augment creates, so resolution repeats until
 // no pending augment's target resolves: whether a target resolves does not
 // depend on the order augments are declared in or modules are loaded, and each
@@ -84,6 +131,11 @@ type augmentJob struct {
 func (c *Context) applyAugments() {
 	var jobs []*augmentJob
 	for _, m := range c.loadOrder {
+		if !m.implemented {
+			// A module that is only imported contributes no augments
+			// (RFC 7950 §5.6.5).
+			continue
+		}
 		for _, aug := range m.sourceTopStatements() {
 			if aug.Keyword != "augment" {
 				continue
@@ -336,6 +388,11 @@ func appendInheritedWhen(n *schemaNodeData, when WhenConstraint) {
 }
 
 func (m *moduleData) collectDeviations() {
+	if !m.implemented {
+		// A module that is only imported contributes no deviations
+		// (RFC 7950 §5.6.5).
+		return
+	}
 	for _, dev := range m.sourceTopStatements() {
 		if dev.Keyword != "deviation" || !m.featureIncluded(dev) {
 			continue
@@ -344,7 +401,6 @@ func (m *moduleData) collectDeviations() {
 			m.recordSchemaError(err)
 			continue
 		}
-		m.ctx.markImplemented(m)
 		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, dev.Argument, dev)
 		if targetMod == nil || target == nil {
 			excluded, ok := m.ctx.featureExcludedSchemaPathStep(m, dev.Argument, dev)
@@ -498,7 +554,15 @@ func (m *moduleData) addDeviationProperty(target *schemaNodeData, prop *yangpars
 			return
 		}
 		target.applyCardinalityProperty(prop, false)
-	case "config", "mandatory", "type":
+	case "config", "mandatory":
+		// RFC 7950 §7.20.3.2: an explicit config or mandatory statement (not
+		// a value inherited from an ancestor or a default) already exists.
+		if (prop.Keyword == "config" && target.configProp != nil) || (prop.Keyword == "mandatory" && target.mandatoryProp != nil) {
+			target.recordSchemaError(fmt.Errorf("deviate add %s for %q already exists at %s", prop.Keyword, target.name, prop.Location()))
+			return
+		}
+		m.replaceDeviationProperty(target, prop)
+	case "type":
 		m.replaceDeviationProperty(target, prop)
 	}
 }

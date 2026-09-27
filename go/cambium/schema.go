@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
@@ -1172,6 +1173,7 @@ type schemaNodeData struct {
 	config              Config
 	configProp          *yangparse.Statement
 	mandatory           bool
+	mandatoryProp       *yangparse.Statement
 	presence            bool
 	orderedBy           OrderedBy
 	defaults            []DefaultValue
@@ -2618,6 +2620,23 @@ func (m *moduleData) findGroupingFrom(qname string, from *yangparse.Statement) (
 	return m, def
 }
 
+// isMandatoryNode reports whether n is a mandatory node as RFC 7950 §3
+// defines it, whatever its config.
+func isMandatoryNode(n *schemaNodeData) bool {
+	if n == nil {
+		return false
+	}
+	switch n.kind {
+	case SchemaNodeKindLeaf, SchemaNodeKindChoice, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
+		return n.mandatory
+	case SchemaNodeKindLeafList, SchemaNodeKindList:
+		return n.minElements != nil && *n.minElements > 0
+	case SchemaNodeKindContainer:
+		return !n.presence && slices.ContainsFunc(n.children, isMandatoryNode)
+	}
+	return false
+}
+
 func firstMandatoryConfigNode(nodes []*schemaNodeData) *schemaNodeData {
 	for _, node := range nodes {
 		if mandatory := mandatoryConfigNode(node); mandatory != nil {
@@ -2708,17 +2727,29 @@ func (m *moduleData) validateSiblingNames() {
 }
 
 func (m *moduleData) validateSiblingNamesFrom(root *schemaNodeData) {
+	type siblingKey struct {
+		module *moduleData
+		name   string
+	}
 	var walk func(*schemaNodeData)
 	walk = func(n *schemaNodeData) {
 		if n == nil || m.schemaErr != nil {
 			return
 		}
-		type siblingKey struct {
-			module *moduleData
-			name   string
+		// Case names are unique within their choice. Data node and choice
+		// identifiers share one namespace per closest ancestor that is neither
+		// a choice nor a case (RFC 7950 §6.2.1, §7.9.2), so a case's children
+		// are checked with that ancestor.
+		var scope []*schemaNodeData
+		switch n.kind {
+		case SchemaNodeKindChoice:
+			scope = n.children
+		case SchemaNodeKindCase:
+		default:
+			scope = identifierNamespaceNodes(n.children, nil)
 		}
-		seen := make(map[siblingKey]*schemaNodeData, len(n.children))
-		for _, child := range n.children {
+		seen := make(map[siblingKey]*schemaNodeData, len(scope))
+		for _, child := range scope {
 			key := siblingKey{module: child.module, name: child.name}
 			if prev := seen[key]; prev != nil {
 				m.recordSchemaError(fmt.Errorf("duplicate schema child %q from module %q under %s; previous child at %s", child.name, childModuleName(child), parentPath(n), prev.path))
@@ -2731,6 +2762,22 @@ func (m *moduleData) validateSiblingNamesFrom(root *schemaNodeData) {
 		}
 	}
 	walk(root)
+}
+
+// identifierNamespaceNodes appends to out, in schema order, the nodes of
+// nodes and of their choice and case descendants that share the identifier
+// namespace of their closest ancestor that is neither a choice nor a case.
+// Case nodes are looked through but not listed.
+func identifierNamespaceNodes(nodes, out []*schemaNodeData) []*schemaNodeData {
+	for _, n := range nodes {
+		if n.kind != SchemaNodeKindCase {
+			out = append(out, n)
+		}
+		if n.kind == SchemaNodeKindChoice || n.kind == SchemaNodeKindCase {
+			out = identifierNamespaceNodes(n.children, out)
+		}
+	}
+	return out
 }
 
 func (m *moduleData) validateListConstraints() {
@@ -2765,6 +2812,9 @@ func (m *moduleData) validateDefaultRules() {
 }
 
 func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
+	// A grouping body is checked before any refine or deviation of a use of
+	// it applies, so the default case rule runs on the effective tree only.
+	effective := root == m.root
 	var walk func(*schemaNodeData)
 	walk = func(n *schemaNodeData) {
 		if n == nil || m.schemaErr != nil {
@@ -2824,6 +2874,21 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 			case len(n.defaults) == 1 && n.directChild(n.defaults[0].value) == nil:
 				n.recordSchemaError(fmt.Errorf("choice %q default %q does not reference a case", n.name, n.defaults[0].value))
 				return
+			}
+			if effective && len(n.defaults) == 1 {
+				// RFC 7950 §7.9.3: no mandatory node directly under the
+				// default case.
+				dflt := n.directChild(n.defaults[0].value)
+				nodes := []*schemaNodeData{dflt}
+				if dflt.kind == SchemaNodeKindCase {
+					nodes = dflt.children
+				}
+				for _, child := range nodes {
+					if isMandatoryNode(child) {
+						n.recordSchemaError(fmt.Errorf("choice %q default case %q must not contain mandatory node %q", n.name, dflt.name, child.name))
+						return
+					}
+				}
 			}
 		}
 		for _, child := range n.children {
@@ -3196,7 +3261,9 @@ func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolv
 		return fmt.Errorf("default %q is not valid for identityref %s %q", value, nodeStatementKeyword(n), n.name)
 	}
 	id := source.identityForQNameFrom(value, n.stmt)
-	if id == nil || !identityDerivedFromAny(id, resolved.Bases(), nil) {
+	// RFC 7950 §9.10.2: a value is an identity derived from the base; the
+	// base itself is not a value.
+	if id == nil || !identityStrictlyDerivedFromAny(id, resolved.Bases(), nil) {
 		return fmt.Errorf("default %q is not valid for identityref %s %q", value, nodeStatementKeyword(n), n.name)
 	}
 	idModule := id.module
@@ -5405,6 +5472,7 @@ func (n *schemaNodeData) applyMandatoryProperty(prop *yangparse.Statement) {
 		n.recordSchemaError(fmt.Errorf("invalid mandatory %q at %s", prop.Argument, prop.Location()))
 		return
 	}
+	n.mandatoryProp = prop
 	n.mandatory = value
 }
 
@@ -5880,6 +5948,15 @@ func identityDerivedFromAny(id *identityData, bases []Identity, seen map[*identi
 			return true
 		}
 	}
+	return identityStrictlyDerivedFromAny(id, bases, seen)
+}
+
+// identityStrictlyDerivedFromAny reports whether id is derived, directly or
+// transitively, from one of bases without being one of them itself.
+func identityStrictlyDerivedFromAny(id *identityData, bases []Identity, seen map[*identityData]bool) bool {
+	if id == nil {
+		return false
+	}
 	if seen == nil {
 		seen = make(map[*identityData]bool)
 	}
@@ -5912,6 +5989,9 @@ func (m *moduleData) restrictedEnumBitValues(base []EnumValue, st *yangparse.Sta
 	restrictions := direct(st, keyword)
 	if len(restrictions) == 0 {
 		return nil, nil
+	}
+	if m.yangVersionForStatement(st) != "1.1" {
+		return nil, fmt.Errorf("%s restriction of a derived type requires yang-version 1.1 at %s", keyword, restrictions[0].Location())
 	}
 	baseByName := make(map[string]EnumValue, len(base))
 	for _, value := range base {
@@ -6614,6 +6694,9 @@ func (m *moduleData) enumValues(st *yangparse.Statement, keyword, valueKeyword s
 
 func validateEnumBitMetadata(kind string, st *yangparse.Statement) error {
 	name := st.Argument
+	if kind == "enum" && !validEnumName(name) {
+		return fmt.Errorf("invalid enum name %q at %s: it must not be empty or have leading or trailing whitespace", name, st.Location())
+	}
 	if _, err := singletonDefinitionArg(kind, name, st, "description"); err != nil {
 		return err
 	}
@@ -6621,6 +6704,17 @@ func validateEnumBitMetadata(kind string, st *yangparse.Statement) error {
 		return err
 	}
 	return validateDefinitionStatus(kind, name, st)
+}
+
+// validEnumName reports whether name is a valid enum name (RFC 7950 §9.6.4):
+// not zero-length, with no leading or trailing Unicode White_Space character.
+func validEnumName(name string) bool {
+	if name == "" {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(name)
+	last, _ := utf8.DecodeLastRuneInString(name)
+	return !unicode.IsSpace(first) && !unicode.IsSpace(last)
 }
 
 func (m *moduleData) extensionInstances(st *yangparse.Statement) []Extension {
