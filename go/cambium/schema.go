@@ -2546,6 +2546,10 @@ func firstMandatoryConfigNode(nodes []*schemaNodeData) *schemaNodeData {
 	return nil
 }
 
+// mandatoryConfigNode returns n when it is a configuration mandatory node as
+// RFC 7950 §3 defines it, and nil otherwise. Only a non-presence container
+// inherits mandatory from its children: a mandatory descendant of a presence
+// container, a list, or a case does not make n mandatory.
 func mandatoryConfigNode(n *schemaNodeData) *schemaNodeData {
 	if n == nil || !n.representsConfigurationData() {
 		return nil
@@ -2566,11 +2570,6 @@ func mandatoryConfigNode(n *schemaNodeData) *schemaNodeData {
 					return n
 				}
 			}
-		}
-	}
-	for _, child := range n.children {
-		if mandatory := mandatoryConfigNode(child); mandatory != nil {
-			return mandatory
 		}
 	}
 	return nil

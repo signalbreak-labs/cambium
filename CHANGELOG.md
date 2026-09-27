@@ -50,6 +50,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- `Build` rejected an augment into another module when a mandatory node sat
+  below a presence container, a list, or a case of the augment (for example
+  `ietf-ip@2014-06-16`, RFC 7277). Only the augment's own nodes, through
+  non-presence containers, are mandatory nodes (RFC 7950 §3, §7.17), as in
+  libyang.
 
 ## [go/v0.4.0] - 2026-07-02
 
