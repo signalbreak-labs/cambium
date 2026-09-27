@@ -18,7 +18,7 @@ import (
 // types, all from public native handles.
 func Example_schemaConsumer() {
 	dir, _ := os.MkdirTemp("", "cambium-example")
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	_ = os.WriteFile(filepath.Join(dir, "shop.yang"), []byte(`module shop {
   yang-version 1.1; namespace "urn:example:shop"; prefix s;
   feature discounts;

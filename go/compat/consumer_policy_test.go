@@ -280,7 +280,7 @@ func TestCompatSubmoduleCircularDependencyFlagHasNoEffect(t *testing.T) {
 		if err := ms.Read("circ"); err != nil {
 			t.Fatalf("Read: %v", err)
 		}
-		outcome := "ok"
+		var outcome string
 		if errs := ms.Process(); len(errs) != 0 {
 			outcome = "error: " + errs[0].Error()
 		} else {
