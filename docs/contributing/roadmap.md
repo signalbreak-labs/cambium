@@ -92,7 +92,9 @@ lands rather than adding another dated file.
 - This page — the living narrative of stable / experimental / unbuilt.
 - The [conformance corpus](conformance.md) — the machine-checkable floor; a
   capability is not "done" without passing fixtures. For `datatree`, the
-  differential lane (`datatree = true` cases) is the graduation gate.
+  differential lane (`datatree = true` cases) is the graduation gate; it
+  compares validation verdicts, including must-reject documents
+  (`expect = "reject"`), as well as output.
 - [Architecture decision records](../adr/) — the one-way-door decisions and their
   reversal costs.
 - Git history — past point-in-time audits and release-readiness snapshots remain

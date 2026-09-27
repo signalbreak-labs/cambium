@@ -1,0 +1,8 @@
+<user xmlns="urn:reject-duplicate-list-key">
+  <name>ada</name>
+  <uid>1000</uid>
+</user>
+<user xmlns="urn:reject-duplicate-list-key">
+  <name>ada</name>
+  <uid>1001</uid>
+</user>

@@ -6,7 +6,8 @@
 // Package conformance runs Cambium's shared /conformance corpus. It reads
 // manifest.toml, parses each fixture through the libyang backend, and asserts
 // byte-for-byte equality with the golden outputs (after trailing-whitespace
-// normalization).
+// normalization). A case with expect = "reject" has no goldens: a validating
+// parse must refuse its input instead.
 package conformance
 
 import (
@@ -59,10 +60,14 @@ func LoadManifest(path string) ([]Case, error) {
 }
 
 // RunCase loads the case's modules, parses its input, and asserts every
-// expected format matches the golden bytes.
+// expected format matches the golden bytes. For a reject case it asserts that
+// libyang (and, for an oracle case, yanglint) refuses the input instead.
 func RunCase(conformanceDir string, c Case) error {
 	if c.EffectiveTier() == confmanifest.TierSchemaIR {
 		return fmt.Errorf("RunCase cannot execute schema-ir case %q", c.Name)
+	}
+	if c.EffectiveExpect() == confmanifest.ExpectReject {
+		return runRejectCase(conformanceDir, c)
 	}
 	outputs, err := backendCaseOutputs(conformanceDir, c)
 	if err != nil {
@@ -261,13 +266,18 @@ func RunDataTreeDifferential(conformanceDir string, only []string) (passed, skip
 }
 
 // RunDataTreeDifferentialCase compares one datatree-opted backend-data fixture
-// against the libyang backend.
+// against the libyang backend. An accept case must pass datatree validation
+// and serialize as libyang does; a reject case must be refused by both
+// engines. Verdicts are compared, never error texts.
 func RunDataTreeDifferentialCase(conformanceDir string, c Case) error {
 	if c.EffectiveTier() == confmanifest.TierSchemaIR {
 		return fmt.Errorf("RunDataTreeDifferentialCase cannot execute schema-ir case %q", c.Name)
 	}
 	if !c.DataTree {
 		return fmt.Errorf("case %q is not marked datatree=true", c.Name)
+	}
+	if c.EffectiveExpect() == confmanifest.ExpectReject {
+		return runDataTreeRejectCase(conformanceDir, c)
 	}
 	backendOutputs, err := backendCaseOutputs(conformanceDir, c)
 	if err != nil {
@@ -339,6 +349,9 @@ func dataTreeCaseOutputs(conformanceDir string, c Case) ([]caseOutput, error) {
 	tree, err := datatree.Parse(mod, inFmt, input)
 	if err != nil {
 		return nil, err
+	}
+	if err := tree.Validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", msgRejectedAccept, err)
 	}
 
 	formats := make([]string, 0, len(c.Expected))
@@ -495,6 +508,10 @@ func isSubmodule(path string) bool {
 	return strings.HasPrefix(strings.TrimSpace(string(data)), "submodule ")
 }
 
+// errYanglintFailed marks a yanglint run that exited non-zero: a failure for
+// an accept case, the expected verdict for a reject case.
+var errYanglintFailed = errors.New("yanglint failed")
+
 func runYanglintOracle(yanglint, moduleDir, inputPath string, format backend.Format, wd backend.WithDefaults, opType string) ([]byte, error) {
 	schemas, err := oracleSchemaPaths(moduleDir)
 	if err != nil {
@@ -534,7 +551,7 @@ func runYanglintOracle(yanglint, moduleDir, inputPath string, format backend.For
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return nil, fmt.Errorf("yanglint failed: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			return nil, fmt.Errorf("%w: %s", errYanglintFailed, strings.TrimSpace(string(exitErr.Stderr)))
 		}
 		return nil, fmt.Errorf("yanglint: %w", err)
 	}

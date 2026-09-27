@@ -67,12 +67,14 @@ declaration order*, not a sorted order:
 `manifest.toml` is the single index of cases. Each `[[case]]` entry names the
 case, optionally declares its tier, lists the ordering invariants it exercises,
 points at its fixture inputs, and lists the expected outputs to compare against.
-As of this writing the manifest holds **208 cases**: **13** carry
-`tier = "schema-ir"` and the remaining **195** are backend/data cases (the
-default tier — they declare an `input`, and 193 of them are additionally marked
-`oracle = true`). These counts come from the live manifest; re-derive them with
-`grep -c '^\[\[case\]\]'`, `grep -c '^tier = "schema-ir"'`, and
-`grep -c '^input = '` rather than trusting a prose number that can drift.
+As of this writing the manifest holds **234 cases**: **13** carry
+`tier = "schema-ir"` and the remaining **221** are backend/data cases (the
+default tier — they declare an `input`, and 219 of them are additionally marked
+`oracle = true`). **24** of the backend/data cases are must-reject cases
+(`expect = "reject"`). These counts come from the live manifest; re-derive them
+with `grep -c '^\[\[case\]\]'`, `grep -c '^tier = "schema-ir"'`,
+`grep -c '^input = '`, and `grep -c '^expect = "reject"'` rather than trusting
+a prose number that can drift.
 
 A backend/data case names an input plus a `[case.expected]` table of
 `format -> golden path`:
@@ -136,10 +138,44 @@ Two backend/data manifest keys opt into additional lanes:
 - `datatree = true` means the case is in the experimental pure-Go `datatree`
   supported subset and is run by `go run ./cmd/cambium datatree-diff`. Do not
   set it merely because libyang can run the case; set it only when datatree can
-  parse, validate, and serialize the declared expected formats correctly.
+  parse, validate, and serialize the declared expected formats correctly (for a
+  must-reject case, only when datatree refuses the document as libyang does).
 - `gnmi-path = "/module:top/list"` is required when `[case.expected]` contains
   `gnmi-json-ietf`. It identifies the subtree whose JSON_IETF value is wrapped
   into the gNMI-style update envelope.
+
+### Must-reject cases
+
+A backend/data case with `expect = "reject"` (the default is `"accept"`) holds a
+data document that breaks one RFC 7950 rule. It has no golden outputs: the
+assertion is that a validating parse refuses the document. A validating parse is
+strict (unknown data is an error) and validates the whole datastore, the way
+`yanglint` checks data by default:
+
+```toml
+[[case]]
+name = "reject-choice-two-cases"
+expect = "reject"
+module = "fixtures/reject-choice-two-cases/module"
+input = "fixtures/reject-choice-two-cases/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+```
+
+- The runners compare verdicts, never error texts: libyang, `yanglint` (for
+  `oracle = true`, when configured), and datatree (for `datatree = true`) must
+  each refuse the document. One that accepts it fails the case.
+- A harness failure is never a rejection: a module that does not load or a
+  missing input fails the case.
+- A reject case takes no `[case.expected]`, `op-type`, `serialize-defaults`, or
+  `gnmi-path`; the manifest parser refuses those combinations. Its input needs
+  at least one top-level data node, because the libyang backend reports an
+  error for every empty document, valid or not.
+- Keep each input to one violation, so the case says which rule it checks.
+  Where an older engine got a rule wrong in the other direction (refusing valid
+  data), add an ordinary accept case with goldens next to it, such as
+  `choice-unselected-case-mandatory` and `leaflist-config-false-duplicates`.
 
 ## Cases are tagged by invariant
 
@@ -185,14 +221,18 @@ opt-in differential flag for the experimental datatree lane:
   byte gate** (`cmd/cambium`). They parse `input` through the libyang-backed
   engine and assert byte-for-byte equality against every golden format in
   `[case.expected]`. They additionally exercise the data-tier invariants
-  **I1/I5** over real data.
+  **I1/I5** over real data. A must-reject case (`expect = "reject"`) instead
+  asserts that libyang's validating parse refuses its input.
 
 - **Datatree differential cases** are backend/data cases marked
   `datatree = true`. They still belong to the backend/data tier, but
-  `cmd/cambium datatree-diff` also parses and serializes them through the
-  experimental pure-Go `datatree` package, then compares normalized XML/JSON
-  output against the libyang backend. This is an explicit supported-subset gate,
-  not a claim that datatree is a complete conformance tier. The normalization is
+  `cmd/cambium datatree-diff` also parses, validates, and serializes them
+  through the experimental pure-Go `datatree` package, then compares normalized
+  XML/JSON output against the libyang backend. The lane compares validation
+  verdicts too: datatree must accept every accept case (`Tree.Validate` returns
+  nil) and, like libyang, refuse every must-reject case. This is an explicit
+  supported-subset gate, not a claim that datatree is a complete conformance
+  tier. The normalization is
   compact-only (`formatBytesForDifferential` in `go/conformance/runner.go`):
   trailing ASCII whitespace is stripped, JSON is passed through `json.Compact`,
   and XML whitespace-only text nodes are removed. Element order and JSON member
@@ -202,8 +242,9 @@ opt-in differential flag for the experimental datatree lane:
 The manifest's tier shape is enforced, not assumed. A pure-Go fitness test
 (`TestNoCGOConformanceManifestDeclaresSupportedTiers`, build-tagged `!cgo`)
 requires every Schema-IR case to declare `expected-ir` and carry no backend-data
-fields, and asserts the manifest contains at least one Schema-IR case. That keeps
-the corpus from ever drifting into a tier-ambiguous state.
+fields, requires golden outputs on every backend/data accept case and none on a
+must-reject case, and asserts the manifest contains at least one Schema-IR case.
+That keeps the corpus from ever drifting into a tier-ambiguous state.
 
 The same fixture style is what a future `/<lang>/` binding consumes: its
 schema-introspection layer runs the Schema-IR cases against the same
@@ -279,8 +320,9 @@ by `green-bar.sh`) asserts the build honors that pin.
 `cmd/cambium` is the Go conformance runner for the backend/data tier (its source
 is build-tagged `//go:build cgo`). It locates `conformance/manifest.toml`, parses
 each selected fixture through the libyang backend, serializes to every expected
-format, and exits non-zero on any byte mismatch. Schema-IR cases never run here —
-they run in the pure gate above.
+format, and exits non-zero on any byte mismatch. For a must-reject case it runs
+a strict, validating libyang parse and exits non-zero if libyang accepts the
+document. Schema-IR cases never run here — they run in the pure gate above.
 
 ```bash
 cd go
@@ -298,22 +340,26 @@ The argument handling is:
   passing).
 - **`all`** — runs every backend/data case in the manifest.
 - **`datatree-diff`** — runs backend/data cases marked `datatree = true` through
-  both libyangbackend and datatree, comparing normalized serialized output.
+  both libyangbackend and datatree, comparing validation verdicts and
+  normalized serialized output.
 - **One or more names** — runs exactly the named cases, nothing else.
 
 When the `CAMBIUM_YANGLINT` environment variable points at a `yanglint` binary,
 cases marked `oracle = true` are additionally checked against an independent
 `yanglint` invocation, so the goldens are validated against a second
-implementation rather than trusted on their own.
+implementation rather than trusted on their own. For a must-reject case,
+`yanglint` must exit non-zero.
 
 ## Adding a case
 
 1. Add `fixtures/<name>/` with the YANG module(s) and either an `input.<fmt>`
    (backend/data) or an `expected-ir.json` (Schema-IR).
-2. For a backend/data case, add `golden/<name>/output.{xml,json,json_ietf}`.
+2. For a backend/data case, add `golden/<name>/output.{xml,json,json_ietf}`
+   (`scripts/conformance-tool.py gen <name>` writes them from the pinned oracle
+   once the case is in the manifest). A must-reject case has no goldens.
 3. Add the `[[case]]` entry to `manifest.toml` with `invariants = [...]`, the
    correct `tier` (omit it for backend/data; set `tier = "schema-ir"` otherwise),
-   and the input/expected pointers.
+   `expect = "reject"` for a must-reject case, and the input/expected pointers.
 4. Run the relevant gate. New ordering behavior follows TDD: the fixture (the red
    test) lands before the production change.
 

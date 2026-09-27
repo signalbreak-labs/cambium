@@ -185,7 +185,7 @@ Every fixture declares a tier in `manifest.toml`.
     mode.toml              # parse/validate/serialize options
   golden/<name>/
     output.xml  output.json  output.gnmi.json
-  manifest.toml            # name -> {invariants:[I2,I3], tier:"schema-ir|backend-data"}
+  manifest.toml            # name -> {invariants:[I2,I3], tier:"schema-ir|backend-data", expect:"accept|reject"}
 ```
 
 Schema IR runner contract:
@@ -203,6 +203,20 @@ Backend/data runner contract:
 3. Assert bytes equal the golden output under the fixed formatting profile.
 4. For backend differential fixtures, assert each binding's backend bytes equal
    the others'.
+
+Must-reject runner contract (backend/data cases with `expect = "reject"`; the
+default is `"accept"`):
+
+1. Parse `input.*` strictly (unknown data is an error) and validate the whole
+   datastore against RFC 7950, as a server does before accepting the data.
+2. Assert that every engine the case covers refuses the document: the backend
+   engine always, and each additional engine the case opts into (an oracle, a
+   differential engine). An engine that accepts it fails the case.
+3. Compare the verdict only, never the error text. A harness failure (a module
+   that does not load, a missing input) fails the case; it is not a rejection.
+4. A must-reject case has no golden outputs, no operation or output options,
+   and at least one top-level data node, so an engine refusing an empty
+   document cannot pass for a verdict.
 
 ## 7. Required edge-case fixtures
 
