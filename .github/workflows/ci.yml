@@ -11,11 +11,14 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   release-tags:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history + tags: the guard audits every tag
       - name: Release-tag hygiene
@@ -24,26 +27,30 @@ jobs:
   go-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.27.1'
+          go-version-file: go/go.mod
           cache-dependency-path: go/go.sum
       - name: Cache vendored C build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: go/internal/libyang/.build
           # Exact-key only: a restored .build must correspond byte-for-byte to
           # the pinned engine inputs (build.sh early-exits on a hit).
           key: cbuild-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('VERSIONS', 'go/internal/libyang/build.sh', 'scripts/build-yanglint-oracle.sh') }}
       - name: Go default pure gate
+        env:
+          # Randomize test order in CI only; locally -shuffle would bypass the
+          # go test result cache on every run.
+          GOFLAGS: -shuffle=on
         run: scripts/check-go-default-pure.sh
       - name: Build static engine
         run: bash go/internal/libyang/build.sh
       - name: Go lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.13.2
           working-directory: go
@@ -57,24 +64,28 @@ jobs:
   go-linux-glibc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.27.1'
+          go-version-file: go/go.mod
           cache-dependency-path: go/go.sum
       - name: Cache vendored C build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: go/internal/libyang/.build
           key: cbuild-${{ runner.os }}-${{ runner.arch }}-glibc-${{ hashFiles('VERSIONS', 'go/internal/libyang/build.sh', 'scripts/build-yanglint-oracle.sh') }}
       - name: Go default pure gate
+        env:
+          # Randomize test order in CI only; locally -shuffle would bypass the
+          # go test result cache on every run.
+          GOFLAGS: -shuffle=on
         run: scripts/check-go-default-pure.sh
       - name: Build static engine
         run: bash go/internal/libyang/build.sh
       - name: Go lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.13.2
           working-directory: go
@@ -96,18 +107,18 @@ jobs:
   go-linux-musl:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.27.1'
+          go-version-file: go/go.mod
           cache-dependency-path: go/go.sum
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
         with:
           version: 0.13.0
       - name: Cache vendored C build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: go/internal/libyang/.build
           # The musl toolchain (zig target/version) is declared in this file,

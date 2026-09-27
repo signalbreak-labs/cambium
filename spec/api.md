@@ -117,7 +117,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     bodies, `empty` or `leafref` union member types, list key leaves with type
     `empty`, identifiers starting with `xml` in any case, and default
     statements on `leaf-list` nodes. Cross-module augments that add mandatory
-    config nodes require `yang-version 1.1` and a direct `when` statement.
+    config nodes require `yang-version 1.1` and a direct `when` statement; only
+    the augment's own nodes count, a non-presence container through its
+    children (RFC 7950 §3), not nodes below a presence container, list, or case.
     Explicit `require-instance` statements on `leafref` types also require
     `yang-version 1.1`.
   - Loaded submodules must declare a `belongs-to` parent and that `belongs-to`
@@ -158,7 +160,7 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     parent module, augment and deviation targets excluded by the enabled
     feature set, cross-module mandatory config augments, config false mandatory leaves that
     inherit typedef defaults, unambiguous local-name schema-path fallbacks
-    for vendor deviation/leafref paths, import and include cycles (RFC 7950
+    for vendor deviation/leafref paths, leafref cycles, import and include cycles (RFC 7950
     §7.1.5, §7.1.6), a module and submodule with different `yang-version`s or a
     YANG 1.0 module importing a YANG 1.1 module by revision (§12), and
     same-module references from a current definition to a deprecated or
@@ -386,6 +388,17 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - Leafref helpers resolve one hop, resolve a chain, return a trace, and fail
     with structured reasons. Identity helpers expose identity lookup, base
     identities, and transitive derived identity closure.
+  - A leafref whose chain of targets returns to a node already on the chain
+    fails schema/context construction with `CAMBIUM_E0001` and a
+    `semantic_schema_error` diagnostic, as libyang does. Chains follow
+    leafref union members. The walk visits implemented modules in load order
+    and nodes in schema order, so the first cycle reported depends only on the
+    load order. The message keeps the leafref cycle wording and lists the path
+    chain (`leafref chain from /m/entry contains a cycle at /m/a: /m/a -> /m/b
+    -> /m/a`), and the cause is a leafref resolution error with the cycle
+    reason. `ValidationVendorCompatible` reports each cycle as a
+    `LoadReport.Warnings` entry instead, and chain resolution keeps its
+    query-time cycle guard.
   - Errors and warnings are inspectable as structured diagnostics carrying a
     stable rule code where available, diagnostic category, module/path when
     known, source location, and related locations when available. Structured
@@ -710,12 +723,22 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     nested union member `type` statements. Union member types `empty` and
     `leafref` require `yang-version 1.1`.
 	    Typedef-derived `range` and `length` restrictions must stay within the
-	    typedef base restriction.
+	    typedef base restriction. In a derived restriction, `min` and `max`
+	    stand for the bounds of the type being restricted (RFC 7950 sections
+	    9.2.4 and 9.4.4). decimal64 bounds must lie within the decimal64 value
+	    space for the type's `fraction-digits`.
 	    `range`/`length` metadata children (`error-message`, `error-app-tag`,
 	    `description`, `reference`) are singleton statements. Direct known
 	    non-extension children of `range` and `length` are limited to those
 	    metadata statements. `RangeBound` exposes `Min()`, `Max()`, optional
 	    `ErrorMessage()`, `ErrorAppTag()`, `Description()`, and `Reference()`.
+	    `Min()`/`Max()` are lexical: integer bounds are decimal numbers, and
+	    length and decimal64 bounds keep a `min`/`max` keyword that stands for
+	    the built-in limit. `MinNumber()`/`MaxNumber()` return the bounds as a
+	    `Number` with keywords resolved (decimal64 limits are the int64 limits
+	    scaled by `fraction-digits`); `MinLength()`/`MaxLength()` return length
+	    bounds as `uint64` (built-in limits 0 and 18446744073709551615) and report
+	    false for range bounds.
 	    String pattern `modifier`, when present, must be a singleton
 	    `invert-match` and requires `yang-version 1.1`; pattern expressions
 	    are YANG/XML Schema regular expressions. Cambium validates and preserves
@@ -1268,13 +1291,18 @@ equals view relationships; only absolute path strings grow with depth. The
 same v1 compatibility policy applies to v2.
 
 Both JSON versions are value projections with a deliberately narrow per-node
-contract. They carry the base type name only, defaults and must/when as
-expression strings, and deviation records without description or source
-location. Typedef chains, restrictions, union members, enum/bit values,
-presence, ordering, cardinality, description, units, status, extensions,
-constraint error metadata, and XPath prefix context are available only through
-the native Go handles (`SchemaIRNode.Ref` / `SchemaIRTableNode.Ref`). Native
-consumers never need a JSON round trip.
+contract. They carry the base type name, the type's effective range or length
+restriction, defaults and must/when as expression strings, and deviation
+records without description or source location. An integer or decimal64 type
+carries `type.range`, and a string or binary type `type.length`: an ordered
+array of `{"min", "max"}` segments with `min`/`max` keywords resolved, encoded
+as canonical decimal strings (`"18446744073709551615"`, `"-1.50"`) so 64-bit
+and decimal64 values keep full precision. Unrestricted types omit both fields.
+Typedef chains, patterns, union members, enum/bit values, presence, ordering,
+cardinality, description, units, status, extensions, constraint error metadata,
+and XPath prefix context are available only through the native Go handles
+(`SchemaIRNode.Ref` / `SchemaIRTableNode.Ref`). Native consumers never need a
+JSON round trip.
 
 For v1, the documented object layout is stable for `version`, `modules`, optional
 `errors`, module identity/import/include fields, ordered node path/name/kind
@@ -1300,6 +1328,8 @@ Behavior specified here is verified by the shared `/conformance` corpus
 (`manifest.toml` plus golden outputs) and the binding's unit tests — never by
 hand-authored expectations. Every ordering invariant (I1–I6) has at least one
 fixture and coverage is a floor; per the TDD house rule, a change to observable
-behavior lands its failing fixture or test before the implementation. The fixture
+behavior lands its failing fixture or test before the implementation. Data
+validation verdicts are covered too: must-reject cases (`expect = "reject"`)
+hold invalid documents that every engine a case covers must refuse. The fixture
 tiers and runner contract are specified in
 [`ordering-invariants.md`](./ordering-invariants.md) §6.

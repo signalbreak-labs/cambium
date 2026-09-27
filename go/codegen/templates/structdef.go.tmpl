@@ -5,7 +5,8 @@ type {{.Name}} struct {
 	{{.Ident}} {{.GoType}}
 {{- end}}
 {{- if .HasMetadata}}
-	// CambiumMetadata carries RFC 7952 instance metadata by child wire name.
+	// CambiumMetadata carries RFC 7952 instance metadata by child wire name
+	// (module:name for a child sharing an earlier sibling's local name).
 	CambiumMetadata map[string][]MetadataAnnotation
 {{- end}}
 }

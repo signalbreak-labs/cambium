@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Two-stage static build of the vendored PCRE2 + libyang for the Go cgo layer.
-# Mirrors rust/cambium-libyang-sys/build.rs EXACTLY (same CMake flags) so the Go
-# and Rust stacks link a byte-identical engine (see spec/ordering-invariants.md §4).
+# The engine-affecting CMake flags must match the cmake_flags pinned in /VERSIONS
+# (asserted by scripts/diff-engine-config.sh), so every language binding links a
+# byte-identical engine (see spec/ordering-invariants.md §4).
 #
 # Output: go/internal/libyang/.build/{pcre2-install,libyang-install} (gitignored).
 # cgo references these via ${SRCDIR}/.build/... in build.go.

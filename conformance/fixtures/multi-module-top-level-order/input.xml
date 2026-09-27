@@ -1,0 +1,16 @@
+<b-last xmlns="urn:mmo:1">end</b-last>
+<a-last xmlns="urn:mmo:3">z</a-last>
+<b-values xmlns="urn:mmo:1">20</b-values>
+<ext-ref xmlns="urn:mmo:2">second</ext-ref>
+<b-list xmlns="urn:mmo:1">
+  <name>second</name>
+</b-list>
+<a-box xmlns="urn:mmo:3">
+  <added xmlns="urn:mmo:2">yes</added>
+  <inner>in</inner>
+</a-box>
+<b-values xmlns="urn:mmo:1">10</b-values>
+<b-list xmlns="urn:mmo:1">
+  <name>first</name>
+</b-list>
+<a-first xmlns="urn:mmo:3">a</a-first>

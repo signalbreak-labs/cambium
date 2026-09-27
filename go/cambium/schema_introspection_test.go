@@ -16926,6 +16926,114 @@ func TestCrossModuleMandatoryAugmentVersionRules(t *testing.T) {
 	}
 }
 
+// Only a mandatory node (RFC 7950 section 3, RFC 6020 section 3.1) added by a
+// cross-module augment is restricted: a mandatory leaf below a list without
+// min-elements, a presence container, or a non-mandatory choice does not make
+// the added node mandatory (OpenConfig's openconfig-bgp-policy augments
+// routing-policy this way). A non-presence container with a mandatory child
+// is still mandatory.
+func TestCrossModuleAugmentMandatoryOnlyThroughMandatoryNodes(t *testing.T) {
+	base := `module cambium-mandatory-depth-base {
+    namespace "urn:cambium:mandatory-depth-base";
+    prefix cmdb;
+
+    container top {
+        choice pick {
+            leaf other { type string; }
+        }
+    }
+}`
+	accepted := `module cambium-mandatory-depth-ok {
+    namespace "urn:cambium:mandatory-depth-ok";
+    prefix cmdo;
+
+    import cambium-mandatory-depth-base {
+        prefix base;
+    }
+
+    augment "/base:top" {
+        container sets {
+            list set {
+                key name;
+                leaf name { type string; }
+                container config {
+                    leaf label { type string; mandatory true; }
+                }
+            }
+        }
+        container optional {
+            presence "enables the optional feature";
+            leaf required { type string; mandatory true; }
+        }
+        choice mode {
+            case strict {
+                leaf level { type uint8; mandatory true; }
+            }
+        }
+    }
+
+    augment "/base:top/base:pick" {
+        case extra {
+            leaf extra-name { type string; mandatory true; }
+        }
+    }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(base); err != nil {
+		t.Fatalf("LoadModuleStr base: %v", err)
+	}
+	if err := builder.LoadModuleStr(accepted); err != nil {
+		t.Fatalf("LoadModuleStr augment: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	mod, err := ctx.Schema("cambium-mandatory-depth-base")
+	if err != nil {
+		t.Fatalf("Schema base: %v", err)
+	}
+	if got, want := strings.Join(schemaChildNames(schemaNodeAt(t, mod, "/cmdb:top").Children()), ","), "pick,sets,optional,mode"; got != want {
+		t.Fatalf("top children = %s, want %s", got, want)
+	}
+
+	rejected := `module cambium-mandatory-depth-bad {
+    namespace "urn:cambium:mandatory-depth-bad";
+    prefix cmdbad;
+
+    import cambium-mandatory-depth-base {
+        prefix base;
+    }
+
+    augment "/base:top" {
+        container outer {
+            container inner {
+                leaf required { type string; mandatory true; }
+            }
+        }
+    }
+}`
+	builder, err = cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(base); err != nil {
+		t.Fatalf("LoadModuleStr base: %v", err)
+	}
+	if err := builder.LoadModuleStr(rejected); err != nil {
+		t.Fatalf("LoadModuleStr augment: %v", err)
+	}
+	if _, err := builder.Build(); err == nil {
+		t.Fatal("Build accepted a cross-module augment adding a mandatory non-presence container")
+	} else if want := `augment "/base:top" adds mandatory config node "outer" to another module`; !strings.Contains(err.Error(), want) {
+		t.Fatalf("Build error = %v, want to contain %q", err, want)
+	}
+}
+
 func TestCrossModuleMandatoryAugmentIntoRPCInputIsNotConfig(t *testing.T) {
 	base := `module cambium-mandatory-rpc-augment-base {
     namespace "urn:cambium:mandatory-rpc-augment-base";

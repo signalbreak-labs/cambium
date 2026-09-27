@@ -1,0 +1,8 @@
+module reject-leaflist-canonical-duplicate {
+  yang-version 1.1;
+  namespace "urn:reject-leaflist-canonical-duplicate";
+  prefix rlcd;
+  revision 2026-09-27;
+
+  leaf-list id { type int64; }
+}

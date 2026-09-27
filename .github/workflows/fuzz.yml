@@ -1,0 +1,53 @@
+name: Fuzz
+
+# Longer cgo-free fuzzing than the 20 s smoke in ci.yml: 5 minutes per target,
+# weekly. Add a matrix entry for every new Fuzz target.
+on:
+  schedule:
+    - cron: "43 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pkg: ./internal/yangparse
+            target: FuzzParse
+          - pkg: ./datatree
+            target: FuzzParseJSONIETF
+          - pkg: ./internal/xsdregex
+            target: FuzzCompile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - name: Fuzz for 5 minutes
+        working-directory: go
+        env:
+          CGO_ENABLED: "0"
+          PKG: ${{ matrix.pkg }}
+          TARGET: ${{ matrix.target }}
+        run: go test "$PKG" -run '^$' -fuzz "^${TARGET}\$" -fuzztime=5m
+      # A failure writes the crashing input under testdata/fuzz/<target>/;
+      # keep it so the finding can be reproduced and committed as a seed.
+      - name: Upload failing input
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-failure-${{ matrix.target }}
+          path: go/**/testdata/fuzz/${{ matrix.target }}/
+          if-no-files-found: ignore

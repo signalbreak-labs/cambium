@@ -18,8 +18,11 @@ func TestLoadSharedManifest(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	var schemaIR, backend int
+	var schemaIR, backend, reject int
 	for _, c := range cases {
+		if c.EffectiveExpect() == ExpectReject {
+			reject++
+		}
 		switch c.EffectiveTier() {
 		case TierSchemaIR:
 			schemaIR++
@@ -51,6 +54,9 @@ func TestLoadSharedManifest(t *testing.T) {
 	if backend == 0 {
 		t.Error("no backend-data cases found")
 	}
+	if reject == 0 {
+		t.Error(`no expect = "reject" cases found; validation verdicts are never compared`)
+	}
 }
 
 func TestSharedManifestReferencesExistingFiles(t *testing.T) {
@@ -77,6 +83,13 @@ func TestSharedManifestReferencesExistingFiles(t *testing.T) {
 			assertPathExists(t, root, c.Name, "expected-ir", c.ExpectedIR)
 		case TierBackendData:
 			assertPathExists(t, root, c.Name, "input", c.Input)
+			if c.InputFormat == "" {
+				t.Fatalf("case %q has no input-format", c.Name)
+			}
+			if c.EffectiveExpect() == ExpectReject {
+				// Load refuses expected outputs on a reject case.
+				continue
+			}
 			if len(c.Expected) == 0 {
 				t.Fatalf("case %q has no expected outputs", c.Name)
 			}
@@ -219,6 +232,114 @@ module = "foo.yang"
 	}
 	if !strings.Contains(msg, "schema-irx") {
 		t.Errorf("error %q does not contain tier value %q", msg, "schema-irx")
+	}
+}
+
+func writeTempManifest(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "manifest.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func TestEffectiveExpectDefaultsToAccept(t *testing.T) {
+	if got := (Case{}).EffectiveExpect(); got != ExpectAccept {
+		t.Errorf("EffectiveExpect() = %q, want %q", got, ExpectAccept)
+	}
+}
+
+func TestLoadParsesExpectReject(t *testing.T) {
+	cases, err := Load(writeTempManifest(t, `[[case]]
+name = "accept-me"
+expect = "accept"
+module = "fixtures/accept-me/module"
+input = "fixtures/accept-me/input.json"
+input-format = "json_ietf"
+[case.expected]
+json_ietf = "golden/accept-me/output.json_ietf"
+
+[[case]]
+name = "reject-me"
+expect = "reject"
+module = "fixtures/reject-me/module"
+input = "fixtures/reject-me/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cases) != 2 {
+		t.Fatalf("cases = %d, want 2", len(cases))
+	}
+	if got := cases[0].EffectiveExpect(); got != ExpectAccept {
+		t.Errorf("%s: EffectiveExpect() = %q, want %q", cases[0].Name, got, ExpectAccept)
+	}
+	reject := cases[1]
+	if reject.Expect != ExpectReject || reject.EffectiveExpect() != ExpectReject {
+		t.Errorf("%s: Expect = %q, want %q", reject.Name, reject.Expect, ExpectReject)
+	}
+	if reject.EffectiveTier() != TierBackendData || !reject.DataTree || !reject.Oracle {
+		t.Errorf("%s: tier/datatree/oracle = %q/%v/%v, want backend-data/true/true",
+			reject.Name, reject.EffectiveTier(), reject.DataTree, reject.Oracle)
+	}
+	if len(reject.Expected) != 0 {
+		t.Errorf("%s: Expected = %v, want none", reject.Name, reject.Expected)
+	}
+}
+
+func TestLoadRejectsInvalidExpect(t *testing.T) {
+	_, err := Load(writeTempManifest(t, `[[case]]
+name = "bad-expect"
+expect = "fail"
+module = "fixtures/bad-expect/module"
+input = "fixtures/bad-expect/input.json"
+input-format = "json_ietf"
+`))
+	if err == nil {
+		t.Fatal("Load returned no error for invalid expect")
+	}
+	for _, want := range []string{"bad-expect", `"fail"`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not contain %s", err, want)
+		}
+	}
+}
+
+// A reject case is a data document with no outputs: fields that only make
+// sense for serialized output (or that the verdict does not cover yet) are a
+// manifest error, not something a runner silently ignores.
+func TestLoadRejectsMalformedRejectCases(t *testing.T) {
+	const head = `[[case]]
+name = "bad-reject"
+expect = "reject"
+module = "fixtures/bad-reject/module"
+input = "fixtures/bad-reject/input.json"
+input-format = "json_ietf"
+`
+	for _, tc := range []struct {
+		name, extra, want string
+	}{
+		{"expected outputs", "[case.expected]\njson_ietf = \"golden/bad-reject/output.json_ietf\"\n", "expected output"},
+		{"schema-ir tier", "tier = \"schema-ir\"\n", "tier"},
+		{"op-type", "op-type = \"rpc\"\n", "op-type"},
+		{"serialize-defaults", "serialize-defaults = \"trim\"\n", "serialize-defaults"},
+		{"gnmi-path", "gnmi-path = \"/m:top\"\n", "gnmi-path"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Load(writeTempManifest(t, head+tc.extra))
+			if err == nil {
+				t.Fatal("Load returned no error")
+			}
+			for _, want := range []string{"bad-reject", tc.want} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not contain %q", err, want)
+				}
+			}
+		})
 	}
 }
 

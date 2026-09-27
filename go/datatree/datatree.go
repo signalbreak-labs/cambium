@@ -10,15 +10,25 @@
 //
 // Order is structural here exactly as in the schema tier: a node's children are
 // stored as an ordered slice (never a map as the traversal source), output
-// follows schema declaration order (invariant I2), list keys are emitted first
-// in key-statement order (I3), and leaf-list / list element order from the input
-// is preserved. Input member order is irrelevant — output order comes from the
-// schema.
+// follows schema declaration order (invariant I2), and list keys are emitted
+// first in key-statement order (I3). ordered-by user list entries and leaf-list
+// values keep their input order (I1); ordered-by system ones are put in the
+// canonical order libyang uses, by key or value per type (I2). Input member
+// order is irrelevant — output order comes from the schema.
+//
+// Parse binds one module. ParseModules binds several, for a document whose
+// top-level nodes come from different modules; those are grouped by module,
+// modules in name order, as libyang orders them.
 //
 // JSON_IETF (RFC 7951) and XML round-trip containers, leaves, leaf-lists, and
-// lists. Leaf values are held as JSON tokens, with type-aware validation and XML
-// text conversion layered on that representation. choice nodes are flattened
-// (RFC 7950 section 7.9). anydata/anyxml round-trip as opaque content in JSON_IETF:
+// lists. Leaf values are held as canonical JSON_IETF tokens (RFC 7950 canonical
+// forms, as libyang stores them), with type-aware validation and XML text
+// conversion layered on that representation; identityref and
+// instance-identifier prefixes are converted between XML namespace prefixes
+// and JSON_IETF module names at the format boundary. choice and case nodes
+// have no data node of their own, so a case's data sits flattened among its
+// parent's children (RFC 7950 section 7.9); Validate and ApplyDefaults derive
+// the selected case from that data. anydata/anyxml round-trip as opaque content in JSON_IETF:
 // the inner value is preserved as compact JSON and never schema-validated; opaque XML
 // content and operations are not yet handled.
 package datatree
@@ -48,8 +58,8 @@ const (
 // and are not concurrency-safe; give each goroutine its own parsed tree or guard
 // access externally.
 type Tree struct {
-	module cambium.Module
-	roots  []*node
+	modules []cambium.Module // bound modules, in top-level order (see ParseModules)
+	roots   []*node
 }
 
 type nodeKind int
@@ -70,6 +80,7 @@ type node struct {
 	module    string // module name owning this node (for JSON_IETF qualification)
 	namespace string // module namespace URI (for XML xmlns)
 	kind      nodeKind
+	schema    cambium.SchemaNodeRef // the schema node this data node instantiates
 
 	value    json.RawMessage   // kindLeaf: the scalar, normalized to compact JSON
 	values   []json.RawMessage // kindLeafList: ordered values
@@ -100,21 +111,29 @@ func dataNodeKey(n *node) nodeKey {
 	return nodeKey{module: n.module, name: n.name}
 }
 
-// Parse decodes data against schema m into an ordered Tree.
+// Parse decodes data against schema m into an ordered Tree. Every top-level
+// node must belong to m; ParseModules accepts a document whose top-level nodes
+// come from several modules.
 func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
+	return parseTree([]cambium.Module{m}, f, data)
+}
+
+// parseTree decodes data into a Tree bound to mods, which are in top-level
+// order.
+func parseTree(mods []cambium.Module, f Format, data []byte) (*Tree, error) {
 	switch f {
 	case FormatJSONIETF:
 		raw, err := decodeJSONObject("root", data)
 		if err != nil {
 			return nil, err
 		}
-		roots, err := parseChildren(flattenTopLevel(m), raw, "")
+		roots, err := parseChildren(flattenTopLevel(mods...), raw, "")
 		if err != nil {
 			return nil, err
 		}
-		return &Tree{module: m, roots: roots}, nil
+		return &Tree{modules: mods, roots: roots}, nil
 	case FormatXML:
-		return parseXML(m, data)
+		return parseXML(mods, data)
 	default:
 		return nil, fmt.Errorf("datatree: unsupported format %d", f)
 	}
@@ -166,15 +185,18 @@ func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage, pare
 	return "", nil, false
 }
 
-// flattenTopLevel returns the module's top-level data nodes with choice/case
-// nodes flattened away (their data children spliced in at the choice's
-// position), matching how SchemaNodeRef.DataChildren(true) treats nested levels.
-// TopLevel() alone does not flatten, so without this a leaf inside a top-level
-// choice would be unreachable.
-func flattenTopLevel(m cambium.Module) []cambium.SchemaNodeRef {
+// flattenTopLevel returns the modules' top-level data nodes, module after
+// module in the order given, with choice/case nodes flattened away (their data
+// children spliced in at the choice's position), matching how
+// SchemaNodeRef.DataChildren(true) treats nested levels. TopLevel() alone does
+// not flatten, so without this a leaf inside a top-level choice would be
+// unreachable.
+func flattenTopLevel(mods ...cambium.Module) []cambium.SchemaNodeRef {
 	var out []cambium.SchemaNodeRef
-	for n := range m.TopLevel().Iter() {
-		out = appendFlattened(out, n)
+	for _, m := range mods {
+		for n := range m.TopLevel().Iter() {
+			out = appendFlattened(out, n)
+		}
 	}
 	return out
 }
@@ -198,7 +220,7 @@ func childRefs(children cambium.SchemaChildren) []cambium.SchemaNodeRef {
 }
 
 func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
-	n := &node{name: sn.Name(), module: sn.Module().Name(), namespace: sn.Namespace()}
+	n := newNode(sn)
 	switch {
 	case sn.IsLeaf():
 		n.kind = kindLeaf
@@ -206,7 +228,7 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("datatree: leaf %q: %w", sn.Name(), err)
 		}
-		n.value = v
+		n.value = canonicalLeafToken(sn, v)
 	case sn.IsLeafList():
 		n.kind = kindLeafList
 		elems, err := splitArray(raw)
@@ -218,8 +240,9 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			if err != nil {
 				return nil, fmt.Errorf("datatree: leaf-list %q element: %w", sn.Name(), err)
 			}
-			n.values = append(n.values, v)
+			n.values = append(n.values, canonicalLeafToken(sn, v))
 		}
+		sortSystemOrdered(sn, n)
 	case sn.IsContainer():
 		n.kind = kindContainer
 		obj, err := decodeJSONObject(fmt.Sprintf("container %q", sn.Name()), raw)
@@ -248,6 +271,7 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			}
 			n.entries = append(n.entries, keysFirst(sn, kids))
 		}
+		sortSystemOrdered(sn, n)
 	case sn.IsAnyData():
 		n.kind = kindAnyData
 		v, err := compactJSON(raw)
@@ -270,23 +294,29 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 	return n, nil
 }
 
+func newNode(sn cambium.SchemaNodeRef) *node {
+	return &node{name: sn.Name(), module: sn.Module().Name(), namespace: sn.Namespace(), schema: sn}
+}
+
 // keysFirst reorders a list entry's child nodes so the key leaves come first in
 // key-statement order (invariant I3), followed by the remaining children in
-// their original (declaration) order.
+// their original (declaration) order. Keys are matched by qualified (module,
+// name) identity, so a leaf augmented into the list from another module that
+// shares a key's local name stays with the non-key children.
 func keysFirst(list cambium.SchemaNodeRef, kids []*node) []*node {
-	keys := list.KeyNames()
+	keys := childRefs(list.ListKeys())
 	if len(keys) == 0 {
 		return kids
 	}
-	rank := make(map[string]int, len(keys))
+	rank := make(map[nodeKey]int, len(keys))
 	for i, k := range keys {
-		rank[k] = i
+		rank[schemaNodeKey(k)] = i
 	}
 	ordered := make([]*node, len(kids))
 	copy(ordered, kids)
 	sort.SliceStable(ordered, func(i, j int) bool {
-		ri, iok := rank[ordered[i].name]
-		rj, jok := rank[ordered[j].name]
+		ri, iok := rank[dataNodeKey(ordered[i])]
+		rj, jok := rank[dataNodeKey(ordered[j])]
 		switch {
 		case iok && jok:
 			return ri < rj // both keys: key-statement order
