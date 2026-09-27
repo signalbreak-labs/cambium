@@ -114,3 +114,45 @@ func TestLintPrefixInXPathCountsAsUse(t *testing.T) {
 		}
 	}
 }
+
+// TestLintNilAndClosedContextReturnNoFindings keeps Lint consistent with the
+// other Context methods, which are safe on a nil or closed handle.
+func TestLintNilAndClosedContextReturnNoFindings(t *testing.T) {
+	var nilCtx *cambium.Context
+	if findings := lintWithoutPanic(t, nilCtx); findings != nil {
+		t.Fatalf("nil context Lint = %+v, want nil", findings)
+	}
+	dir := writeLintDeps(t)
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatalf("SearchPath: %v", err)
+	}
+	if err := builder.LoadModuleStr(`module lintclosed {
+    namespace "urn:lintclosed";
+    prefix lc;
+    import dep-a { prefix a; }
+}`); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	ctx.Close()
+	if findings := lintWithoutPanic(t, ctx); findings != nil {
+		t.Fatalf("closed context Lint = %+v, want nil", findings)
+	}
+}
+
+func lintWithoutPanic(t *testing.T, ctx *cambium.Context) (findings []cambium.LintFinding) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Lint panicked: %v", r)
+		}
+	}()
+	return ctx.Lint()
+}

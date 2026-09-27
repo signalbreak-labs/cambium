@@ -542,7 +542,7 @@ func (ResolvedUnknown) resolvedType() {}
 type TypeInfo struct {
 	base         BaseType
 	typedefName  *string
-	typedefChain []string
+	typedefChain *typedefNames
 	resolved     ResolvedType
 }
 
@@ -558,8 +558,9 @@ func (t TypeInfo) Resolved() ResolvedType {
 	return cloneResolvedType(t.resolved)
 }
 
+// cloneTypeInfo deep-copies t's mutable parts; the typedef chain is immutable
+// and shared.
 func cloneTypeInfo(t TypeInfo) TypeInfo {
-	t.typedefChain = append([]string(nil), t.typedefChain...)
 	if t.resolved != nil {
 		t.resolved = cloneResolvedType(t.resolved)
 	}
@@ -2183,6 +2184,11 @@ func (m *moduleData) buildNodeSeen(st *yangparse.Statement, parent *schemaNodeDa
 	if name == "" && (st.Keyword == "input" || st.Keyword == "output") {
 		name = st.Keyword
 	}
+	if !m.admitSchemaNode(st) {
+		// Over budget: a childless placeholder keeps callers nil-safe while
+		// the rebuild fails with the resource-limit error.
+		return &schemaNodeData{name: name, kind: kindForKeyword(st.Keyword), module: owner, sourceModule: m, stmt: st, parent: parent}
+	}
 	config := ConfigRw
 	if parent != nil {
 		config = parent.config
@@ -3319,12 +3325,27 @@ func yangIdentContinue(ch byte) bool {
 	return yangIdentStart(ch) || ch >= '0' && ch <= '9' || ch == '-' || ch == '.'
 }
 
+// appendDerivedToIdentityAncestors records derived on base and every ancestor
+// of base, once each, without scanning derived lists. derived is resolved
+// once, so its traversals are the only appends of derived. With a nil seen
+// (a single base, so one traversal with no other appends interleaved), an
+// ancestor already visited has derived as its last entry; with several bases,
+// seen spans their traversals.
 func appendDerivedToIdentityAncestors(base, derived *identityData, seen map[*identityData]bool) {
-	if base == nil || derived == nil || seen[base] {
+	if base == nil || derived == nil {
 		return
 	}
-	seen[base] = true
-	appendIdentityUnique(&base.derived, derived)
+	if seen == nil {
+		if n := len(base.derived); n > 0 && base.derived[n-1] == derived {
+			return
+		}
+	} else {
+		if seen[base] {
+			return
+		}
+		seen[base] = true
+	}
+	base.derived = append(base.derived, derived)
 	for _, ancestor := range base.bases {
 		appendDerivedToIdentityAncestors(ancestor, derived, seen)
 	}
@@ -6948,12 +6969,24 @@ func (m *moduleData) validateFeatureRefSeen(qname string, from *yangparse.Statem
 	if resolving[key] {
 		return false
 	}
+	// A feature whose if-features resolved once resolves from anywhere, so the
+	// rebuild validates each feature of a chain once (see buildState).
+	var valid map[*featureData]bool
+	if m.ctx != nil {
+		valid = m.ctx.build.validFeatures
+	}
+	if valid[feature] {
+		return true
+	}
 	resolving[key] = true
 	defer delete(resolving, key)
 	for _, iff := range direct(feature.stmt, "if-feature") {
 		if !mod.validateIfFeatureExprSeen(iff.Argument, iff, resolving) {
 			return false
 		}
+	}
+	if valid != nil {
+		valid[feature] = true
 	}
 	return true
 }
@@ -6990,13 +7023,25 @@ func (m *moduleData) featureEnabledSeen(qname string, from *yangparse.Statement,
 	if resolving[key] {
 		return false, false
 	}
+	// A known result does not depend on where the feature is referenced from,
+	// so the rebuild evaluates each feature of a chain once (see buildState).
+	memo := m.ctx.build.featureEnabled
+	if enabled, ok := memo[feature]; ok {
+		return enabled, true
+	}
 	resolving[key] = true
 	defer delete(resolving, key)
 	for _, iff := range direct(feature.stmt, "if-feature") {
 		included, ok := mod.evalIfFeatureExprSeen(iff.Argument, iff, resolving)
 		if !ok || !included {
+			if ok && memo != nil {
+				memo[feature] = false
+			}
 			return false, ok
 		}
+	}
+	if memo != nil {
+		memo[feature] = true
 	}
 	return true, true
 }
@@ -7274,15 +7319,6 @@ func isYANGDecimalDigit(ch byte) bool {
 }
 
 func appendUnique(dst *[]string, value string) {
-	for _, existing := range *dst {
-		if existing == value {
-			return
-		}
-	}
-	*dst = append(*dst, value)
-}
-
-func appendIdentityUnique(dst *[]*identityData, value *identityData) {
 	for _, existing := range *dst {
 		if existing == value {
 			return

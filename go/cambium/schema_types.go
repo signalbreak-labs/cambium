@@ -21,7 +21,23 @@ func (t TypeInfo) TypedefName() (string, bool) {
 
 // TypedefChain returns the typedef names traversed to reach the base type, from
 // outermost to innermost.
-func (t TypeInfo) TypedefChain() []string { return append([]string(nil), t.typedefChain...) }
+func (t TypeInfo) TypedefChain() []string { return t.typedefChain.names() }
+
+// typedefNames is an immutable list of typedef names, outermost first. Each
+// typedef level prepends its name and shares the rest, so resolving a chain of
+// n typedefs does not copy the chain at every level.
+type typedefNames struct {
+	name string
+	next *typedefNames
+}
+
+func (l *typedefNames) names() []string {
+	var out []string
+	for ; l != nil; l = l.next {
+		out = append(out, l.name)
+	}
+	return out
+}
 
 // TypedefDefinition is a declared top-level or included YANG typedef.
 type TypedefDefinition struct {
@@ -247,6 +263,12 @@ func (m *moduleData) resolveIdentity(id *identityData) {
 		id.resolving = false
 	}()
 	baseStmts := direct(id.stmt, "base")
+	// With several bases, one visited set spans their traversals so an
+	// ancestor shared by two bases still receives id once.
+	var ancestors map[*identityData]bool
+	if len(id.baseNames) > 1 {
+		ancestors = make(map[*identityData]bool)
+	}
 	for i, q := range id.baseNames {
 		var baseStmt *yangparse.Statement
 		if i < len(baseStmts) {
@@ -270,7 +292,7 @@ func (m *moduleData) resolveIdentity(id *identityData) {
 			return
 		}
 		id.bases = append(id.bases, base)
-		appendDerivedToIdentityAncestors(base, id, make(map[*identityData]bool))
+		appendDerivedToIdentityAncestors(base, id, ancestors)
 	}
 	if len(id.baseNames) > 1 && source.yangVersionForStatement(id.stmt) != "1.1" {
 		source.recordSchemaError(fmt.Errorf("identity %q with multiple base statements requires yang-version 1.1 at %s", id.name, id.stmt.Location()))
@@ -294,6 +316,27 @@ func (m *moduleData) parseType(st *yangparse.Statement) (TypeInfo, error) {
 	return m.parseTypeSeen(st, make(map[*yangparse.Statement]bool))
 }
 
+// resolveTypedefType resolves typ, the type statement of typedef td in m. The
+// result does not depend on where td is referenced from (a cycle through td
+// fails wherever it starts), so during a rebuild each typedef is resolved once
+// and later references get a copy: a chain of n typedefs resolves in O(n)
+// rather than once per level per reference.
+func (m *moduleData) resolveTypedefType(td, typ *yangparse.Statement, seen map[*yangparse.Statement]bool) (TypeInfo, error) {
+	var memo map[typedefKey]TypeInfo
+	if m.ctx != nil {
+		memo = m.ctx.build.typedefTypes
+	}
+	key := typedefKey{module: m, stmt: td}
+	if info, ok := memo[key]; ok {
+		return cloneTypeInfo(info), nil
+	}
+	info, err := m.parseTypeSeen(typ, seen)
+	if err == nil && memo != nil {
+		memo[key] = cloneTypeInfo(info)
+	}
+	return info, err
+}
+
 func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.Statement]bool) (TypeInfo, error) {
 	name := st.Argument
 	if tdMod, td := m.lookupTypedefModuleFrom(name, st); td != nil {
@@ -313,13 +356,13 @@ func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.
 		if len(defaults) > 1 {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, fmt.Errorf("typedef %q has multiple default statements at %s", td.Argument, defaults[1].Location())
 		}
-		base, err := tdMod.parseTypeSeen(typ, seen)
+		base, err := tdMod.resolveTypedefType(td, typ, seen)
 		if err != nil {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, err
 		}
 		typedefName := localName(name)
 		base.typedefName = ptr(typedefName)
-		base.typedefChain = append([]string{typedefName}, base.typedefChain...)
+		base.typedefChain = &typedefNames{name: typedefName, next: base.typedefChain}
 		if err := validateTypeRestrictionPlacement(st, base.base); err != nil {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, err
 		}

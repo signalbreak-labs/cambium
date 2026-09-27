@@ -327,8 +327,8 @@ func typeInfoDiffFingerprint(info TypeInfo) string {
 	if info.typedefName != nil {
 		parts = append(parts, "typedef="+*info.typedefName)
 	}
-	if len(info.typedefChain) != 0 {
-		parts = append(parts, "typedef-chain="+strings.Join(info.typedefChain, " > "))
+	if chain := info.TypedefChain(); len(chain) != 0 {
+		parts = append(parts, "typedef-chain="+strings.Join(chain, " > "))
 	}
 	parts = append(parts, "resolved="+resolvedTypeDiffFingerprint(info.resolved))
 	return strings.Join(parts, ";")

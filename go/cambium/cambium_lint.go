@@ -33,8 +33,12 @@ var prefixTokenRE = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_.-]*):`)
 // modules and returns findings in module load order (deterministic). It is
 // read-only: it does not mutate the schema, does not affect Build, and its
 // findings are warnings, not errors. Today it reports imports and includes that
-// a module declares but never references.
+// a module declares but never references. A nil or closed context has no
+// findings.
 func (c *Context) Lint() []LintFinding {
+	if c == nil || c.closed {
+		return nil
+	}
 	var findings []LintFinding
 	for _, m := range c.loadOrder {
 		if m == nil || !m.implemented {

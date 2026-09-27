@@ -183,6 +183,14 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     and `SourceLocation()` (the `deviate` or deviated property statement);
     `LoadReport.DeviationPolicy` and `LoadReport.IgnoredDeviations` record the
     policy and what it kept.
+  - `ContextBuilder.SetMaxSchemaNodes(limit)` bounds the schema nodes `Build`
+    instantiates: each node counts once per instantiation (per `uses` of its
+    grouping, per augment, and once more for the standalone check of each
+    grouping body). `Build` fails with a `resource_limit` diagnostic naming the
+    limit as soon as expansion exceeds it, before the expansion completes.
+    `0` selects `DefaultMaxSchemaNodes` (8,388,608), about 2.5 times what the
+    full Junos configuration schema needs; services loading untrusted YANG
+    should set a lower limit.
   - An explicitly enabled feature whose own `if-feature` condition is false is
     effectively disabled, reported in `DisabledFeatures`, and produces a
     `LoadReport` warning. `SetFeatures` takes explicit feature names; there is

@@ -11,8 +11,10 @@ package cambium
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -303,6 +305,9 @@ type Context struct {
 	dirty           bool
 	frozen          bool
 	closed          bool
+	// build holds the per-rebuild schema node budget and resolution memos
+	// (schema_budget.go).
+	build buildState
 }
 
 type contextSnapshot struct {
@@ -1822,13 +1827,15 @@ func (c *Context) Modules() []Module {
 	return out
 }
 
-func (c *Context) rebuildIfDirty() error {
+func (c *Context) rebuildIfDirty() (err error) {
 	if c == nil || c.closed {
 		return fmt.Errorf("context is closed")
 	}
 	if !c.dirty {
 		return nil
 	}
+	c.beginRebuild()
+	defer func() { err = c.endRebuild(err) }()
 	for _, mod := range c.loadOrder {
 		mod.resetIR()
 		if err := mod.collectDefinitions(); err != nil {
@@ -1931,18 +1938,20 @@ func (c *Context) rebuildIfDirty() error {
 	return nil
 }
 
+// validateEnabledFeatures reports the first unknown enabled feature, visiting
+// modules in load order and each module's features by name, so the error does
+// not depend on map iteration order.
 func (c *Context) validateEnabledFeatures() error {
 	if c == nil {
 		return nil
 	}
-	for moduleName, features := range c.enabledFeatures {
-		mod := c.modules[moduleName]
-		if mod == nil || mod.stmt == nil {
+	for _, mod := range c.loadOrder {
+		if mod == nil || mod.stmt == nil || c.modules[mod.name] != mod {
 			continue
 		}
-		for feature := range features {
+		for _, feature := range slices.Sorted(maps.Keys(c.enabledFeatures[mod.name])) {
 			if mod.featureMap[feature] == nil {
-				return fmt.Errorf("unknown feature %q for module %q", feature, moduleName)
+				return fmt.Errorf("unknown feature %q for module %q", feature, mod.name)
 			}
 		}
 	}

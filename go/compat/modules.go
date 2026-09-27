@@ -278,6 +278,9 @@ type Modules struct {
 	sources []moduleSource
 	ctx     *cambium.Context
 	built   bool
+	// recordOrder holds each module and submodule record in the order it was
+	// first recorded, so lookups that report records never follow map order.
+	recordOrder []*Module
 }
 
 // NewModules returns an initialized Modules facade.
@@ -589,6 +592,7 @@ func (ms *Modules) addModuleDecl(decl moduleDecl) *Module {
 	if record == nil {
 		record = &Module{Name: decl.name}
 		target[fullName] = record
+		ms.recordOrder = append(ms.recordOrder, record)
 	}
 	record.Modules = ms
 	record.Name = decl.name
