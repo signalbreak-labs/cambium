@@ -27,6 +27,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- Generated code for a module with `anydata`/`anyxml` nodes has
+  `ToXMLChecked() (string, error)` on every struct. It returns an error for an
+  anydata/anyxml value parsed from JSON_IETF, which has no XML form, instead of
+  writing an empty element.
 - A weekly `Fuzz` workflow runs each native fuzz target cgo-free for 5 minutes
   and keeps any failing input as an artifact.
 - `libyangbackend.ErrContextFrozen`, the sentinel for a module load after the
@@ -44,6 +48,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   feature-gated nodes or reorders augments.
 - Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
   scales with unique nodes.
+- Codegen names every package-level identifier from one allocator per file,
+  seeded with the runtime helper names. A colliding type family gets the
+  smallest free numeric suffix, chosen in a canonical order (own-module nodes
+  in schema order, then other modules by module name), so names depend only on
+  the schema, not module load order. Schemas without collisions keep their
+  names. Generated struct fields can no longer be named `ToXMLChecked` or
+  `ToJSONIETFWithDefaults` (they get a `_` suffix, like `ToXML`).
+- Generated identityref types no longer accept the base identity itself, only
+  identities derived from it (RFC 7950 §9.10.2).
+- Generated identityref JSON_IETF prefixes are relative to the module that
+  defines the leaf, not the generated module (RFC 7951 §6.8). An identity from
+  the leaf's own module is also accepted in its `module:identity` form.
+- Generated `Validate` rejects anydata/anyxml content that is not a
+  well-formed XML fragment (no XML declaration or DTD) or a single JSON value.
+- Anydata/anyxml JSON parsed by generated code and nested more than 16 levels
+  is written back compact instead of indented.
 - CI pins every GitHub Action to a commit SHA, reads the Go version from
   `go/go.mod`, defaults to read-only `contents` permission (only the
   `conformance-artifact` job that attaches the release asset can write),
@@ -76,6 +96,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Generated `bits` values were written in declaration order; they now list set
   bits in position order (RFC 7950 §9.7.2, matching libyang), including
   schema defaults. Parsing still accepts any order.
+- Codegen gave distinct leaves with the same generated name one shared
+  restriction, enumeration, bits, identityref or union type, merging their
+  constraints. Every such leaf now has its own type.
+- Generated code failed to compile when names collided across levels (for
+  example `a-b/c` and `a/b-c`, a list `foo` and a container `foo-entry`, a
+  node and a helper such as `CambiumStruct`), or when an enum name was not a Go
+  identifier (`a/b`, `x+y`, `$`).
+- When two other modules augmented the same local name into a struct, the
+  one loaded first kept the plain field name and `CambiumMetadata` key; they
+  are now ordered by module name. Root-level XML/JSON serializers read
+  metadata by the plain wire name, so an imported top-level node sharing a
+  local name with the module's own node was written with the wrong
+  annotations.
+- Generated anydata/anyxml `Validate` did not check content, so raw content
+  could inject sibling XML or JSON. A deeply nested anydata value parsed from
+  JSON_IETF re-serialized with quadratic indentation (54 KB in, 162 MB out).
 - `scripts/check-go-default-pure.sh` listed dependencies only with
   `CGO_ENABLED=0`, which hides cgo files, so a dependency with a pure-Go
   fallback passed. It now also lists them with `CGO_ENABLED=1` and fails on any

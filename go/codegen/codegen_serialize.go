@@ -182,12 +182,12 @@ func (g *goEmitter) emitTopInstanceIdentifierLeafValue(wire, nsAttr, valueExpr s
 	out.WriteString("\t\t}\n")
 }
 
-func (g *goEmitter) emitTopUnionLeafValue(wire, nsAttr, valueExpr string, out *strings.Builder) {
+func (g *goEmitter) emitTopUnionLeafValue(wire, metaKey, nsAttr, valueExpr string, out *strings.Builder) {
 	g.helpers["xmlEscape"] = true
 	fmt.Fprintf(out, "\t\tif pfx, ns, ok := %s.XMLPrefixNS(); ok && cambiumValidateXMLPrefix(pfx) == nil {\n", valueExpr)
-	fmt.Fprintf(out, "\t\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, valueExpr, wire)
+	fmt.Fprintf(out, "\t\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, metaKey, valueExpr, wire)
 	out.WriteString("\t\t} else {\n")
-	fmt.Fprintf(out, "\t\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, valueExpr, wire)
+	fmt.Fprintf(out, "\t\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, metaKey, valueExpr, wire)
 	out.WriteString("\t\t}\n")
 }
 
@@ -196,6 +196,42 @@ func (g *goEmitter) emitTopAnyDataXML(wire string, f fieldInfo, valueExpr string
 	fmt.Fprintf(out, "\tb.WriteString(\"<%s%s>\\n\")\n", wire, nsAttr)
 	fmt.Fprintf(out, "\tcambiumWriteRawXML(&b, 1, %s.XMLValue())\n", valueExpr)
 	fmt.Fprintf(out, "\tb.WriteString(\"</%s>\\n\")\n", wire)
+}
+
+// emitXMLFormCheck emits ToXMLChecked and its checkXMLForms walker for a
+// schema with anydata/anyxml nodes. Opaque content is never converted between
+// formats, so a value parsed from JSON_IETF has no XML form: ToXML writes it as
+// an empty element, while ToXMLChecked reports it.
+func (g *goEmitter) emitXMLFormCheck(name string, fields []fieldInfo, rootPath string, out *strings.Builder) {
+	out.WriteString("// ToXMLChecked returns ToXML, or an error if an anydata/anyxml value in the\n")
+	out.WriteString("// tree has no XML form because it was parsed from JSON_IETF.\n")
+	fmt.Fprintf(out, "func (n *%s) ToXMLChecked() (string, error) {\n", name)
+	fmt.Fprintf(out, "\tif err := n.checkXMLForms(%q); err != nil { return \"\", err }\n", rootPath)
+	out.WriteString("\treturn n.ToXML(), nil\n")
+	out.WriteString("}\n\n")
+
+	fmt.Fprintf(out, "func (n *%s) checkXMLForms(path string) error {\n", name)
+	out.WriteString("\tif n == nil { return nil }\n")
+	for _, f := range fields {
+		pathExpr := fmt.Sprintf("cambiumJoinPath(path, %q)", f.wire)
+		switch f.node.Kind() {
+		case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
+			if f.optional {
+				fmt.Fprintf(out, "\tif n.%s != nil && n.%s.jsonOnly { return cambiumAnyDataNoXMLForm(%s) }\n", f.ident, f.ident, pathExpr)
+			} else {
+				fmt.Fprintf(out, "\tif n.%s.jsonOnly { return cambiumAnyDataNoXMLForm(%s) }\n", f.ident, pathExpr)
+			}
+		case cambium.SchemaNodeKindContainer, cambium.SchemaNodeKindAction, cambium.SchemaNodeKindNotification:
+			fmt.Fprintf(out, "\tif err := n.%s.checkXMLForms(%s); err != nil { return err }\n", f.ident, pathExpr)
+		case cambium.SchemaNodeKindList:
+			itemsExpr := fieldItemsExpr("n", f.ident, f)
+			fmt.Fprintf(out, "\tfor i := range %s {\n", itemsExpr)
+			fmt.Fprintf(out, "\t\tif err := %s[i].checkXMLForms(%s); err != nil { return err }\n", itemsExpr, pathExpr)
+			out.WriteString("\t}\n")
+		}
+	}
+	out.WriteString("\treturn nil\n")
+	out.WriteString("}\n\n")
 }
 
 func nestedXMLNSAttr(f fieldInfo, currentNS string) string {
@@ -1186,10 +1222,10 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 		if f.jsonKind == "Empty" {
 			if f.optional {
 				fmt.Fprintf(out, "\tif m.%s != nil {\n", ident)
-				fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, wire)
+				fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, f.metaKey)
 				out.WriteString("\t}\n")
 			} else {
-				fmt.Fprintf(out, "\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, wire)
+				fmt.Fprintf(out, "\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, f.metaKey)
 			}
 			return
 		}
@@ -1208,7 +1244,7 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 			valueRef := "(*m." + ident + ")"
 			if f.isUnion {
 				valueRef = "m." + ident
-				g.emitTopUnionLeafValue(wire, nsAttr, valueRef, out)
+				g.emitTopUnionLeafValue(wire, f.metaKey, nsAttr, valueRef, out)
 				out.WriteString("\t}\n")
 				return
 			}
@@ -1216,7 +1252,7 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 			if strings.Contains(expr, "cambiumXMLEscapeText") {
 				g.helpers["xmlEscape"] = true
 			}
-			fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, wire, expr, wire)
+			fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, expr, wire)
 			out.WriteString("\t}\n")
 		} else {
 			if f.isIdentityref {
@@ -1228,14 +1264,14 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 				return
 			}
 			if f.isUnion {
-				g.emitTopUnionLeafValue(wire, nsAttr, "m."+ident, out)
+				g.emitTopUnionLeafValue(wire, f.metaKey, nsAttr, "m."+ident, out)
 				return
 			}
 			expr := g.xmlValueExpr("m."+ident, f)
 			if strings.Contains(expr, "cambiumXMLEscapeText") {
 				g.helpers["xmlEscape"] = true
 			}
-			fmt.Fprintf(out, "\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, wire, expr, wire)
+			fmt.Fprintf(out, "\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, expr, wire)
 		}
 	case cambium.SchemaNodeKindLeafList:
 		itemsExpr := g.emitCollectionItems("m", f, out, "\t")
@@ -1251,7 +1287,7 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 			return
 		}
 		if f.isUnion {
-			g.emitTopUnionLeafValue(wire, nsAttr, "v", out)
+			g.emitTopUnionLeafValue(wire, f.metaKey, nsAttr, "v", out)
 			out.WriteString("\t}\n")
 			return
 		}
@@ -1259,7 +1295,7 @@ func (g *goEmitter) emitTopLevelXML(f fieldInfo, out *strings.Builder) {
 		if strings.Contains(expr, "cambiumXMLEscapeText") {
 			g.helpers["xmlEscape"] = true
 		}
-		fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, wire, expr, wire)
+		fmt.Fprintf(out, "\t\tb.WriteString(\"<%s%s\" + cambiumMetadataXMLAttrs(m.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, expr, wire)
 		out.WriteString("\t}\n")
 	case cambium.SchemaNodeKindAnyData, cambium.SchemaNodeKindAnyXML:
 		if f.optional {
@@ -1314,14 +1350,14 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 				out.WriteString("\t\tfirst = false\n")
 				out.WriteString("\t\tcambiumJSONIndent(w, 1)\n")
 				fmt.Fprintf(out, "\t\tw.WriteString(\"\\\"%s\\\": [null]\")\n", wire)
-				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 				out.WriteString("\t}\n")
 			} else {
 				out.WriteString("\tif !first { w.WriteByte(',') }\n")
 				out.WriteString("\tfirst = false\n")
 				out.WriteString("\tcambiumJSONIndent(w, 1)\n")
 				fmt.Fprintf(out, "\tw.WriteString(\"\\\"%s\\\": [null]\")\n", wire)
-				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 			}
 			return
 		}
@@ -1335,11 +1371,11 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 			if hasDefault {
 				fmt.Fprintf(out, "\t\tif mode != WithDefaultsTrim || %s != %s {\n", g.jsonLiteralExpr(valueRef, f), g.defaultJSONLiteralExpr(f, defaultValue))
 				g.emitScalarJSON(wire, "w", "1", valueRef, f, out)
-				fmt.Fprintf(out, "\t\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\t\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 				out.WriteString("\t\t}\n")
 			} else {
 				g.emitScalarJSON(wire, "w", "1", valueRef, f, out)
-				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 			}
 			out.WriteString("\t}\n")
 			if hasDefault {
@@ -1355,11 +1391,11 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 			if defaultValue, hasDefault := f.node.DefaultEntry(); hasDefault {
 				fmt.Fprintf(out, "\tif mode != WithDefaultsTrim || %s != %s {\n", g.jsonLiteralExpr("m."+ident, f), g.defaultJSONLiteralExpr(f, defaultValue))
 				g.emitScalarJSON(wire, "w", "1", "m."+ident, f, out)
-				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 				out.WriteString("\t}\n")
 			} else {
 				g.emitScalarJSON(wire, "w", "1", "m."+ident, f, out)
-				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 			}
 		}
 	case cambium.SchemaNodeKindLeafList:
@@ -1378,7 +1414,7 @@ func (g *goEmitter) emitTopLevelJSON(f fieldInfo, byNode map[cambium.SchemaNodeR
 		}
 		itemsExpr := g.emitCollectionItems("m", f, out, "\t\t")
 		g.emitLeafListJSONArray(wire, "w", "1", "2", itemsExpr, f, out)
-		fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.wire)
+		fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(w, 1, %q, m.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 		if defaultVar != "" {
 			out.WriteString("\t\t}\n")
 		}
