@@ -27,6 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- `libyangbackend.ErrContextFrozen`, the sentinel for a module load after the
+  context created a data tree.
 
 ### Changed
 
@@ -50,6 +52,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- `libyangbackend` `LoadModule`/`LoadModuleFromPath` after the context had
+  created a data tree let libyang recompile the schema under live trees, so a
+  later `Serialize` failed and `Validate` crashed (SIGSEGV). The first data
+  tree (`Parse`, `ParseOp`, `NewData`) now freezes the context permanently, and
+  later loads fail with `ErrContextFrozen` (`CAMBIUM_E0001`), leaving the
+  schema unchanged. Load every module before creating data.
+- `LoadModuleFromPath` after `Close` now returns `ErrContextClosed` instead of
+  passing a destroyed context to libyang.
 
 ## [go/v0.4.0] - 2026-07-02
 

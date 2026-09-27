@@ -1990,10 +1990,19 @@ func (c *RawContext) SchemaModules() ([]RawModule, error) {
 }
 
 // LoadModuleFromPath loads a YANG module from a file path into the context.
-// The file is parsed as YANG format.
+// The file is parsed as YANG format. Like LoadModule, it fails with
+// ErrContextClosed after Close and ErrContextFrozen once a data tree exists.
 func (c *RawContext) LoadModuleFromPath(path string) error {
 	defer pinToOSThread()()
-	defer runtime.KeepAlive(c)
+	if err := c.acquire(); err != nil { //nolint:gocritic // uncheckedInlineErr false positive on cgo-rewritten body
+		return err
+	}
+	defer c.release()
+	unlock, err := c.beginLoad()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	cpath := C.CString(path)
 	defer C.free(unsafe.Pointer(cpath))
 	mod := C.cam_load_module_path(c.ctx, cpath)
