@@ -1864,9 +1864,7 @@ func (c *Context) rebuildIfDirty() error {
 			}
 		}
 	}
-	for _, mod := range c.loadOrder {
-		mod.applyAugments()
-	}
+	c.applyAugments()
 	for _, mod := range c.loadOrder {
 		mod.collectDeviations()
 	}

@@ -58,7 +58,10 @@ These rules are engine-neutral and are the oracle for pure-Go schema IR tests:
 3. Augment children are inserted after the target node's directly declared and
    already-expanded children. Multiple augments for the same target are applied
    in deterministic module-load order, then augment statement source order, then
-   child source order within the augment.
+   child source order within the augment. This holds when the target is itself
+   created by another augment: augment targets resolve independently of the
+   order augments are declared in and modules are loaded, so module-load order
+   only decides the relative placement of contributions to one target.
 4. Deviations modify or remove target nodes without reordering unaffected
    siblings. A deviated replacement node occupies the original target position.
 5. Backend/data-tier implementations MAY expose libyang's compiled order for

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"iter"
 	"math/big"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -1164,6 +1165,11 @@ type schemaNodeData struct {
 	choiceDesc          bool
 	groupOrigin         string
 	devs                []Deviation
+	// augmentRank is the rank of the top-level augment that placed this node
+	// on its parent (module-load order, then augment source order), or 0 for
+	// a node declared or expanded in place. It orders augment contributions
+	// to one target; see insertAugmentChildren.
+	augmentRank int
 }
 
 type identityData struct {
@@ -2383,14 +2389,15 @@ func (m *moduleData) collectFeatureExcludedNames(parent *schemaNodeData, st *yan
 			groupMod.collectFeatureExcludedNames(parent, child, owner, seen)
 		}
 	case isSchemaChildKeyword(st.Keyword), st.Keyword == "case", st.Keyword == "rpc", st.Keyword == "notification", st.Keyword == "input", st.Keyword == "output":
-		name := featureExcludedName{module: owner, name: st.Argument}
-		for _, existing := range parent.featureExcluded {
-			if existing == name {
-				return
-			}
-		}
-		parent.featureExcluded = append(parent.featureExcluded, name)
+		addFeatureExcludedName(parent, featureExcludedName{module: owner, name: st.Argument})
 	}
+}
+
+func addFeatureExcludedName(parent *schemaNodeData, name featureExcludedName) {
+	if parent == nil || slices.Contains(parent.featureExcluded, name) {
+		return
+	}
+	parent.featureExcluded = append(parent.featureExcluded, name)
 }
 
 func validateUsesParent(uses *yangparse.Statement, parent *schemaNodeData) error {
@@ -2430,20 +2437,29 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 	defer delete(groupingStack, group)
 	children := groupMod.buildChildrenSeen(group, parent, owner, choiceDesc, localName(uses.Argument), groupingStack)
 	prependIfFeatures(children, ifFeatureArgs(uses))
+	var refinedOut []*schemaNodeData
 	for _, refine := range direct(uses, "refine") {
-		if !m.featureIncluded(refine) {
-			continue
-		}
 		if err := validateDescendantSchemaNodeIDStatement("refine", refine, m.yangVersionForStatement(refine) == "1.1"); err != nil {
 			m.recordSchemaError(err)
 			continue
 		}
-		target := findRelativeSchemaNode(m, children, strings.Split(refine.Argument, "/"), refine)
+		path := strings.Split(refine.Argument, "/")
+		target := findRelativeSchemaNode(m, children, path, refine)
 		if target == nil {
-			m.recordSchemaError(fmt.Errorf("refine %q target not found at %s", refine.Argument, refine.Location()))
+			// A grouping node the enabled feature set excluded is absent from
+			// the effective schema, so there is nothing to refine.
+			if !m.featureExcludedRelativePath(parent, children, path, refine) {
+				m.recordSchemaError(fmt.Errorf("refine %q target not found at %s", refine.Argument, refine.Location()))
+			}
 			continue
 		}
 		applyRefine(m, target, refine)
+		// RFC 7950 §7.13.2: a refine's if-feature statements are added to its
+		// target, so they gate the target node, not the refine's other
+		// properties.
+		if !m.featureIncluded(refine) {
+			refinedOut = append(refinedOut, target)
+		}
 	}
 	for _, aug := range direct(uses, "augment") {
 		if !m.featureIncluded(aug) {
@@ -2458,8 +2474,45 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 			m.recordSchemaError(fmt.Errorf("uses augment %q target not found at %s", aug.Argument, aug.Location()))
 		}
 	}
+	children = pruneRefinedOut(children, refinedOut)
 	m.applyUsesWhen(uses, children)
 	return children
+}
+
+// pruneRefinedOut removes the uses-expanded nodes whose refine added an
+// if-feature the enabled feature set rejects, and notes each on its parent as
+// feature-excluded so augment and deviation paths into it are recognized as
+// feature exclusions. roots are the expansion's top-level nodes; the pruned
+// roots are removed from the returned slice.
+func pruneRefinedOut(roots, pruned []*schemaNodeData) []*schemaNodeData {
+	for _, n := range pruned {
+		if n.parent == nil {
+			continue
+		}
+		addFeatureExcludedName(n.parent, featureExcludedName{module: n.module, name: n.name})
+		if slices.Contains(roots, n) {
+			roots = removeNodePtr(roots, n)
+		} else {
+			n.parent.children = removeNodePtr(n.parent.children, n)
+		}
+	}
+	return roots
+}
+
+// featureExcludedRelativePath reports whether a descendant schema node path
+// that does not resolve under roots, the nodes expanded under parent, fails at
+// a step the enabled feature set excluded.
+func (m *moduleData) featureExcludedRelativePath(parent *schemaNodeData, roots []*schemaNodeData, path []string, fromStmt *yangparse.Statement) bool {
+	from := parent
+	for _, step := range path {
+		next := findRelativeSchemaNode(m, roots, []string{step}, fromStmt)
+		if next == nil {
+			_, excluded := m.featureExcludedChild(from, step, fromStmt)
+			return excluded
+		}
+		from, roots = next, next.children
+	}
+	return false
 }
 
 func (m *moduleData) applyUsesWhen(uses *yangparse.Statement, roots []*schemaNodeData) {
@@ -3451,20 +3504,6 @@ func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string
 	return mod, node
 }
 
-// findDisabledAugmentTarget resolves a feature-disabled augment's target the
-// way an enabled augment would, without recording diagnostics: the augment
-// contributes nothing, so its path must not add warnings to the load report.
-func (c *Context) findDisabledAugmentTarget(source *moduleData, aug *yangparse.Statement) *schemaNodeData {
-	if c == nil || source == nil || aug == nil {
-		return nil
-	}
-	_, node, _, _ := c.findNodeBySchemaPathDetail(source, aug.Argument, true, aug)
-	if node == nil && c.validationMode == ValidationVendorCompatible {
-		_, node, _ = c.findNodeByVendorCompatibleSchemaPath(source, aug.Argument, aug)
-	}
-	return node
-}
-
 // featureExcludedSchemaPathStep reports whether an unresolved absolute schema
 // path fails at a step the enabled feature set excluded, returning that step's
 // local name. Paths that fail at an undeclared name, or under an unresolvable
@@ -3477,13 +3516,21 @@ func (c *Context) featureExcludedSchemaPathStep(source *moduleData, path string,
 	if mod == nil || node != nil || from == nil || segment == "" {
 		return "", false
 	}
-	qname := pathStepQName(segment)
+	return source.featureExcludedChild(from, pathStepQName(segment), fromStmt)
+}
+
+// featureExcludedChild reports whether the path step qname names a child of
+// from that the enabled feature set excluded, returning its local name. It
+// matches the step the way path resolution does: a prefixed step names one
+// module's node, an unprefixed step matches by local name.
+func (m *moduleData) featureExcludedChild(from *schemaNodeData, qname string, fromStmt *yangparse.Statement) (string, bool) {
+	if from == nil {
+		return "", false
+	}
 	name := localName(qname)
-	// Match the step the way path resolution does: a prefixed step names one
-	// module's node, an unprefixed step matches by local name.
 	var want *moduleData
 	if hasPrefix(qname) {
-		if want = source.resolveSourceQNameModuleFrom(qname, fromStmt); want == nil {
+		if want = m.resolveSourceQNameModuleFrom(qname, fromStmt); want == nil {
 			return "", false
 		}
 	}

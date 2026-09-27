@@ -163,10 +163,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     source location, and the previous declaration as a related location when
     available. Other revision defects, including malformed dates and duplicate
     dependency `revision-date` statements, remain errors.
-  - An augment or deviation whose target does not resolve fails loading in
+  - An augment may target a node that another augment creates; augment
+    targets resolve independently of declaration and module-load order.
+    An augment or deviation whose target does not resolve fails loading in
     every mode unless the path stops at a node the enabled feature set
-    excluded: one whose own `if-feature`, enclosing `uses`, or declaring
-    `augment` is disabled. The step must name that node's module, so a wrong
+    excluded: one whose own `if-feature`, `refine`-added `if-feature`,
+    enclosing `uses`, or declaring `augment` is disabled. The step must name that node's module, so a wrong
     or unresolvable prefix is not an exclusion. Strict mode rejects that case too, naming the excluded node
     ("excluded by feature policy"); `ValidationVendorCompatible` skips the
     statement with a warning. A skipped augment drops declared content, so its
@@ -233,7 +235,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     resolve to declared module-local features once the named module is loaded.
     YANG 1.0 sources may use only a single feature reference per `if-feature`;
     YANG 1.1 sources may use `not`, `and`, `or`, and parentheses, and may
-    attach `if-feature` to `enum`, `bit`, `identity`, and `refine`. Public
+    attach `if-feature` to `enum`, `bit`, `identity`, and `refine`. A
+    `refine`'s `if-feature` statements are added to its target (RFC 7950
+    §7.13.2): they remove the target from the effective schema when they
+    evaluate false and never gate the refine's other properties. Public
     schema-node handles expose direct node plus applied `uses`, `augment`, and
     `refine` `if-feature` expression strings in declaration/effective order
     through `IfFeatures()`; feature, identity, enum/bit value,
@@ -548,7 +553,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     shorthand child `if-feature` expressions that controlled case materialization.
   - Active `uses`/`refine` paths that cannot be resolved fail schema/context
     construction with `CAMBIUM_E0001`; unmatched refinements are not silently
-    ignored.
+    ignored. A `refine` whose path stops at a grouping node the enabled
+    feature set excluded has nothing to refine and is accepted.
 
   Defaults and leafref metadata:
   - `SchemaNodeRef.DefaultValues()` returns all default values in declaration

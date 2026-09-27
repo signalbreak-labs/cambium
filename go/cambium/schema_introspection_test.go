@@ -17693,7 +17693,7 @@ func TestIfFeatureOnDeviationNotAppliedWhenDisabled(t *testing.T) {
 	}
 }
 
-func TestIfFeatureOnRefineNotApplied(t *testing.T) {
+func TestIfFeatureOnRefineGatesTarget(t *testing.T) {
 	t.Helper()
 	dir := schemaIntrospectionModuleDir(t)
 
@@ -17738,12 +17738,10 @@ func TestIfFeatureOnRefineNotApplied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Schema: %v", err)
 	}
-	leaf, err := mod.FindPath("/cifr:top/cifr:config-true")
-	if err != nil {
-		t.Fatalf("FindPath config-true: %v", err)
-	}
-	if leaf.Config() != cambium.ConfigRw {
-		t.Fatalf("config-true Config() = %v, want ConfigRw (refine with disabled if-feature should not apply)", leaf.Config())
+	// RFC 7950 §7.13.2: the refine adds its if-feature to the target, so the
+	// disabled feature removes config-true from the effective schema.
+	if _, err := mod.FindPath("/cifr:top/cifr:config-true"); err == nil {
+		t.Fatal("config-true is present, want it removed by the refine's disabled if-feature")
 	}
 
 	enabledCtx, err := cambium.NewContext()

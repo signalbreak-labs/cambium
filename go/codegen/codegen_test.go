@@ -6403,8 +6403,10 @@ func TestGeneratedGoRefineMinMaxIfFeatureMatchesLibyang(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	if !strings.Contains(src, "Tags []string") || !strings.Contains(src, "AdvancedOpt *string") {
-		t.Fatalf("generated source should keep grouped nodes while skipping properties from disabled refine if-feature, got:\n%s", src)
+	// RFC 7950 §7.13.2 (and libyang): a refine's if-feature is added to its
+	// target, so the disabled "advanced" feature removes advanced-opt.
+	if !strings.Contains(src, "Tags []string") || strings.Contains(src, "AdvancedOpt") {
+		t.Fatalf("generated source should keep grouped nodes and drop the node gated by a disabled refine if-feature, got:\n%s", src)
 	}
 
 	wantXML, err := os.ReadFile(goldenPath(t, "linkage-refine-min-max-iffeature", "output.xml"))
