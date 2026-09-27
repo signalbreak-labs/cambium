@@ -209,6 +209,9 @@ concurrency rules are part of the architecture, not an implementation detail.
   is the mutable phase and `Build()` returns a frozen `*Context`. The libyang
   `ly_ctx` follows the same discipline — assemble the schema, then treat it as
   read-only and shareable for schema reads and parsing independent data trees.
+  The backend enforces the freeze: once a context has created a data tree,
+  module loads return `ErrContextFrozen` (`CAMBIUM_E0001`) instead of letting
+  libyang recompile the schema under live trees.
   Mutators and `Close()` must not race with those operations; the FFI seam is
   additionally **fail-closed** as a safety net — operations after (or racing)
   `Close` return `ErrContextClosed` instead of reaching freed memory, and the
