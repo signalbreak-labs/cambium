@@ -109,6 +109,13 @@ Backend/data tier:
 2. `ordered-by system` list entries MUST be emitted in canonical key order;
    leaf-list values MUST be emitted in canonical value order.
 3. Output MUST be deterministic across repeated runs and processes.
+4. Canonical order is the pinned engine's (`/VERSIONS`): entries compare key by
+   key in `key` statement order, and values compare by type (numbers
+   numerically, strings and identity names bytewise, enumerations by assigned
+   value, bits by position); equal values keep insertion order. Only keyed
+   configuration lists and configuration leaf-lists are sorted; `config false`
+   and keyless lists keep insertion order. Every data-tier implementation,
+   engine-backed or not, MUST emit this same order.
 
 ### I3 - List keys are first and in key-statement order
 

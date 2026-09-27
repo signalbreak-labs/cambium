@@ -59,6 +59,10 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModul
 			}
 			return
 		}
+		if len(text) > maxNumericLexicalLen {
+			*out = append(*out, fmt.Sprintf("%s: integer value is longer than %d characters", path, maxNumericLexicalLen))
+			return
+		}
 		v, ok := new(big.Int).SetString(text, 10)
 		if !ok {
 			*out = append(*out, fmt.Sprintf("%s: %q is not a valid integer", path, text))
@@ -364,6 +368,10 @@ func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out
 var decimal64Lexical = regexp.MustCompile(`^[+-]?\d+(\.\d+)?$`)
 
 func checkDecimal(s string, r cambium.ResolvedDecimal64, path string, out *[]string) {
+	if len(s) > maxNumericLexicalLen {
+		*out = append(*out, fmt.Sprintf("%s: decimal64 value is longer than %d characters", path, maxNumericLexicalLen))
+		return
+	}
 	if !decimal64Lexical.MatchString(s) {
 		*out = append(*out, fmt.Sprintf("%s: %q is not a valid decimal64", path, s))
 		return

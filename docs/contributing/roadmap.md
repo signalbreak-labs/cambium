@@ -43,7 +43,8 @@ lands rather than adding another dated file.
   leaf-list/list uniqueness and list-key checks; leafref instance existence;
   `must`/`when` over a growing XPath subset; opaque `anydata`/`anyxml` in
   JSON_IETF; and apply-defaults. It preserves ordering invariants I1/I2/I3/I5
-  over what it supports. See the
+  over what it supports, including libyang's canonical order for
+  `ordered-by system` data and canonical leaf values. See the
   [pure-Go data tree guide](../guides/data-tree-pure-go.md).
 
   It is **experimental** for concrete reasons, each of which is on the path to

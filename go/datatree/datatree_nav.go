@@ -59,9 +59,10 @@ func (nd Node) AnyValue() (string, bool) {
 	return string(nd.n.anyRaw), true
 }
 
-// LeafValue returns a leaf's value as its raw encoded token (for the JSON_IETF
-// source this is the JSON text, e.g. `"hi"`, `7`, or `true`), and false if the
-// node is not a leaf.
+// LeafValue returns a leaf's value as its JSON_IETF token, in canonical form
+// whatever format it was parsed from (e.g. `"hi"`, `7`, `true`, or `"45.5"` for
+// a decimal64 written 45.50), and false if the node is not a leaf. A value
+// that is invalid for its type is kept as written.
 func (nd Node) LeafValue() (string, bool) {
 	if nd.n.kind != kindLeaf {
 		return "", false
@@ -69,8 +70,10 @@ func (nd Node) LeafValue() (string, bool) {
 	return string(nd.n.value), true
 }
 
-// LeafListValues returns a leaf-list's values in order, each as its raw encoded
-// token; nil if the node is not a leaf-list.
+// LeafListValues returns a leaf-list's values in order (canonical value order
+// for an ordered-by system configuration leaf-list, input order otherwise),
+// each as its JSON_IETF token like LeafValue; nil if the node is not a
+// leaf-list.
 func (nd Node) LeafListValues() []string {
 	if nd.n.kind != kindLeafList {
 		return nil
@@ -91,8 +94,9 @@ func (nd Node) Children() []Node {
 	return wrapNodes(nd.n.children)
 }
 
-// Entries returns a list's entries in document order; each entry is its child
-// nodes with keys first. nil if the node is not a list.
+// Entries returns a list's entries in order (canonical key order for an
+// ordered-by system configuration list, input order otherwise); each entry is
+// its child nodes with keys first. nil if the node is not a list.
 func (nd Node) Entries() [][]Node {
 	if nd.n.kind != kindList {
 		return nil

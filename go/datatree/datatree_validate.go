@@ -180,22 +180,24 @@ func checkElements(sn cambium.SchemaNodeRef, count int, path string, out *[]stri
 // key tuples are unique across entries (invariant-neutral: key order in the
 // tuple follows key-statement order, and entries are not reordered).
 func checkListKeys(sn cambium.SchemaNodeRef, dn *node, path string, out *[]string) {
-	keys := sn.KeyNames()
+	keys := childRefs(sn.ListKeys())
 	if len(keys) == 0 {
 		return
 	}
 	seen := make(map[string]bool, len(dn.entries))
 	for i, entry := range dn.entries {
-		byName := make(map[string]*node, len(entry))
+		// Keys are looked up by qualified (module, name) identity: a same-named
+		// leaf augmented in from another module is not the key.
+		byKey := make(map[nodeKey]*node, len(entry))
 		for _, e := range entry {
-			byName[e.name] = e
+			byKey[dataNodeKey(e)] = e
 		}
 		tuple := make([]string, 0, len(keys))
 		complete := true
 		for _, k := range keys {
-			kn := byName[k]
+			kn := byKey[schemaNodeKey(k)]
 			if kn == nil {
-				*out = append(*out, fmt.Sprintf("%s[%d] is missing key leaf %q", path, i, k))
+				*out = append(*out, fmt.Sprintf("%s[%d] is missing key leaf %q", path, i, k.Name()))
 				complete = false
 				continue
 			}

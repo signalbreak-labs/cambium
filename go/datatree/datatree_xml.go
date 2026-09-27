@@ -33,6 +33,67 @@ type xmlElem struct {
 	ns    string
 	text  string
 	kids  []*xmlElem
+	scope *xmlNSScope // namespace bindings in scope on the element
+}
+
+// xmlNSScope is one in-scope XML namespace binding, chained to the bindings of
+// the enclosing elements, so a lookup walks outward as XML namespace scoping
+// does. Leaf values that carry prefixes (identityref, instance-identifier)
+// resolve them here: they are document bindings, unrelated to the schema's
+// import prefixes (RFC 7950 §9.10.3, §9.13.2).
+type xmlNSScope struct {
+	parent *xmlNSScope
+	prefix string // "" binds the default namespace
+	uri    string
+}
+
+// namespace implements valueScope. An empty URI (xmlns="") unbinds.
+func (s *xmlNSScope) namespace(prefix string) (string, bool) {
+	for ; s != nil; s = s.parent {
+		if s.prefix == prefix {
+			return s.uri, s.uri != ""
+		}
+	}
+	return "", false
+}
+
+func withNSDecls(parent *xmlNSScope, attrs []xml.Attr) *xmlNSScope {
+	s := parent
+	for _, a := range attrs {
+		switch {
+		case a.Name.Space == "xmlns":
+			s = &xmlNSScope{parent: s, prefix: a.Name.Local, uri: a.Value}
+		case a.Name.Space == "" && a.Name.Local == "xmlns":
+			s = &xmlNSScope{parent: s, uri: a.Value}
+		}
+	}
+	return s
+}
+
+// valueScope resolves the prefixes inside a lexical identityref or
+// instance-identifier value to namespace URIs ("" is the default namespace).
+// XML element text resolves against the element's in-scope xmlns bindings;
+// schema default values against the defining module's import prefixes.
+type valueScope interface {
+	namespace(prefix string) (string, bool)
+}
+
+// schemaScope resolves prefixes as YANG does inside module m.
+type schemaScope struct{ module cambium.Module }
+
+func (s schemaScope) namespace(prefix string) (string, bool) {
+	if m, ok := s.module.ResolvePrefix(prefix); ok {
+		return m.Namespace(), true
+	}
+	// Tolerate an imported module's name in place of its prefix.
+	for _, imp := range s.module.Imports() {
+		if imp.Name == prefix {
+			if m, ok := s.module.ResolvePrefix(imp.Prefix); ok {
+				return m.Namespace(), true
+			}
+		}
+	}
+	return "", false
 }
 
 type xmlQName struct {
@@ -69,7 +130,7 @@ func decodeXMLForest(data []byte) ([]*xmlElem, error) {
 			return nil, fmt.Errorf("datatree: xml: %w", err)
 		}
 		if se, ok := tok.(xml.StartElement); ok {
-			el, err := decodeXMLElem(dec, se, 1)
+			el, err := decodeXMLElem(dec, se, nil, 1)
 			if err != nil {
 				return nil, err
 			}
@@ -88,11 +149,11 @@ func decodeXMLForest(data []byte) ([]*xmlElem, error) {
 	return roots, nil
 }
 
-func decodeXMLElem(dec *xml.Decoder, start xml.StartElement, depth int) (*xmlElem, error) {
+func decodeXMLElem(dec *xml.Decoder, start xml.StartElement, parent *xmlNSScope, depth int) (*xmlElem, error) {
 	if depth > maxXMLNestingDepth {
 		return nil, fmt.Errorf("datatree: xml: nesting exceeds %d", maxXMLNestingDepth)
 	}
-	el := &xmlElem{local: start.Name.Local, ns: start.Name.Space}
+	el := &xmlElem{local: start.Name.Local, ns: start.Name.Space, scope: withNSDecls(parent, start.Attr)}
 	var text strings.Builder
 	for {
 		tok, err := dec.Token()
@@ -101,7 +162,7 @@ func decodeXMLElem(dec *xml.Decoder, start xml.StartElement, depth int) (*xmlEle
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			kid, err := decodeXMLElem(dec, t, depth+1)
+			kid, err := decodeXMLElem(dec, t, el.scope, depth+1)
 			if err != nil {
 				return nil, err
 			}
@@ -154,7 +215,7 @@ func schemaXMLName(sn cambium.SchemaNodeRef) xmlQName {
 }
 
 func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
-	n := &node{name: sn.Name(), module: sn.Module().Name(), namespace: sn.Namespace()}
+	n := newNode(sn)
 	switch {
 	case sn.IsLeaf():
 		if err := requireSingleXML(sn, group); err != nil {
@@ -165,7 +226,7 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 		}
 		n.kind = kindLeaf
 		ti, _ := sn.LeafType()
-		n.value = jsonTokenFromText(ti, group[0].text, sn.Module(), sn.Module())
+		n.value = canonicalLeafToken(sn, jsonTokenFromText(ti, group[0].text, sn.Module(), group[0].scope))
 	case sn.IsLeafList():
 		n.kind = kindLeafList
 		ti, _ := sn.LeafType()
@@ -173,8 +234,9 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 			if len(e.kids) > 0 {
 				return nil, fmt.Errorf("datatree: XML leaf-list %q contains child elements", sn.Name())
 			}
-			n.values = append(n.values, jsonTokenFromText(ti, e.text, sn.Module(), sn.Module()))
+			n.values = append(n.values, canonicalLeafToken(sn, jsonTokenFromText(ti, e.text, sn.Module(), e.scope)))
 		}
+		sortSystemOrdered(sn, n)
 	case sn.IsContainer():
 		if err := requireSingleXML(sn, group); err != nil {
 			return nil, err
@@ -200,6 +262,7 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 			}
 			n.entries = append(n.entries, keysFirst(sn, kids))
 		}
+		sortSystemOrdered(sn, n)
 	case sn.IsAnyData(), sn.IsAnyXML():
 		return nil, fmt.Errorf("datatree: anydata/anyxml %q in XML input is not supported "+
 			"(the pure-Go XML reader cannot losslessly capture opaque content; use JSON_IETF "+
@@ -217,10 +280,10 @@ func requireSingleXML(sn cambium.SchemaNodeRef, group []*xmlElem) error {
 	return fmt.Errorf("datatree: duplicate XML element %q in namespace %q", sn.Name(), sn.Namespace())
 }
 
-func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule, sourceModule cambium.Module) json.RawMessage {
-	if sourceModule.Name() == "" {
-		sourceModule = leafModule
-	}
+// jsonTokenFromText converts a lexical value — XML element text or a schema
+// default — to the internal JSON_IETF token for type ti. scope resolves the
+// prefixes inside identityref and instance-identifier values.
+func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule cambium.Module, scope valueScope) json.RawMessage {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedBoolean:
 		s := strings.TrimSpace(text)
@@ -237,7 +300,7 @@ func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule, sourceModul
 		return jsonTokenFromIntegerText(text, r.Kind)
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			token := jsonTokenFromText(member, text, leafModule, sourceModule)
+			token := jsonTokenFromText(member, text, leafModule, scope)
 			var trial []string
 			validateLeafValue(member, token, "", leafModule.Name(), &trial)
 			if len(trial) == 0 {
@@ -247,12 +310,17 @@ func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule, sourceModul
 		return jsonStringToken(text)
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
-			return jsonTokenFromText(*rt, text, leafModule, sourceModule)
+			return jsonTokenFromText(*rt, text, leafModule, scope)
 		}
 		return jsonStringToken(text)
 	case cambium.ResolvedIdentityRef:
-		if jsonName, ok := identityrefJSONName(text, r, leafModule, sourceModule); ok {
+		if jsonName, ok := identityrefJSONName(text, r, leafModule, scope); ok {
 			return jsonStringToken(jsonName)
+		}
+		return jsonStringToken(text)
+	case cambium.ResolvedInstanceIdentifier:
+		if path, ok := instanceIdentifierFromLexical(text, leafModule, scope); ok {
+			return jsonStringToken(path)
 		}
 		return jsonStringToken(text)
 	default:
@@ -260,57 +328,85 @@ func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule, sourceModul
 	}
 }
 
-func identityrefJSONName(value string, resolved cambium.ResolvedIdentityRef, leafModule, sourceModule cambium.Module) (string, bool) {
-	if sourceModule.Name() == "" {
-		sourceModule = leafModule
-	}
+// identityrefJSONName maps a lexical "prefix:name" (or bare "name", in the
+// scope's default namespace) identityref value to its JSON_IETF form: bare for
+// an identity of the leaf's own module, module-qualified otherwise.
+func identityrefJSONName(value string, resolved cambium.ResolvedIdentityRef, leafModule cambium.Module, scope valueScope) (string, bool) {
 	prefix, local, prefixed := strings.Cut(value, ":")
 	if !prefixed {
-		local = value
+		prefix, local = "", value
 	}
-	seen := make(map[string]bool)
-	var visit func(cambium.Identity) (string, bool)
-	visit = func(id cambium.Identity) (string, bool) {
-		idModule := id.Module()
-		key := idModule.Name() + ":" + id.Name()
-		if seen[key] {
-			return "", false
-		}
-		seen[key] = true
-		if id.Name() == local && identityrefDefaultModuleMatches(prefix, prefixed, idModule, sourceModule) {
-			jsonName := id.Name()
-			if idModule.Name() != leafModule.Name() {
-				jsonName = idModule.Name() + ":" + id.Name()
-			}
-			return jsonName, true
-		}
-		for _, derived := range id.Derived() {
-			if jsonName, ok := visit(derived); ok {
-				return jsonName, true
-			}
-		}
+	ns, ok := scope.namespace(prefix)
+	if !ok {
 		return "", false
 	}
-	for _, base := range resolved.Bases() {
-		if jsonName, ok := visit(base); ok {
-			return jsonName, true
-		}
+	id, ok := findIdentity(resolved, func(id cambium.Identity) bool {
+		return id.Name() == local && id.Module().Namespace() == ns
+	})
+	if !ok {
+		return "", false
 	}
-	return "", false
+	if id.Module().Name() == leafModule.Name() {
+		return id.Name(), true
+	}
+	return id.Module().Name() + ":" + id.Name(), true
 }
 
-func identityrefDefaultModuleMatches(prefix string, prefixed bool, idModule, sourceModule cambium.Module) bool {
-	if !prefixed {
-		return sourceModule.Name() == idModule.Name()
+// identityFromJSON finds the identity a JSON_IETF identityref value names
+// ("module:name", or a bare name of the leaf's module).
+func identityFromJSON(raw json.RawMessage, resolved cambium.ResolvedIdentityRef, leafModule cambium.Module) (cambium.Identity, bool) {
+	s, ok := jsonStringValue(raw)
+	if !ok {
+		return cambium.Identity{}, false
 	}
-	if resolved, ok := sourceModule.ResolvePrefix(prefix); ok {
-		return resolved.Name() == idModule.Name()
+	mod, local, qualified := strings.Cut(s, ":")
+	if !qualified {
+		mod, local = leafModule.Name(), s
 	}
-	return prefix == idModule.Name()
+	return findIdentity(resolved, func(id cambium.Identity) bool {
+		return id.Name() == local && id.Module().Name() == mod
+	})
+}
+
+// findIdentity walks the identityref's bases and everything derived from them,
+// in declaration order, for the first identity matching match.
+func findIdentity(resolved cambium.ResolvedIdentityRef, match func(cambium.Identity) bool) (cambium.Identity, bool) {
+	seen := make(map[string]bool)
+	var visit func(cambium.Identity) (cambium.Identity, bool)
+	visit = func(id cambium.Identity) (cambium.Identity, bool) {
+		key := id.Module().Name() + ":" + id.Name()
+		if seen[key] {
+			return cambium.Identity{}, false
+		}
+		seen[key] = true
+		if match(id) {
+			return id, true
+		}
+		for _, derived := range id.Derived() {
+			if found, ok := visit(derived); ok {
+				return found, true
+			}
+		}
+		return cambium.Identity{}, false
+	}
+	for _, base := range resolved.Bases() {
+		if found, ok := visit(base); ok {
+			return found, true
+		}
+	}
+	return cambium.Identity{}, false
 }
 
 func jsonTokenFromIntegerText(text string, kind cambium.IntKind) json.RawMessage {
 	s := strings.TrimSpace(text)
+	if len(s) > maxNumericLexicalLen {
+		// Too long to be any YANG integer: keep it unparsed (no math/big work)
+		// in the shape Validate expects, so it is reported by length.
+		if integerJSONQuoted(kind) || !jsonIntegerNumberLexical.MatchString(s) {
+			return jsonStringToken(s)
+		}
+		return json.RawMessage(s)
+	}
 	v, ok := new(big.Int).SetString(s, 10)
 	if !ok {
 		return jsonStringToken(text)
@@ -321,12 +417,16 @@ func jsonTokenFromIntegerText(text string, kind cambium.IntKind) json.RawMessage
 	return json.RawMessage(v.String())
 }
 
+// jsonStringToken encodes s as a JSON string token. <, > and & stay literal
+// (no HTML escaping), as in libyang's JSON output and in JSON_IETF input.
 func jsonStringToken(s string) json.RawMessage {
-	b, err := json.Marshal(s)
-	if err != nil {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
 		return json.RawMessage(`""`)
 	}
-	return json.RawMessage(b)
+	return json.RawMessage(bytes.TrimSuffix(b.Bytes(), []byte("\n")))
 }
 
 // --- serialize ---------------------------------------------------------------
@@ -344,10 +444,12 @@ func (t *Tree) serializeXML() ([]byte, error) {
 func writeXMLNode(b *bytes.Buffer, n *node, parentNS string) error {
 	switch n.kind {
 	case kindLeaf:
-		writeXMLLeaf(b, n, parentNS, xmlTextFromToken(n.value))
+		text, decls := xmlLeafText(n, n.value)
+		writeXMLLeaf(b, n, parentNS, text, decls)
 	case kindLeafList:
 		for _, v := range n.values {
-			writeXMLLeaf(b, n, parentNS, xmlTextFromToken(v))
+			text, decls := xmlLeafText(n, v)
+			writeXMLLeaf(b, n, parentNS, text, decls)
 		}
 	case kindContainer:
 		writeXMLOpen(b, n, parentNS)
@@ -381,10 +483,17 @@ func writeXMLNode(b *bytes.Buffer, n *node, parentNS string) error {
 	return nil
 }
 
-func writeXMLLeaf(b *bytes.Buffer, n *node, parentNS, text string) {
+func writeXMLLeaf(b *bytes.Buffer, n *node, parentNS, text string, decls []xmlNSDecl) {
 	b.WriteByte('<')
 	b.WriteString(n.name)
 	writeXMLNS(b, n, parentNS)
+	for _, d := range decls {
+		b.WriteString(" xmlns:")
+		b.WriteString(d.prefix)
+		b.WriteString(`="`)
+		b.WriteString(escapeXMLAttr(d.uri))
+		b.WriteByte('"')
+	}
 	if text == "" {
 		b.WriteString("/>")
 		return
@@ -412,9 +521,55 @@ func writeXMLClose(b *bytes.Buffer, n *node) {
 func writeXMLNS(b *bytes.Buffer, n *node, parentNS string) {
 	if n.namespace != "" && n.namespace != parentNS {
 		b.WriteString(` xmlns="`)
-		b.WriteString(escapeXMLText(n.namespace))
+		b.WriteString(escapeXMLAttr(n.namespace))
 		b.WriteByte('"')
 	}
+}
+
+// xmlNSDecl is a prefixed namespace declaration a leaf value needs on its own
+// element.
+type xmlNSDecl struct{ prefix, uri string }
+
+// xmlLeafText renders the value token of leaf or leaf-list n as XML text.
+func xmlLeafText(n *node, raw json.RawMessage) (string, []xmlNSDecl) {
+	ti, ok := n.schema.LeafType()
+	if !ok {
+		return xmlTextFromToken(raw), nil
+	}
+	return xmlValueText(ti, raw, n.schema.Module())
+}
+
+// xmlValueText renders a value token of type ti as XML element text. Values
+// that name identities or data nodes of another module are written with each
+// such module's own prefix, declared on the value's element, as libyang
+// prints them; an identity of the leaf's own module needs no prefix.
+func xmlValueText(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) (string, []xmlNSDecl) {
+	switch r := ti.Resolved().(type) {
+	case cambium.ResolvedIdentityRef:
+		if id, ok := identityFromJSON(raw, r, leafModule); ok && id.Module().Name() != leafModule.Name() {
+			m := id.Module()
+			return m.Prefix() + ":" + id.Name(), []xmlNSDecl{{prefix: m.Prefix(), uri: m.Namespace()}}
+		}
+	case cambium.ResolvedInstanceIdentifier:
+		if s, ok := jsonStringValue(raw); ok {
+			if path, decls, ok := instanceIdentifierXML(s, leafModule); ok {
+				return path, decls
+			}
+		}
+	case cambium.ResolvedLeafRef:
+		if rt, ok := r.Realtype(); ok && rt != nil {
+			return xmlValueText(*rt, raw, leafModule)
+		}
+	case cambium.ResolvedUnion:
+		for _, member := range r.Members() {
+			var trial []string
+			validateLeafValue(member, raw, "", leafModule.Name(), &trial)
+			if len(trial) == 0 {
+				return xmlValueText(member, raw, leafModule) // first matching member wins
+			}
+		}
+	}
+	return xmlTextFromToken(raw), nil
 }
 
 // xmlTextFromToken converts an internal JSON token back to XML element text by
@@ -434,12 +589,14 @@ func xmlTextFromToken(raw json.RawMessage) string {
 	return s
 }
 
-func escapeXMLText(s string) string {
-	return strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		`"`, "&quot;",
-		"'", "&apos;",
-	).Replace(s)
-}
+// Escaping matches libyang's printer (lyxml_dump_text): element text escapes
+// &, < and > (the last only for readability); attribute values, which are
+// double-quoted, also escape ".
+var (
+	xmlTextEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+	xmlAttrEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;")
+)
+
+func escapeXMLText(s string) string { return xmlTextEscaper.Replace(s) }
+
+func escapeXMLAttr(s string) string { return xmlAttrEscaper.Replace(s) }
