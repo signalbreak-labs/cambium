@@ -180,7 +180,10 @@ The script:
    `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
    `github.com/openconfig/goyang`, or the vendored `internal/yangparse/upstream`
    raw-statement lexer.
-3. Fails if any package in that closure has cgo source files at all.
+3. Fails if any package in that closure has cgo source files at all. Because
+   `CGO_ENABLED=0` hides cgo files, it also lists the closure with
+   `CGO_ENABLED=1` and fails on any non-standard-library package with cgo files,
+   so a dependency with a pure-Go fallback cannot slip through.
 
 Because the check inspects the *actual resolved dependency graph*, the cgo-free
 guarantee is verified, not asserted. `scripts/green-bar.sh` runs it as the first

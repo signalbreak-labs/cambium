@@ -103,7 +103,8 @@ exercises `cambium`, `codegen`, `compat`, and `datatree` with `CGO_ENABLED=0`, t
 inspects their actual transitive dependency closure and fails if it contains
 `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
 `github.com/openconfig/goyang`, the vendored `internal/yangparse/upstream` lexer, or
-any package carrying cgo source files.
+any package carrying cgo source files (checked with cgo both disabled and
+enabled, so a non-standard dependency with a pure-Go fallback is still caught).
 
 ```bash
 # Prove the default packages have no path to C:
