@@ -41,11 +41,15 @@ lands rather than adding another dated file.
 
 - **Pure-Go data tree** (`datatree`) — a cgo-free generic data tree and the current
   development frontier. What works today: JSON_IETF and XML parse/serialize for
-  containers, leaves, leaf-lists, and lists; structural and type validation;
-  leaf-list/list uniqueness and list-key checks; leafref instance existence;
+  containers, leaves, leaf-lists, and lists, including documents whose top-level
+  nodes come from several modules (`ParseModules`, in libyang's top-level
+  order); structural and type validation
+  with choice/case semantics; leaf-list, list-key, and `unique` uniqueness over
+  canonical values; leafref instance existence;
   `must`/`when` over a growing XPath subset; opaque `anydata`/`anyxml` in
   JSON_IETF; and apply-defaults. It preserves ordering invariants I1/I2/I3/I5
-  over what it supports. See the
+  over what it supports, including libyang's canonical order for
+  `ordered-by system` data and canonical leaf values. See the
   [pure-Go data tree guide](../guides/data-tree-pure-go.md).
 
   It is **experimental** for concrete reasons, each of which is on the path to
@@ -59,7 +63,8 @@ lands rather than adding another dated file.
     for opaque content, and no RPC/action/notification (operation) data. The XPath
     engine now covers the YANG functions `re-match`, `bit-is-set`, `derived-from`,
     and `derived-from-or-self`; it still **skips** `deref()` rather than
-    mis-evaluating it.
+    mis-evaluating it. `must`/`when` do not yet see default values or absent
+    non-presence containers, which libyang instantiates before validating.
 
   The goal is a complete, stable pure-Go data tier so that the full
   parse → validate → serialize path can run with the same portability the schema
@@ -68,7 +73,10 @@ lands rather than adding another dated file.
   **both** engines in the differential lane (`go run ./cmd/cambium datatree-diff`),
   which byte-compares output after compact-only normalization — element and member
   order is never normalized away. Growing that flagged subset *is* the path to
-  stable.
+  stable. Today 189 of the 222 backend/data cases are flagged, including all 24
+  must-reject cases; the rest are the scope gaps above, with-defaults output
+  modes, RFC 7952 metadata, gNMI output, one JSON escape-spelling difference, and
+  `ietf-interfaces`, which waits on two schema-build fixes.
 
 ## Not built yet
 
@@ -78,6 +86,12 @@ lands rather than adding another dated file.
   available only through the Go handles. Widening the JSON is an additive
   change under the ADR 0002 policy. Related schema gap: `must`/`when` carry no
   source location.
+- **Codegen value gaps.** Mandatory leaves outside a `choice` are value fields,
+  so `Validate` cannot detect one left unset in Go (fixing it means pointer
+  fields, a breaking change); an identityref with several bases accepts
+  identities derived from any base rather than all; and anydata/anyxml content
+  is not converted between XML and JSON. See the
+  [codegen guide](../guides/codegen.md).
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
   none exists today. The enabling step has landed: the corpus is published as a
@@ -90,7 +104,9 @@ lands rather than adding another dated file.
 - This page — the living narrative of stable / experimental / unbuilt.
 - The [conformance corpus](conformance.md) — the machine-checkable floor; a
   capability is not "done" without passing fixtures. For `datatree`, the
-  differential lane (`datatree = true` cases) is the graduation gate.
+  differential lane (`datatree = true` cases) is the graduation gate; it
+  compares validation verdicts, including must-reject documents
+  (`expect = "reject"`), as well as output.
 - [Architecture decision records](../adr/) — the one-way-door decisions and their
   reversal costs.
 - Git history — past point-in-time audits and release-readiness snapshots remain

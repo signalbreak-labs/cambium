@@ -3,6 +3,7 @@ type {{.Name}} struct {
 	set map[string]bool
 }
 
+// {{.Name}}BitPositions lists the named bits in position order.
 var {{.Name}}BitPositions = []struct {
 	name string
 	pos  int64
@@ -34,7 +35,8 @@ func New{{.Name}}(names []string) ({{.Name}}, error) {
 	return out, nil
 }
 
-// String returns the canonical space-separated bits value.
+// String returns the canonical bits value: the set bit names in position
+// order, separated by single spaces.
 func (b {{.Name}}) String() string {
 	parts := make([]string, 0, len(b.set))
 	for _, item := range {{.Name}}BitPositions {

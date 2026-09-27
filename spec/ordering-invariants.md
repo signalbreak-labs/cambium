@@ -109,6 +109,19 @@ Backend/data tier:
 2. `ordered-by system` list entries MUST be emitted in canonical key order;
    leaf-list values MUST be emitted in canonical value order.
 3. Output MUST be deterministic across repeated runs and processes.
+4. Canonical order is the pinned engine's (`/VERSIONS`): entries compare key by
+   key in `key` statement order, and values compare by type (numbers
+   numerically, strings and identity names bytewise, enumerations by assigned
+   value, bits by position); equal values keep insertion order. Only keyed
+   configuration lists and configuration leaf-lists are sorted; `config false`
+   and keyless lists keep insertion order. Every data-tier implementation,
+   engine-backed or not, MUST emit this same order.
+5. Top-level data nodes from several modules have no common schema parent, so
+   they follow the pinned engine's placement: grouped by module, modules in
+   bytewise order of their names, each module's top-level nodes in effective
+   schema declaration order. The order MUST NOT depend on input order, module
+   load order, namespace, or prefix. Every data-tier implementation MUST emit
+   this same order (fixture `multi-module-top-level-order`).
 
 ### I3 - List keys are first and in key-statement order
 
@@ -178,7 +191,7 @@ Every fixture declares a tier in `manifest.toml`.
     mode.toml              # parse/validate/serialize options
   golden/<name>/
     output.xml  output.json  output.gnmi.json
-  manifest.toml            # name -> {invariants:[I2,I3], tier:"schema-ir|backend-data"}
+  manifest.toml            # name -> {invariants:[I2,I3], tier:"schema-ir|backend-data", expect:"accept|reject"}
 ```
 
 Schema IR runner contract:
@@ -197,6 +210,20 @@ Backend/data runner contract:
 4. For backend differential fixtures, assert each binding's backend bytes equal
    the others'.
 
+Must-reject runner contract (backend/data cases with `expect = "reject"`; the
+default is `"accept"`):
+
+1. Parse `input.*` strictly (unknown data is an error) and validate the whole
+   datastore against RFC 7950, as a server does before accepting the data.
+2. Assert that every engine the case covers refuses the document: the backend
+   engine always, and each additional engine the case opts into (an oracle, a
+   differential engine). An engine that accepts it fails the case.
+3. Compare the verdict only, never the error text. A harness failure (a module
+   that does not load, a missing input) fails the case; it is not a rejection.
+4. A must-reject case has no golden outputs, no operation or output options,
+   and at least one top-level data node, so an engine refusing an empty
+   document cannot pass for a verdict.
+
 ## 7. Required edge-case fixtures
 
 | Fixture | Tier | Invariant | Why |
@@ -211,6 +238,7 @@ Backend/data runner contract:
 | `ordering-nested-user-cascading` | Backend/data | I1 | nested user-ordered lists |
 | `list-keyless-positional` | Backend/data | I1/I2 | keyless list positional order |
 | `list-ordered-by-system-canonical` | Backend/data | I2 | system-ordered entries canonicalize deterministically |
+| `multi-module-top-level-order` | Backend/data | I2 | top-level nodes of several modules group by module in name order, not input, load, or namespace order |
 | `json-object-determinism` | Backend/data | I5 | deterministic object member output |
 | `gnmi-ordered-atomic` | Backend/data | I6 | ordered list carried as one atomic JSON_IETF gNMI payload value; predicated gNMI paths are rejected with a data-path error so callers pass the list path for the atomic update |
 
