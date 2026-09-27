@@ -31,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- `ContextBuilder.SetMaxSchemaNodes` and `DefaultMaxSchemaNodes` (8,388,608):
+  a budget on the schema nodes `Build` instantiates (every `uses` and augment
+  expansion, plus the standalone check of each grouping body). 0 selects the
+  default.
 - `RangeBound.MinNumber`/`MaxNumber` (`Number`) and, for length restrictions,
   `RangeBound.MinLength`/`MaxLength` (`uint64`), with `min`/`max` resolved
   against the type being restricted; `Min`/`Max` stay lexical.
@@ -83,6 +87,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   feature-gated nodes or reorders augments.
 - Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
   scales with unique nodes.
+- `Build` fails with a `resource_limit` diagnostic as soon as grouping and
+  augment expansion exceeds the schema node budget, instead of running until
+  memory is exhausted (a 1.2 KB module of nested `uses` used 4 GB and 45 s).
+  The full Junos configuration schema needs about 3.3 million
+  instantiations and OpenConfig about 60,000, so the default admits them.
 - Only implemented modules contribute augments and deviations (RFC 7950
   §5.6.5). An import-only module's augments and deviations were applied, and
   declaring a deviation made a module implemented; load an augmenting or
@@ -152,6 +161,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- Typedef, `if-feature`, and identity chains resolved in cubic time (a
+  1000-typedef chain took 6 s; 5000 did not finish). Typedef resolution and
+  feature validation and evaluation are memoized per definition during a
+  build, so typedef and feature chains are linear; identity chains are
+  quadratic, the size of the derived lists they expose.
+- Error text depended on map iteration: `Build` with several unknown enabled
+  features (now the first module in load order, then the first feature by
+  name), `datatree.Parse` with several unknown JSON members (now the first in
+  document order), and `compat` `FindModuleByNamespace` for a namespace shared
+  by several modules (now the first two in load order).
+- `(*Context)(nil).Lint()` panicked; a nil or closed context has no findings.
 - An augment whose target another augment creates failed with `target not
   found` unless the creating augment happened to be applied first (within a
   module, or depending on `LoadModule` order). Augment targets now resolve to

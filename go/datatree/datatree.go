@@ -141,12 +141,13 @@ func parseTree(mods []cambium.Module, f Format, data []byte) (*Tree, error) {
 
 // parseChildren builds nodes for the schema children present in raw, in schema
 // declaration order. Unknown members (not matching any schema child) are an
-// error, so no data is silently dropped.
-func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMessage, parentModule string) ([]*node, error) {
-	consumed := make(map[string]bool, len(raw))
+// error, so no data is silently dropped; the first one in document order is
+// reported.
+func parseChildren(children []cambium.SchemaNodeRef, raw jsonObject, parentModule string) ([]*node, error) {
+	consumed := make(map[string]bool, len(raw.members))
 	var out []*node
 	for _, sn := range children {
-		member, val, ok := lookupMember(sn, raw, parentModule)
+		member, val, ok := lookupMember(sn, raw.members, parentModule)
 		if !ok {
 			continue
 		}
@@ -157,7 +158,7 @@ func parseChildren(children []cambium.SchemaNodeRef, raw map[string]json.RawMess
 		}
 		out = append(out, n)
 	}
-	for key := range raw {
+	for _, key := range raw.names {
 		if !consumed[key] {
 			return nil, fmt.Errorf("datatree: unknown member %q (no matching schema node)", key)
 		}
@@ -427,48 +428,56 @@ func splitArray(raw json.RawMessage) ([]json.RawMessage, error) {
 	return elems, nil
 }
 
-func decodeJSONObject(context string, raw []byte) (map[string]json.RawMessage, error) {
+// jsonObject is a decoded JSON object. members is a lookup cache; names keeps
+// the member names in document order for anything that reaches an error.
+type jsonObject struct {
+	members map[string]json.RawMessage
+	names   []string
+}
+
+func decodeJSONObject(context string, raw []byte) (jsonObject, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	tok, err := dec.Token()
 	if err != nil {
-		return nil, fmt.Errorf("datatree: %s: %w", context, err)
+		return jsonObject{}, fmt.Errorf("datatree: %s: %w", context, err)
 	}
 	delim, ok := tok.(json.Delim)
 	if !ok || delim != '{' {
-		return nil, fmt.Errorf("datatree: %s: expected JSON object", context)
+		return jsonObject{}, fmt.Errorf("datatree: %s: expected JSON object", context)
 	}
-	obj := make(map[string]json.RawMessage)
+	obj := jsonObject{members: make(map[string]json.RawMessage)}
 	for dec.More() {
 		tok, err := dec.Token()
 		if err != nil {
-			return nil, fmt.Errorf("datatree: %s: read member name: %w", context, err)
+			return jsonObject{}, fmt.Errorf("datatree: %s: read member name: %w", context, err)
 		}
 		key, ok := tok.(string)
 		if !ok {
-			return nil, fmt.Errorf("datatree: %s: expected JSON object member name", context)
+			return jsonObject{}, fmt.Errorf("datatree: %s: expected JSON object member name", context)
 		}
-		if _, exists := obj[key]; exists {
-			return nil, fmt.Errorf("datatree: %s: duplicate member %q", context, key)
+		if _, exists := obj.members[key]; exists {
+			return jsonObject{}, fmt.Errorf("datatree: %s: duplicate member %q", context, key)
 		}
 		var val json.RawMessage
 		if err := dec.Decode(&val); err != nil {
-			return nil, fmt.Errorf("datatree: %s member %q: %w", context, key, err)
+			return jsonObject{}, fmt.Errorf("datatree: %s member %q: %w", context, key, err)
 		}
-		obj[key] = val
+		obj.members[key] = val
+		obj.names = append(obj.names, key)
 	}
 	tok, err = dec.Token()
 	if err != nil {
-		return nil, fmt.Errorf("datatree: %s: close object: %w", context, err)
+		return jsonObject{}, fmt.Errorf("datatree: %s: close object: %w", context, err)
 	}
 	delim, ok = tok.(json.Delim)
 	if !ok || delim != '}' {
-		return nil, fmt.Errorf("datatree: %s: expected end of JSON object", context)
+		return jsonObject{}, fmt.Errorf("datatree: %s: expected end of JSON object", context)
 	}
 	if tok, err = dec.Token(); err != io.EOF {
 		if err != nil {
-			return nil, fmt.Errorf("datatree: %s: trailing data: %w", context, err)
+			return jsonObject{}, fmt.Errorf("datatree: %s: trailing data: %w", context, err)
 		}
-		return nil, fmt.Errorf("datatree: %s: unexpected trailing JSON token %v", context, tok)
+		return jsonObject{}, fmt.Errorf("datatree: %s: unexpected trailing JSON token %v", context, tok)
 	}
 	return obj, nil
 }

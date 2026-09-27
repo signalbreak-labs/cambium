@@ -28,6 +28,12 @@ Caller responsibilities:
   `SearchPath` calls, root modules (with revisions when it matters), features
   per module, `SetDeviationPolicy`, and `SetValidationMode`. Defaults are
   strict validation, no features, and every loaded deviation applied.
+- Bound the work of untrusted YANG with `SetMaxSchemaNodes`. Nested `uses`
+  can expand exponentially; `Build` then fails with a `resource_limit`
+  diagnostic instead of exhausting memory. The default,
+  `DefaultMaxSchemaNodes` (8,388,608 node instantiations), admits the largest
+  vendor schemas (the full Junos configuration schema needs about 3.3 million)
+  but still allows several GB of memory.
 - Treat a `Build` error as no schema. `DiagnosticFromError(err)` gives the
   kind, rule code, and source location.
 - Treat a non-empty `LoadReport().OmittedContent()` as an incomplete schema.

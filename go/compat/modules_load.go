@@ -272,19 +272,50 @@ func GetModule(name string, sources ...string) (*Entry, []error) {
 
 func (ms *Modules) findRecordedModuleByNamespace(ns string) (*Module, error) {
 	var found *Module
-	for _, record := range ms.Modules {
-		if record == nil || record.Namespace == nil || record.Namespace.Name != ns {
+	for _, record := range ms.recordedModulesInLoadOrder() {
+		if record.Namespace == nil || record.Namespace.Name != ns {
 			continue
 		}
-		switch found {
-		case nil:
-			found = record
-		case record:
-		default:
+		if found != nil {
 			return nil, fmt.Errorf("namespace %s matches two or more modules (%s, %s)", ns, found.Name, record.Name)
 		}
+		found = record
 	}
 	return found, nil
+}
+
+// recordedModulesInLoadOrder returns the distinct records of ms.Modules in the
+// order they were first recorded, then any record placed in the map directly,
+// by key, so callers never depend on map iteration order.
+func (ms *Modules) recordedModulesInLoadOrder() []*Module {
+	present := make(map[*Module]bool, len(ms.Modules))
+	for _, record := range ms.Modules {
+		if record != nil {
+			present[record] = true
+		}
+	}
+	out := make([]*Module, 0, len(present))
+	for _, record := range ms.recordOrder {
+		if present[record] {
+			out = append(out, record)
+			delete(present, record)
+		}
+	}
+	if len(present) == 0 {
+		return out
+	}
+	keys := make([]string, 0, len(ms.Modules))
+	for key := range ms.Modules {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if record := ms.Modules[key]; present[record] {
+			out = append(out, record)
+			delete(present, record)
+		}
+	}
+	return out
 }
 
 func importFromStatement(stmt *Statement) *Import {
