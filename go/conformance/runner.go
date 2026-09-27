@@ -332,11 +332,9 @@ func dataTreeCaseOutputs(conformanceDir string, c Case) ([]caseOutput, error) {
 	if err != nil {
 		return nil, err
 	}
-	mod, err := dataTreeModuleForInput(ctx, c.InputFormat, input)
-	if err != nil {
-		return nil, err
-	}
-	tree, err := datatree.Parse(mod, inFmt, input)
+	// Bind every implemented module, as the backend parses against its whole
+	// context, so top-level nodes from several modules are accepted.
+	tree, err := datatree.ParseModules(ctx.Modules(), inFmt, input)
 	if err != nil {
 		return nil, err
 	}
@@ -378,6 +376,7 @@ func loadModulesInDirPure(ctx *core.Context, dir string) error {
 		names = append(names, e.Name())
 	}
 	sort.Strings(names)
+	stems := make([]string, 0, len(names))
 	for _, n := range names {
 		stem := strings.TrimSuffix(n, ".yang")
 		if at := strings.IndexByte(stem, '@'); at >= 0 {
@@ -386,52 +385,16 @@ func loadModulesInDirPure(ctx *core.Context, dir string) error {
 		if err := ctx.LoadModule(stem); err != nil {
 			return err
 		}
+		stems = append(stems, stem)
+	}
+	// Loading defers the schema build: surface its error here, not as a
+	// module missing from ctx.Modules().
+	for _, stem := range stems {
+		if _, err := ctx.Schema(stem); err != nil {
+			return err
+		}
 	}
 	return nil
-}
-
-func dataTreeModuleForInput(ctx *core.Context, format string, input []byte) (core.Module, error) {
-	switch strings.ToLower(format) {
-	case "xml":
-		dec := xml.NewDecoder(bytes.NewReader(input))
-		for {
-			tok, err := dec.Token()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				return core.Module{}, err
-			}
-			if start, ok := tok.(xml.StartElement); ok {
-				if mod, ok := ctx.FindModuleByNamespace(start.Name.Space); ok {
-					return mod, nil
-				}
-				return core.Module{}, fmt.Errorf("no module loaded for namespace %q", start.Name.Space)
-			}
-		}
-	case "json", "json-ietf", "json_ietf":
-		var raw map[string]json.RawMessage
-		if err := json.Unmarshal(input, &raw); err != nil {
-			return core.Module{}, err
-		}
-		names := make([]string, 0, len(raw))
-		for name := range raw {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			if i := strings.IndexByte(name, ':'); i > 0 {
-				if mod, err := ctx.Schema(name[:i]); err == nil {
-					return mod, nil
-				}
-			}
-		}
-	}
-	mods := ctx.Modules()
-	if len(mods) == 1 {
-		return mods[0], nil
-	}
-	return core.Module{}, fmt.Errorf("cannot infer datatree module from %s input", format)
 }
 
 func parseDataTreeFormat(s string) (datatree.Format, error) {

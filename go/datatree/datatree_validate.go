@@ -31,7 +31,9 @@ func (e *ValidationError) Error() string {
 // Constraints follow the data tree RFC 7950 describes: only the case of a
 // choice whose data exists is validated, and a non-presence container exists
 // whenever its parent does, so the constraints below an absent one still apply
-// (libyang instantiates it). Values are compared in canonical form.
+// (libyang instantiates it). Values are compared in canonical form. The top
+// level of every module the tree is bound to is checked, with or without data
+// in the document (see ParseModules).
 //
 // must/when expressions and leafref paths that use constructs outside the
 // supported XPath subset (unimplemented functions, explicit axes, unresolved
@@ -42,7 +44,7 @@ func (t *Tree) Validate() error {
 	var violations []string
 	root := t.xroot()
 	v := validator{root: root, out: &violations}
-	v.level(root, topLevelSchema(t.module), [][]*node{t.roots}, "")
+	v.level(root, topLevelSchema(t.modules...), [][]*node{t.roots}, "")
 	t.checkMustWhen(&violations)
 	if len(violations) == 0 {
 		return nil
@@ -170,7 +172,7 @@ func displayPath(path string) string {
 
 func (t *Tree) xroot() *xnode {
 	root := &xnode{}
-	root.kids = buildXNodes(flattenTopLevel(t.module), t.roots, root)
+	root.kids = buildXNodes(flattenTopLevel(t.modules...), t.roots, root)
 	return root
 }
 

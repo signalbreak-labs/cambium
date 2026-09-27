@@ -67,9 +67,9 @@ declaration order*, not a sorted order:
 `manifest.toml` is the single index of cases. Each `[[case]]` entry names the
 case, optionally declares its tier, lists the ordering invariants it exercises,
 points at its fixture inputs, and lists the expected outputs to compare against.
-As of this writing the manifest holds **208 cases**: **13** carry
-`tier = "schema-ir"` and the remaining **195** are backend/data cases (the
-default tier — they declare an `input`, and 193 of them are additionally marked
+As of this writing the manifest holds **209 cases**: **13** carry
+`tier = "schema-ir"` and the remaining **196** are backend/data cases (the
+default tier — they declare an `input`, and 194 of them are additionally marked
 `oracle = true`). These counts come from the live manifest; re-derive them with
 `grep -c '^\[\[case\]\]'`, `grep -c '^tier = "schema-ir"'`, and
 `grep -c '^input = '` rather than trusting a prose number that can drift.
@@ -191,7 +191,10 @@ opt-in differential flag for the experimental datatree lane:
   `datatree = true`. They still belong to the backend/data tier, but
   `cmd/cambium datatree-diff` also parses and serializes them through the
   experimental pure-Go `datatree` package, then compares normalized XML/JSON
-  output against the libyang backend. This is an explicit supported-subset gate,
+  output against the libyang backend. Like the backend, the datatree side binds
+  every implemented module of the case's module directory
+  (`datatree.ParseModules(ctx.Modules(), ...)`), so inputs whose top-level nodes
+  span several modules are compared too. This is an explicit supported-subset gate,
   not a claim that datatree is a complete conformance tier. The normalization is
   compact-only (`formatBytesForDifferential` in `go/conformance/runner.go`):
   trailing ASCII whitespace is stripped, JSON is passed through `json.Compact`,

@@ -100,7 +100,8 @@ instance existence. This tier needs no C build; `go get` is enough.
 Package `datatree`. A generic data tree that parses a document against a Cambium
 schema into an ordered tree and serializes it back in effective schema declaration
 order, with **no libyang and no cgo**. `datatree.Parse(module, format, data)`
-accepts JSON_IETF or XML; `(*Tree).Serialize`, `Validate`, and `ApplyDefaults`
+accepts JSON_IETF or XML (`ParseModules` for a document whose top-level nodes
+span several modules); `(*Tree).Serialize`, `Validate`, and `ApplyDefaults`
 round-trip and check it. For the constructs it supports it preserves I1/I2/I3/I5,
 and it validates mandatory, cardinality, uniqueness, leafref instance existence,
 and `must`/`when` over a growing XPath subset.
