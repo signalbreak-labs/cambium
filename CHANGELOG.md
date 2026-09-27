@@ -27,9 +27,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- `RangeBound.MinNumber`/`MaxNumber` (`Number`) and, for length restrictions,
+  `RangeBound.MinLength`/`MaxLength` (`uint64`), with `min`/`max` resolved
+  against the type being restricted; `Min`/`Max` stay lexical.
+- SchemaIR JSON (v1 and v2) `type.range` / `type.length` arrays carrying the
+  resolved bounds as canonical decimal strings (additive under ADR 0002).
 
 ### Changed
 
+- `Build` rejects leafref cycles, including cycles through leafref union
+  members, with `CAMBIUM_E0001`, a `semantic_schema_error` diagnostic, and a
+  message listing the path chain; the first cycle in load order and schema
+  order is reported. Vendor-compatible mode reports each cycle as a
+  `LoadReport` warning instead. libyang v5.4.9 also rejects these ("circular
+  chain of leafrefs").
 - An unresolved augment or deviation target fails in every validation mode
   unless the enabled feature set excluded the target (its own `if-feature`, an
   enclosing `uses`, or a disabled declaring `augment`, matched by module);
@@ -50,6 +61,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- A derived `range` or `length` using `min`/`max` over a restricted typedef
+  failed as "not within the base restriction"; the keywords now stand for the
+  restricted type's bounds (RFC 7950 sections 9.2.4 and 9.4.4).
+- decimal64 range bounds outside the value space for the type's
+  `fraction-digits` were accepted.
 
 ## [go/v0.4.0] - 2026-07-02
 

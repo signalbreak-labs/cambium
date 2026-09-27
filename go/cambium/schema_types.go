@@ -671,7 +671,7 @@ func dataChildNode(parent *schemaNodeData, name string, module *moduleData) *sch
 func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Statement, base BaseType) (ResolvedType, error) {
 	switch v := r.(type) {
 	case ResolvedInt:
-		rs, err := restrictionRanges(st, "range", base, 0)
+		rs, err := derivedRestrictionRanges(st, "range", base, 0, v.Range)
 		if err != nil {
 			return nil, err
 		}
@@ -683,7 +683,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedDecimal64:
-		rs, err := restrictionRanges(st, "range", base, v.fractionDigits.Value())
+		rs, err := derivedRestrictionRanges(st, "range", base, v.fractionDigits.Value(), v.Range)
 		if err != nil {
 			return nil, err
 		}
@@ -695,7 +695,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedString:
-		rs, err := restrictionRanges(st, "length", base, 0)
+		rs, err := derivedRestrictionRanges(st, "length", base, 0, v.Length)
 		if err != nil {
 			return nil, err
 		}
@@ -714,7 +714,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedBinary:
-		rs, err := restrictionRanges(st, "length", base, 0)
+		rs, err := derivedRestrictionRanges(st, "length", base, 0, v.Length)
 		if err != nil {
 			return nil, err
 		}
