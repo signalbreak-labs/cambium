@@ -7,8 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- 156 more conformance cases opt into the `datatree` differential lane
-  (`datatree = true`), for 161 of the 195 backend/data cases.
+- 156 more existing conformance cases opt into the `datatree` differential
+  lane (`datatree = true`).
 - `cambium.schema-ir.v2` bounded node table (`Context.SchemaIRTable`,
   `SchemaIRNodeID`, `SchemaIRNoParent`), `Context.SchemaIRStats`, and
   `Context.SchemaIRWithLimit`, which fails with a `resource_limit` diagnostic
