@@ -102,6 +102,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   values over 256 characters are now rejected as invalid before parsing.
 - `datatree` XML output escaped quotes in text and JSON_IETF output from XML
   input HTML-escaped `<`, `>`, and `&`, unlike libyang.
+- `datatree` validated choice data as if every case were present: a mandatory
+  leaf or `min-elements` list in an unselected case was reported, data from
+  two cases of one choice and a missing mandatory choice passed, and
+  `ApplyDefaults` filled defaults into every case. Only the selected case (or,
+  with no case data, the default case) now applies (RFC 7950 §7.9).
+- `datatree` never checked `unique` statements; they are now enforced,
+  including leaves with a default value in use (RFC 7950 §7.8.3).
+- `datatree` did not report a mandatory leaf, choice, or `min-elements` list
+  under an absent non-presence container.
+- `datatree` never checked leafref instances of leaf-list values, and compared
+  leafref values by spelling, so an identityref leafref from another module
+  (`"m:one"` against `"one"`) was falsely rejected.
+- `datatree` rejected duplicate values in `config false` leaf-lists, which
+  RFC 7950 §7.7.1 allows in state data.
+- `datatree` accepted decimal64 values outside the range fraction-digits
+  implies (for example `100.0` with `fraction-digits 18`).
+- `datatree` `ApplyDefaults` ignored leaf-list defaults.
 - Generated `UserOrderedVec` mutators edited a backing array shared with
   struct copies, so `Remove`, `InsertBefore`, `MoveBefore` or `InsertLast` on
   a copy could reorder or overwrite the original (I1). Every mutator now

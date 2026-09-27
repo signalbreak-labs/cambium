@@ -39,8 +39,9 @@ lands rather than adding another dated file.
 
 - **Pure-Go data tree** (`datatree`) — a cgo-free generic data tree and the current
   development frontier. What works today: JSON_IETF and XML parse/serialize for
-  containers, leaves, leaf-lists, and lists; structural and type validation;
-  leaf-list/list uniqueness and list-key checks; leafref instance existence;
+  containers, leaves, leaf-lists, and lists; structural and type validation
+  with choice/case semantics; leaf-list, list-key, and `unique` uniqueness over
+  canonical values; leafref instance existence;
   `must`/`when` over a growing XPath subset; opaque `anydata`/`anyxml` in
   JSON_IETF; and apply-defaults. It preserves ordering invariants I1/I2/I3/I5
   over what it supports, including libyang's canonical order for
@@ -58,7 +59,8 @@ lands rather than adding another dated file.
     for opaque content, and no RPC/action/notification (operation) data. The XPath
     engine now covers the YANG functions `re-match`, `bit-is-set`, `derived-from`,
     and `derived-from-or-self`; it still **skips** `deref()` rather than
-    mis-evaluating it.
+    mis-evaluating it. `must`/`when` do not yet see default values or absent
+    non-presence containers, which libyang instantiates before validating.
 
   The goal is a complete, stable pure-Go data tier so that the full
   parse → validate → serialize path can run with the same portability the schema

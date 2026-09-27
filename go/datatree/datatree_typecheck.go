@@ -34,7 +34,8 @@ var intImplicitBounds = map[cambium.IntKind][2]string{
 // validateLeafValue checks one leaf value (the raw JSON token) against its
 // resolved YANG type and appends any violations. It covers string length and
 // patterns, integer ranges (including the base-type width), decimal64
-// fraction-digits and ranges, boolean and empty shapes, enumeration and bits
+// fraction-digits and ranges (including the int64 range the fraction-digits
+// scale implies), boolean and empty shapes, enumeration and bits
 // membership, binary base64 + length, unions (first matching member wins),
 // leafrefs (delegated to the referenced type), and identityref derivation.
 // Leafref instance existence and instance-identifier resolution need data/path
@@ -381,11 +382,13 @@ func checkDecimal(s string, r cambium.ResolvedDecimal64, path string, out *[]str
 		*out = append(*out, fmt.Sprintf("%s: %q is not a valid decimal64", path, s))
 		return
 	}
-	if dot := strings.IndexByte(s, '.'); dot >= 0 {
-		frac := len(s) - dot - 1
-		if maxFrac := int(r.FractionDigits().Value()); frac > maxFrac {
-			*out = append(*out, fmt.Sprintf("%s: %s has %d fraction digits, more than fraction-digits %d", path, s, frac, maxFrac))
-		}
+	maxFrac := int(r.FractionDigits().Value())
+	if dot := strings.IndexByte(s, '.'); dot >= 0 && len(s)-dot-1 > maxFrac {
+		*out = append(*out, fmt.Sprintf("%s: %s has %d fraction digits, more than fraction-digits %d", path, s, len(s)-dot-1, maxFrac))
+	} else if _, ok := parseDecimal64(s, maxFrac); !ok {
+		// RFC 7950 §9.3.4: the value is an int64 scaled by 10^fraction-digits.
+		*out = append(*out, fmt.Sprintf("%s: %s is outside the decimal64 range for fraction-digits %d", path, s, maxFrac))
+		return
 	}
 	if len(r.Range) > 0 && !ratInRanges(val, r.Range) {
 		*out = append(*out, fmt.Sprintf("%s: %s is outside the permitted range", path, s))

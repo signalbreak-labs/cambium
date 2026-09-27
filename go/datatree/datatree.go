@@ -21,8 +21,10 @@
 // forms, as libyang stores them), with type-aware validation and XML text
 // conversion layered on that representation; identityref and
 // instance-identifier prefixes are converted between XML namespace prefixes
-// and JSON_IETF module names at the format boundary. choice nodes are flattened
-// (RFC 7950 section 7.9). anydata/anyxml round-trip as opaque content in JSON_IETF:
+// and JSON_IETF module names at the format boundary. choice and case nodes
+// have no data node of their own, so a case's data sits flattened among its
+// parent's children (RFC 7950 section 7.9); Validate and ApplyDefaults derive
+// the selected case from that data. anydata/anyxml round-trip as opaque content in JSON_IETF:
 // the inner value is preserved as compact JSON and never schema-validated; opaque XML
 // content and operations are not yet handled.
 package datatree
