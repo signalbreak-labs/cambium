@@ -1,0 +1,12 @@
+module reject-range-violation {
+  yang-version 1.1;
+  namespace "urn:reject-range-violation";
+  prefix rrv;
+  revision 2026-09-27;
+
+  leaf mtu {
+    type uint16 {
+      range "68..9216";
+    }
+  }
+}

@@ -1,0 +1,12 @@
+module reject-decimal64-implicit-range {
+  yang-version 1.1;
+  namespace "urn:reject-decimal64-implicit-range";
+  prefix rdir;
+  revision 2026-09-27;
+
+  leaf ratio {
+    type decimal64 {
+      fraction-digits 18;
+    }
+  }
+}

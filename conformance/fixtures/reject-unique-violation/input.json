@@ -1,0 +1,14 @@
+{
+  "reject-unique-violation:server": [
+    {
+      "name": "primary",
+      "address": "192.0.2.1",
+      "port": 53
+    },
+    {
+      "name": "backup",
+      "address": "192.0.2.1",
+      "port": 53
+    }
+  ]
+}

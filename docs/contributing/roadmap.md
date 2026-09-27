@@ -71,7 +71,11 @@ lands rather than adding another dated file.
   **both** engines in the differential lane (`go run ./cmd/cambium datatree-diff`),
   which byte-compares output after compact-only normalization — element and member
   order is never normalized away. Growing that flagged subset *is* the path to
-  stable.
+  stable. Today 187 of the 221 backend/data cases are flagged, including all 24
+  must-reject cases; the rest are the scope gaps above, with-defaults output
+  modes, RFC 7952 metadata, multi-module documents, gNMI output, one JSON
+  escape-spelling difference, and `ietf-interfaces`, which waits on two
+  schema-build fixes.
 
 ## Not built yet
 
@@ -82,6 +86,12 @@ lands rather than adding another dated file.
   ADR 0002 policy. Related schema gaps: `Build` accepts leafref cycles (the
   chain helper reports them), length bounds stay lexical, and `must`/`when`
   carry no source location.
+- **Codegen value gaps.** Mandatory leaves outside a `choice` are value fields,
+  so `Validate` cannot detect one left unset in Go (fixing it means pointer
+  fields, a breaking change); an identityref with several bases accepts
+  identities derived from any base rather than all; and anydata/anyxml content
+  is not converted between XML and JSON. See the
+  [codegen guide](../guides/codegen.md).
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
   none exists today. The enabling step has landed: the corpus is published as a
@@ -94,7 +104,9 @@ lands rather than adding another dated file.
 - This page — the living narrative of stable / experimental / unbuilt.
 - The [conformance corpus](conformance.md) — the machine-checkable floor; a
   capability is not "done" without passing fixtures. For `datatree`, the
-  differential lane (`datatree = true` cases) is the graduation gate.
+  differential lane (`datatree = true` cases) is the graduation gate; it
+  compares validation verdicts, including must-reject documents
+  (`expect = "reject"`), as well as output.
 - [Architecture decision records](../adr/) — the one-way-door decisions and their
   reversal costs.
 - Git history — past point-in-time audits and release-readiness snapshots remain

@@ -187,10 +187,12 @@ def write_goldens(name: str, wd_mode: Optional[str] = None,
                 if fmt in {"xml", "json", "json_ietf"}}
     if "input" not in case or not expected:
         # Compile-only tiers (schema-ir) have no data input; helper-only cases
-        # (gnmi-json-ietf) have no yanglint-comparable format. Neither golden
-        # kind is produced by the oracle, so there is nothing to regenerate.
+        # (gnmi-json-ietf) have no yanglint-comparable format; must-reject
+        # cases (expect = "reject") have no goldens at all. None of these is
+        # produced by the oracle, so there is nothing to regenerate.
         tier = case.get("tier", "backend-data")
-        print(f"  skipping {name}: no yanglint-regenerable goldens (tier={tier})")
+        expect = case.get("expect", "accept")
+        print(f"  skipping {name}: no yanglint-regenerable goldens (tier={tier}, expect={expect})")
         return
     if wd_mode is None:
         wd_mode = case.get("serialize-defaults")
