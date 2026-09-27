@@ -3,7 +3,11 @@
 
 package datatree
 
-import "github.com/signalbreak-labs/cambium/go/cambium"
+import (
+	"encoding/json"
+
+	"github.com/signalbreak-labs/cambium/go/cambium"
+)
 
 // ApplyDefaults fills in absent leaves that carry a schema default with that
 // default value, in effective schema declaration order (RFC 6243 report-all,
@@ -67,6 +71,34 @@ func defaultLeafNode(sn cambium.SchemaNodeRef, def cambium.DefaultValue) *node {
 		module:    sn.Module().Name(),
 		namespace: sn.Namespace(),
 		kind:      kindLeaf,
-		value:     jsonTokenFromText(ti, def.Value(), sn.Module(), def.SourceModule()),
+		value:     defaultValueToken(ti, def.Value(), sn.Module(), def.SourceModule()),
 	}
+}
+
+// defaultValueToken converts a schema default value to its instance-data JSON
+// token. It differs from jsonTokenFromText, the XML data-value conversion, only
+// in integer notation: a default written in a module may use RFC 7950 section
+// 9.2.1 hexadecimal or octal notation, which instance data may not, and is
+// instantiated as its canonical decimal value.
+func defaultValueToken(ti cambium.TypeInfo, text string, leafModule, sourceModule cambium.Module) json.RawMessage {
+	switch r := ti.Resolved().(type) {
+	case cambium.ResolvedInt:
+		if canonical, ok := cambium.CanonicalIntegerDefault(text, r.Kind); ok {
+			return jsonTokenFromIntegerText(canonical, r.Kind)
+		}
+	case cambium.ResolvedUnion:
+		for _, member := range r.Members() {
+			token := defaultValueToken(member, text, leafModule, sourceModule)
+			var trial []string
+			validateLeafValue(member, token, "", leafModule.Name(), &trial)
+			if len(trial) == 0 {
+				return token
+			}
+		}
+	case cambium.ResolvedLeafRef:
+		if rt, ok := r.Realtype(); ok && rt != nil {
+			return defaultValueToken(*rt, text, leafModule, sourceModule)
+		}
+	}
+	return jsonTokenFromText(ti, text, leafModule, sourceModule)
 }

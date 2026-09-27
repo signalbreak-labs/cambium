@@ -3696,6 +3696,63 @@ func TestGeneratedScalarDefaultsUseCanonicalJSONIETFLiterals(t *testing.T) {
 	runGeneratedGoTest(t, src, testBody)
 }
 
+// RFC 7950 section 9.2.1 hexadecimal and octal integer defaults are emitted
+// as their canonical decimal JSON_IETF values (as libyang instantiates them).
+func TestGeneratedGoHexOctalIntegerDefaultsUseCanonicalDecimal(t *testing.T) {
+	const source = `module hex-octal-default-codegen {
+    yang-version 1.1;
+    namespace "urn:hex-octal-default-codegen";
+    prefix hodc;
+
+    leaf limit {
+        type int32;
+        default "0x7FFFFFFF";
+    }
+
+    leaf mode {
+        type uint8;
+        default "052";
+    }
+
+    leaf-list masks {
+        type uint16;
+        default "0x10";
+        default "021";
+    }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "hex-octal-default-codegen")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	testBody := `
+func TestGeneratedHexOctalIntegerDefaultsUseCanonicalDecimal(t *testing.T) {
+	if got, want := (&HexOctalDefaultCodegen{}).ToJSONIETFWithDefaults(WithDefaultsAll), "{\n  \"hex-octal-default-codegen:limit\": 2147483647,\n  \"hex-octal-default-codegen:mode\": 42,\n  \"hex-octal-default-codegen:masks\": [\n    16,\n    17\n  ]\n}\n"; got != want {
+		t.Fatalf("all JSON mismatch:\n got: %q\nwant: %q", got, want)
+	}
+	limit := int32(2147483647)
+	mode := uint8(42)
+	if got, want := (&HexOctalDefaultCodegen{Limit: &limit, Mode: &mode}).ToJSONIETFWithDefaults(WithDefaultsTrim), "{\n}\n"; got != want {
+		t.Fatalf("trim JSON mismatch:\n got: %q\nwant: %q", got, want)
+	}
+}
+`
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
 func TestGeneratedGoScalarDefaultsCoverBinaryEnumIdentityref(t *testing.T) {
 	const source = `module scalar-default-more-codegen {
     namespace "urn:scalar-default-more-codegen";

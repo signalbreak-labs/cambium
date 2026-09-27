@@ -5646,6 +5646,97 @@ func TestInvalidDefaultStatementsReturnContextRuleCode(t *testing.T) {
 			message: `default "256" is not valid for uint8 leaf "value"`,
 		},
 		{
+			name: "hexadecimal default out of range",
+			source: `module cambium-hex-default-range {
+    namespace "urn:cambium:hex-default-range";
+    prefix chdr;
+
+    leaf value {
+        type int8;
+        default "0x80";
+    }
+}`,
+			message: `default "0x80" is not valid for int8 leaf "value"`,
+		},
+		{
+			name: "negative hexadecimal default out of range",
+			source: `module cambium-neg-hex-default-range {
+    namespace "urn:cambium:neg-hex-default-range";
+    prefix cnhdr;
+
+    leaf value {
+        type int8;
+        default "-0x81";
+    }
+}`,
+			message: `default "-0x81" is not valid for int8 leaf "value"`,
+		},
+		{
+			name: "octal default checked as octal against range",
+			source: `module cambium-octal-default-range {
+    namespace "urn:cambium:octal-default-range";
+    prefix codr;
+
+    leaf value {
+        type uint8 { range "50..60"; }
+        default "052";
+    }
+}`,
+			message: `default "052" is not valid for uint8 leaf "value"`,
+		},
+		{
+			name: "leading zero default with non-octal digit",
+			source: `module cambium-bad-octal-default {
+    namespace "urn:cambium:bad-octal-default";
+    prefix cbod;
+
+    leaf value {
+        type uint8;
+        default "08";
+    }
+}`,
+			message: `default "08" is not valid for uint8 leaf "value"`,
+		},
+		{
+			name: "hexadecimal prefix without digits",
+			source: `module cambium-empty-hex-default {
+    namespace "urn:cambium:empty-hex-default";
+    prefix cehd;
+
+    leaf value {
+        type int32;
+        default "0x";
+    }
+}`,
+			message: `default "0x" is not valid for int32 leaf "value"`,
+		},
+		{
+			name: "non-YANG binary integer notation",
+			source: `module cambium-binary-int-default {
+    namespace "urn:cambium:binary-int-default";
+    prefix cbid;
+
+    leaf value {
+        type int32;
+        default "0b101";
+    }
+}`,
+			message: `default "0b101" is not valid for int32 leaf "value"`,
+		},
+		{
+			name: "non-YANG digit separator",
+			source: `module cambium-underscore-int-default {
+    namespace "urn:cambium:underscore-int-default";
+    prefix cuid;
+
+    leaf value {
+        type uint32;
+        default "0x_ff";
+    }
+}`,
+			message: `default "0x_ff" is not valid for uint32 leaf "value"`,
+		},
+		{
 			name: "invalid decimal64 default",
 			source: `module cambium-invalid-decimal64-default {
     namespace "urn:cambium:invalid-decimal64-default";
@@ -5947,6 +6038,22 @@ func TestInvalidDefaultStatementsReturnContextRuleCode(t *testing.T) {
 			message: `leaf-list "values" has duplicate default "a"`,
 		},
 		{
+			// RFC 7950 section 9.2.1: 16, 0x10 and 020 are one value.
+			name: "leaf-list duplicate integer defaults in other notation",
+			source: `module cambium-leaf-list-duplicate-int-defaults {
+    yang-version 1.1;
+    namespace "urn:cambium:leaf-list-duplicate-int-defaults";
+    prefix clldid;
+
+    leaf-list values {
+        type uint16;
+        default "16";
+        default "0x10";
+    }
+}`,
+			message: `leaf-list "values" has duplicate default "0x10"`,
+		},
+		{
 			name: "leaf-list default requires yang 1.1",
 			source: `module cambium-leaf-list-default-yang10 {
     namespace "urn:cambium:leaf-list-default-yang10";
@@ -6231,6 +6338,112 @@ func TestUnsignedIntegerDefaultsAcceptLeadingPlus(t *testing.T) {
 	values := schemaNodeAt(t, mod, "/cudlp:values")
 	if got := values.DefaultValues(); len(got) != 1 || got[0] != "+2" {
 		t.Fatalf("values.DefaultValues() = %v, want [+2]", got)
+	}
+}
+
+// RFC 7950 / RFC 6020 section 9.2.1: an integer default value in a module may
+// be written in hexadecimal ("0x" prefix) or octal (leading "0") notation. The
+// value is checked against the type's range as the number it denotes, and the
+// schema reports the default lexically as written (as libyang's compiled
+// lysc_value.str does).
+func TestCanonicalIntegerDefault(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		kind  cambium.IntKind
+		want  string
+		ok    bool
+	}{
+		{"42", cambium.IntKindU8, "42", true},
+		{"+7", cambium.IntKindU8, "7", true},
+		{"052", cambium.IntKindU8, "42", true},
+		{"0X1f", cambium.IntKindU8, "31", true},
+		{"-0", cambium.IntKindU8, "0", true},
+		{"-0x80", cambium.IntKindI8, "-128", true},
+		{"-0x8000000000000000", cambium.IntKindI64, "-9223372036854775808", true},
+		{"0xffffffffffffffff", cambium.IntKindU64, "18446744073709551615", true},
+		{"0x80", cambium.IntKindI8, "", false},
+		{"0x100", cambium.IntKindU8, "", false},
+		{"-1", cambium.IntKindU8, "", false},
+		{"08", cambium.IntKindU8, "", false},
+		{"0x", cambium.IntKindU8, "", false},
+		{"", cambium.IntKindU8, "", false},
+		{"1_0", cambium.IntKindU8, "", false},
+	} {
+		got, ok := cambium.CanonicalIntegerDefault(tc.value, tc.kind)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("CanonicalIntegerDefault(%q) = (%q,%v), want (%q,%v)", tc.value, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestIntegerDefaultsAcceptHexadecimalAndOctalNotation(t *testing.T) {
+	const source = `module cambium-int-default-hex-octal {
+    namespace "urn:cambium:int-default-hex-octal";
+    prefix cidho;
+    yang-version 1.1;
+
+    typedef mask {
+        type uint16;
+        default "0x1F";
+    }
+
+    leaf hex-max { type int32; default "0x7FFFFFFF"; }
+    leaf hex-u32 { type uint32; default "0xffffffff"; }
+    leaf neg-hex { type int8; default "-0x80"; }
+    leaf plus-hex { type int64; default "+0x7fffffffffffffff"; }
+    leaf octal {
+        type uint8 { range "40..45"; }
+        default "052";
+    }
+    leaf neg-octal { type int16; default "-0777"; }
+    leaf zero { type uint8; default "0"; }
+    leaf typed { type mask; }
+    leaf-list hexes {
+        type uint16;
+        default "0x10";
+        default "021";
+    }
+    leaf mixed {
+        type union { type int8; type string; }
+        default "0x10";
+    }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+
+	mod, err := ctx.Schema("cambium-int-default-hex-octal")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	for _, tc := range []struct{ path, want string }{
+		{"/cidho:hex-max", "0x7FFFFFFF"},
+		{"/cidho:hex-u32", "0xffffffff"},
+		{"/cidho:neg-hex", "-0x80"},
+		{"/cidho:plus-hex", "+0x7fffffffffffffff"},
+		{"/cidho:octal", "052"},
+		{"/cidho:neg-octal", "-0777"},
+		{"/cidho:zero", "0"},
+		{"/cidho:mixed", "0x10"},
+	} {
+		if got, ok := schemaNodeAt(t, mod, tc.path).DefaultValue(); !ok || got != tc.want {
+			t.Errorf("%s DefaultValue() = (%q,%v), want %q,true", tc.path, got, ok, tc.want)
+		}
+	}
+	if got, ok := schemaNodeAt(t, mod, "/cidho:typed").TypeDefaultValue(); !ok || got != "0x1F" {
+		t.Errorf("typed TypeDefaultValue() = (%q,%v), want 0x1F,true", got, ok)
+	}
+	if got := strings.Join(schemaNodeAt(t, mod, "/cidho:hexes").DefaultValues(), ","); got != "0x10,021" {
+		t.Errorf("hexes DefaultValues() = %v, want [0x10 021]", got)
 	}
 }
 

@@ -2920,7 +2920,7 @@ func validateDefaultValuesForNode(n *schemaNodeData) error {
 			return err
 		}
 	}
-	return nil
+	return validateLeafListIntegerDefaultsUnique(n)
 }
 
 func (m *moduleData) validateDefaultValues() error {
@@ -3136,24 +3136,90 @@ func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolv
 
 func validateIntegerDefaultValue(n *schemaNodeData, value string, resolved ResolvedInt) error {
 	base := n.typeInfo.base
-	normalized := ""
-	if isSignedIntKind(resolved.Kind) {
-		parsed, err := strconv.ParseInt(value, 10, intKindBitSize(resolved.Kind))
-		if err != nil {
-			return fmt.Errorf("default %q is not valid for %s %s %q", value, base.String(), nodeStatementKeyword(n), n.name)
-		}
-		normalized = strconv.FormatInt(parsed, 10)
-	} else {
-		parsed, err := parseRangeUint(value, intKindBitSize(resolved.Kind))
-		if err != nil {
-			return fmt.Errorf("default %q is not valid for %s %s %q", value, base.String(), nodeStatementKeyword(n), n.name)
-		}
-		normalized = strconv.FormatUint(parsed, 10)
+	normalized, ok := CanonicalIntegerDefault(value, resolved.Kind)
+	if !ok {
+		return fmt.Errorf("default %q is not valid for %s %s %q", value, base.String(), nodeStatementKeyword(n), n.name)
 	}
 	if len(resolved.Range) > 0 && !rangesWithin(resolved.Range, []RangeBound{{min: normalized, max: normalized}}, "range", base) {
 		return fmt.Errorf("default %q is not valid for %s %s %q", value, base.String(), nodeStatementKeyword(n), n.name)
 	}
 	return nil
+}
+
+// validateLeafListIntegerDefaultsUnique rejects leaf-list integer defaults
+// that write one value in different notations (RFC 7950 section 9.2.1), such
+// as "16" and "0x10"; identical spellings are rejected before types resolve.
+func validateLeafListIntegerDefaultsUnique(n *schemaNodeData) error {
+	resolved, ok := n.typeInfo.resolved.(ResolvedInt)
+	if !ok || n.kind != SchemaNodeKindLeafList {
+		return nil
+	}
+	seen := make(map[string]bool, len(n.defaults))
+	for _, def := range n.defaults {
+		canonical, _ := CanonicalIntegerDefault(def.value, resolved.Kind)
+		if seen[canonical] {
+			return fmt.Errorf("leaf-list %q has duplicate default %q", n.name, def.value)
+		}
+		seen[canonical] = true
+	}
+	return nil
+}
+
+// CanonicalIntegerDefault parses value as an integer default value written in
+// a YANG module and returns its canonical decimal form, and whether value is
+// valid for the integer base type kind. It does not check range restrictions.
+//
+// RFC 7950 and RFC 6020 section 9.2.1 allow such a default, besides the
+// decimal form, in hexadecimal ("0x" followed by hexadecimal digits) or octal
+// ("0" followed by octal digits) notation, each with an optional sign; a
+// default with a leading zero is therefore octal. As in libyang, "0X" is
+// accepted as well. The notation is for default values in a module only:
+// instance data integers are always decimal, so data parsers must not use
+// this function. Schema introspection reports defaults lexically as written;
+// consumers that instantiate a default as data use this canonical form.
+func CanonicalIntegerDefault(value string, kind IntKind) (string, bool) {
+	digits := value
+	negative := false
+	if digits != "" && (digits[0] == '+' || digits[0] == '-') {
+		negative = digits[0] == '-'
+		digits = digits[1:]
+	}
+	numberBase := 10
+	switch {
+	case strings.HasPrefix(digits, "0x"), strings.HasPrefix(digits, "0X"):
+		numberBase = 16
+		digits = digits[2:]
+	case len(digits) > 1 && digits[0] == '0':
+		numberBase = 8
+		digits = digits[1:]
+	}
+	// With an explicit base, ParseUint rejects signs, prefixes and digit
+	// separators, so only plain digits of that base remain valid.
+	magnitude, err := strconv.ParseUint(digits, numberBase, 64)
+	if err != nil {
+		return "", false
+	}
+	bits := intKindBitSize(kind)
+	if !isSignedIntKind(kind) {
+		if negative && magnitude != 0 || bits < 64 && magnitude >= 1<<bits {
+			return "", false
+		}
+		return strconv.FormatUint(magnitude, 10), true
+	}
+	limit := uint64(1) << (bits - 1)
+	if negative {
+		if magnitude > limit {
+			return "", false
+		}
+		if magnitude == 0 {
+			return "0", true
+		}
+		return "-" + strconv.FormatUint(magnitude, 10), true
+	}
+	if magnitude >= limit {
+		return "", false
+	}
+	return strconv.FormatUint(magnitude, 10), true
 }
 
 func validateDecimal64DefaultValue(n *schemaNodeData, value string, resolved ResolvedDecimal64) error {
