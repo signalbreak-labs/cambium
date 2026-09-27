@@ -7,6 +7,46 @@ recommended API for new renderers.
 The native surface is target-neutral. It has no Terraform, HCL, provider, NETCONF
 transport, or renderer-specific concepts.
 
+## Requirements and packaging
+
+The schema surface (`cambium`, `compat`, `codegen`, `cmd/cambium-ir`) is pure Go
+and builds with `CGO_ENABLED=0`; `scripts/check-go-default-pure.sh` enforces that
+its import closure contains no cgo or libyang package. Import
+`github.com/signalbreak-labs/cambium/go/cambium` and pin a released `go/v*` tag.
+The optional libyang backend is only needed for RFC 7950 data validation.
+
+## Integration recipe
+
+`Example_schemaConsumer` in `go/cambium/example_consumer_test.go` is the
+compiled, output-checked recipe. It sets every loading policy explicitly,
+checks completeness, walks config-only list entries with keys first, and reads
+qualified identity, defaults with their origin, and resolved types.
+
+Caller responsibilities:
+
+- Set every policy explicitly: `ContextFlags.DisableSearchdirCwd`, ordered
+  `SearchPath` calls, root modules (with revisions when it matters), features
+  per module, `SetDeviationPolicy`, and `SetValidationMode`. Defaults are
+  strict validation, no features, and every loaded deviation applied.
+- Treat a `Build` error as no schema. `DiagnosticFromError(err)` gives the
+  kind, rule code, and source location.
+- Treat a non-empty `LoadReport().OmittedContent()` as an incomplete schema.
+  Other `LoadReport.Warnings` do not drop declared content.
+- Check `LoadReport.RequestedModules` when revisions matter: a context may
+  implement more than one explicitly requested revision of a module.
+- Filter state explicitly. No traversal profile drops `config false` nodes;
+  use `SchemaChildren.ConfigOnly()` or `ProjectionOptions.ConfigOnly`.
+- Key on qualified identity (`QualifiedName`, `QualifiedPath`,
+  `NamespaceQualifiedPath`, `LookupQualified`), not local names. `Lookup` by
+  local name returns the first match in schema order.
+- A built `Context` is frozen and safe for concurrent reads. Read handles only
+  before `Close`, and keep your own annotations in your own maps keyed by
+  qualified path.
+
+Known limits: `Build` accepts leafref cycles (`ResolveLeafrefChain` reports
+them), length restrictions keep the lexical `min`/`max` bounds, and `must` /
+`when` constraints carry no source location.
+
 ## Versioned schema IR
 
 `ctx.SchemaIR()` returns a `cambium.SchemaIR` value tagged with
@@ -40,6 +80,34 @@ Each node carries:
 The projection is a value snapshot over Cambium's ordered handles. Ordering still
 comes from Cambium's ordered IR slices, never from map iteration.
 
+v1 nests full copies of each node's `Children`, `DataChildren`, and `ListKeys`
+subtrees, so its size can grow exponentially with schema depth (a chain of
+nested containers doubles per level). `ctx.SchemaIRStats()` measures that size
+without building it, and `ctx.SchemaIRWithLimit(max)` returns a
+`resource_limit` diagnostic instead of materializing an oversized projection.
+
+### Bounded node table (`cambium.schema-ir.v2`)
+
+`ctx.SchemaIRTable()` returns the same facts as a node table
+([ADR 0006](../adr/0006-bounded-schemair-table.md)). Every schema node appears
+once in `Nodes`, in pre-order of the structural walk over modules in context
+load order; `ID` is its index and `Parent` is its structural parent
+(`SchemaIRNoParent` at module top level). `Children`, `DataChildren`, and
+`ListKeys` are ordered node ids with the same ordering as v1, so record count
+equals unique nodes for any depth. Prefer v2 for deep or large schemas.
+
+### What the JSON export does and does not carry
+
+Both JSON versions are deliberately narrow. They carry node names, kinds,
+paths, the base type name, defaults and `must`/`when` as expression strings,
+config state, source location, provenance, and deviation records without
+description or source location. Typedef chains, restrictions, union members,
+enum and bit values, presence, ordering, cardinality, description, units,
+status, extensions, constraint error metadata, and XPath prefix context are
+available only through the native Go handles (`SchemaIRNode.Ref`,
+`SchemaIRTableNode.Ref`). A consumer that needs those facts should use the Go
+API rather than the JSON export.
+
 For command-line consumers, `cmd/cambium-ir` exports the pure-Go SchemaIR as JSON
 without importing the cgo backend. Its output is the JSON form of the same
 versioned projection, not a separate schema:
@@ -47,7 +115,12 @@ versioned projection, not a separate schema:
 ```bash
 cd go
 CGO_ENABLED=0 go run ./cmd/cambium-ir -search ../conformance/fixtures/scrambled-children/module order-demo
+CGO_ENABLED=0 go run ./cmd/cambium-ir -format v2 -search ../conformance/fixtures/scrambled-children/module order-demo
 ```
+
+The default output is v1, bounded by `-max-records` (default 1,048,576); an
+oversized v1 document exits 1 with a `resource_limit` diagnostic. `-format v2`
+emits the node table.
 
 For handle-oriented code, use `Context.Schema`, `Module`, `SchemaNodeRef`, and
 `SchemaChildren` directly. `SchemaNodeRef.LocalPath()` returns a local module-root
@@ -109,10 +182,26 @@ feature semantics. The default schema loader is strict. If a builder opts into
 `cambium.ValidationVendorCompatible`, selected vendor compatibility relaxations
 are reported here as warnings while the schema still loads. This includes
 duplicate or out-of-order revisions, direct submodule entrypoints resolved to
-their parent module, skipped feature-disabled augment targets, mandatory config
-augments, config false mandatory typedef defaults, and unambiguous local-name
-path fallbacks. Duplicate `Module.Revisions()` entries are preserved in
-declaration order.
+their parent module, augment and deviation targets excluded by the enabled
+feature set, mandatory config augments, config false mandatory typedef defaults,
+and unambiguous local-name path fallbacks. Duplicate `Module.Revisions()`
+entries are preserved in declaration order.
+
+An augment or deviation target that does not resolve fails in every mode unless
+the path stops at a node the enabled feature set excluded (by its own
+`if-feature`, an enclosing `uses`, or a disabled `augment` that declares it); a
+typo, a wrong prefix, or a missing dependency is never relaxed. Strict mode rejects the feature-excluded case too,
+naming the excluded node. Vendor mode skips it with a warning, and a skipped
+augment's warning has kind `omitted_schema_content` so
+`LoadReport.OmittedContent()` lists every relaxation that dropped declared
+content.
+
+`ContextBuilder.SetDeviationPolicy(DeviationPolicy{IgnoreNotSupported: true})`
+keeps nodes targeted by `deviate not-supported` while still applying other
+deviations, decided before references are validated.
+`LoadReport.IgnoredDeviations` lists what the policy kept, and each
+`Deviation` reports `Applied()` and `SourceLocation()`. To apply none of a
+deviation module's effects, do not load it.
 
 ## Schema diffs
 
@@ -140,7 +229,9 @@ another module's same-local-name sibling.
 Use `cambium.ResolveLeafref(node)` for a single leafref hop and
 `cambium.ResolveLeafrefChain(node)` to follow a chain to its terminal target.
 Failures return `*cambium.LeafrefResolutionError`, including a structured reason.
-Successful resolutions include a trace of each hop.
+Successful resolutions include a trace of each hop. Leafref paths are data
+paths: `..` moves to the data parent and steps look through `choice` and
+`case`, so a leafref into a case's leaf resolves.
 
 For identities, `Module.Identity(name)` returns a resolved identity handle and
 `Identity.DerivedClosure()` returns the transitive derived set in Cambium's

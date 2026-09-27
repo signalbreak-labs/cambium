@@ -219,6 +219,17 @@ func TestS3Defaults(t *testing.T) {
 	if got := schemaNodeAt(t, mod, "/d:top/ll").DefaultValues(); !reflect.DeepEqual(got, []string{"q", "a"}) {
 		t.Fatalf("leaf-list defaults = %v", got)
 	}
+	// Origin names are a stable string contract.
+	for origin, want := range map[cambium.DefaultOrigin]string{
+		cambium.DefaultOriginNode:      "node",
+		cambium.DefaultOriginTypedef:   "typedef",
+		cambium.DefaultOriginRefine:    "refine",
+		cambium.DefaultOriginDeviation: "deviation",
+	} {
+		if got := origin.String(); got != want {
+			t.Errorf("DefaultOrigin(%d).String() = %q, want %q", origin, got, want)
+		}
+	}
 }
 
 func TestS3CardinalityAndMetadata(t *testing.T) {
@@ -417,9 +428,20 @@ func TestS3NegativeReferences(t *testing.T) {
   leaf t { type string; } leaf a { type leafref { path "/zz:t"; } } }`, `unknown prefix "zz"`, cambium.DiagnosticInvalidIdentifier},
 		{"invalid path syntax", `module neg3 { yang-version 1.1; namespace "urn:n3"; prefix n;
   leaf t { type string; } leaf a { type leafref { path "/n:t | /n:t"; } } }`, `invalid leafref path`, cambium.DiagnosticSemanticSchemaError},
+		// Data-path resolution through choice/case must not over-resolve.
+		{"choice leaf under another module's prefix", `module neg4 { yang-version 1.1; namespace "urn:n4"; prefix n;
+  import neg4-other { prefix o; }
+  container cfg { choice pick { case a { leaf x { type string; } } } leaf a { type leafref { path "/n:cfg/o:x"; } } } }`, `target not found`, cambium.DiagnosticUnresolvedPath},
+		{"parent steps past the root", `module neg5 { yang-version 1.1; namespace "urn:n5"; prefix n;
+  container cfg { choice pick { case a { leaf x { type string; } } } leaf a { type leafref { path "../../../x"; } } } }`, `target not found`, cambium.DiagnosticUnresolvedPath},
+		{"unknown prefix into a choice", `module neg6 { yang-version 1.1; namespace "urn:n6"; prefix n;
+  container cfg { choice pick { case a { leaf x { type string; } } } leaf a { type leafref { path "/n:cfg/zz:x"; } } } }`, `unknown prefix "zz"`, cambium.DiagnosticInvalidIdentifier},
+		{"missing leaf in a choice", `module neg7 { yang-version 1.1; namespace "urn:n7"; prefix n;
+  container cfg { choice pick { case a { leaf x { type string; } } } leaf a { type leafref { path "../y"; } } } }`, `target not found`, cambium.DiagnosticUnresolvedPath},
 	}
+	const negOther = `module neg4-other { yang-version 1.1; namespace "urn:n4o"; prefix o; leaf unrelated { type string; } }`
 	for _, tc := range cases {
-		_, err := buildPolicyContext(t, cambium.DeviationPolicy{}, tc.source)
+		_, err := buildPolicyContext(t, cambium.DeviationPolicy{}, negOther, tc.source)
 		if err == nil {
 			t.Errorf("%s: Build succeeded", tc.name)
 			continue

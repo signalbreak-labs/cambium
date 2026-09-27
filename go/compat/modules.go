@@ -203,6 +203,11 @@ func (m *Module) GetPrefix() string {
 }
 
 // Options defines parse/process options accepted for goyang API compatibility.
+//
+// IgnoreSubmoduleCircularDependencies is accepted but has no effect: circular
+// submodule includes load either way. No option selects features; compat
+// projects the native schema with no features enabled, so feature selection
+// requires the native cambium.ContextBuilder.
 type Options struct {
 	IgnoreSubmoduleCircularDependencies bool
 	StoreUses                           bool
@@ -210,6 +215,11 @@ type Options struct {
 }
 
 // DeviateOptions defines deviation handling options for API compatibility.
+//
+// When set in Modules.ParseOptions, IgnoreDeviateNotSupported maps to
+// cambium.DeviationPolicy{IgnoreNotSupported: true}: nodes targeted by
+// deviate not-supported stay in the schema and every other deviation still
+// applies.
 type DeviateOptions struct {
 	IgnoreDeviateNotSupported bool
 }

@@ -295,5 +295,8 @@ func TestCompatSubmoduleCircularDependencyFlagHasNoEffect(t *testing.T) {
 	if outcomes[0] != outcomes[1] {
 		t.Fatalf("flag changed outcome: false=%q true=%q", outcomes[0], outcomes[1])
 	}
-	t.Logf("circular submodule include outcome: %s", outcomes[0])
+	// Circular submodule includes load in both modes, in uses order.
+	if outcomes[0] != "a,b" {
+		t.Fatalf("circular submodule include outcome = %q, want %q", outcomes[0], "a,b")
+	}
 }

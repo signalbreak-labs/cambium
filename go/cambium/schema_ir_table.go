@@ -283,7 +283,8 @@ func saturatingAdd(a, b uint64) uint64 {
 // SchemaIRTable for a projection whose size is linear in the schema.
 func (c *Context) SchemaIRWithLimit(maxRecords uint64) (SchemaIR, error) {
 	stats := c.SchemaIRStats()
-	if stats.V1Records > maxRecords {
+	// A saturated count only says the size exceeds uint64, so no limit admits it.
+	if stats.V1Records > maxRecords || stats.V1Records == math.MaxUint64 {
 		return SchemaIR{Version: SchemaIRVersion}, wrap("schema tree", &DiagnosticError{
 			Kind: DiagnosticResourceLimit,
 			Err: fmt.Errorf("%s projection would materialize %d node records for %d unique schema nodes (limit %d); use SchemaIRTable (%s)",

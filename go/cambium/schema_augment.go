@@ -57,7 +57,11 @@ func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statem
 
 func (m *moduleData) applyAugments() {
 	for _, aug := range m.sourceTopStatements() {
-		if aug.Keyword != "augment" || !m.featureIncluded(aug) {
+		if aug.Keyword != "augment" {
+			continue
+		}
+		if !m.featureIncluded(aug) {
+			m.recordFeatureExcludedAugment(m.ctx.findDisabledAugmentTarget(m, aug), aug, m)
 			continue
 		}
 		if err := validateAbsoluteSchemaNodeIDStatement("augment", aug, m.yangVersionForStatement(aug) == "1.1"); err != nil {

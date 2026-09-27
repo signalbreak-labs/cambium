@@ -165,7 +165,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     dependency `revision-date` statements, remain errors.
   - An augment or deviation whose target does not resolve fails loading in
     every mode unless the path stops at a node the enabled feature set
-    excluded. Strict mode rejects that case too, naming the excluded node
+    excluded: one whose own `if-feature`, enclosing `uses`, or declaring
+    `augment` is disabled. The step must name that node's module, so a wrong
+    or unresolvable prefix is not an exclusion. Strict mode rejects that case too, naming the excluded node
     ("excluded by feature policy"); `ValidationVendorCompatible` skips the
     statement with a warning. A skipped augment drops declared content, so its
     warning has kind `omitted_schema_content` and `LoadReport.OmittedContent()`
@@ -1207,7 +1209,8 @@ default. The v1 shape embeds full copies of each node's `children`,
 with schema depth. `cambium-ir` therefore refuses a v1 document that would
 exceed `-max-records` node records (default 1,048,576) and exits 1 with a
 `resource_limit` diagnostic; `Context.SchemaIRWithLimit` is the Go form and
-`Context.SchemaIRStats` measures the size without materializing it.
+`Context.SchemaIRStats` measures the size without materializing it. The count
+saturates at the largest `uint64`, and no limit admits a saturated count.
 
 `-format v2` emits `cambium.schema-ir.v2`
 (`go/cambium/schema_ir_table.go`, [ADR 0006](../docs/adr/0006-bounded-schemair-table.md)):
@@ -1230,8 +1233,8 @@ presence, ordering, cardinality, description, units, status, extensions,
 constraint error metadata, and XPath prefix context are available only through
 the native Go handles (`SchemaIRNode.Ref` / `SchemaIRTableNode.Ref`). Native
 consumers never need a JSON round trip.
- For
-v1, the documented object layout is stable for `version`, `modules`, optional
+
+For v1, the documented object layout is stable for `version`, `modules`, optional
 `errors`, module identity/import/include fields, ordered node path/name/kind
 fields, type/default/config/constraint fields, source location, and provenance.
 Future v1 output may add fields or enum/string values without changing existing

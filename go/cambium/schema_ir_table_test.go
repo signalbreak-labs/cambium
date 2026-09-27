@@ -6,6 +6,7 @@ package cambium_test
 import (
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -230,5 +231,24 @@ func BenchmarkSchemaIRTableDepth(b *testing.B) {
 			}
 		})
 		ctx.Close()
+	}
+}
+
+func TestSchemaIRStatsSaturatesInsteadOfOverflowing(t *testing.T) {
+	// A 70-deep chain would need 2^71-1 v1 records, beyond uint64.
+	ctx := loadDownstreamContext(t, nestedChainModule(70))
+	stats := ctx.SchemaIRStats()
+	if stats.V1Records != math.MaxUint64 {
+		t.Fatalf("V1Records = %d, want saturation at MaxUint64", stats.V1Records)
+	}
+	if stats.Nodes != 71 {
+		t.Fatalf("Nodes = %d, want 71", stats.Nodes)
+	}
+	// A saturated count means "more than uint64 can hold", so no limit admits
+	// it, including MaxUint64 itself.
+	for _, limit := range []uint64{math.MaxUint64 - 1, math.MaxUint64} {
+		if _, err := ctx.SchemaIRWithLimit(limit); err == nil {
+			t.Fatalf("SchemaIRWithLimit(%d) succeeded on a saturated size", limit)
+		}
 	}
 }
