@@ -39,9 +39,9 @@ const (
 
 // freezeContext returns a context with freeze-a loaded and the directory that
 // also holds the not-yet-loaded freeze-b.
-func freezeContext(t *testing.T) (*cambium.Context, string) {
+func freezeContext(t *testing.T) (ctx *cambium.Context, dir string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir = t.TempDir()
 	for name, src := range map[string]string{
 		"freeze-a.yang": freezeBaseModule,
 		"freeze-b.yang": freezeAugmentModule,

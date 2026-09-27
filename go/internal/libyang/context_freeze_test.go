@@ -15,7 +15,7 @@ import (
 
 // freezeRawContext returns a context with freeze-a loaded and the path of
 // freeze-b, which augments freeze-a and is not loaded yet.
-func freezeRawContext(t *testing.T) (*RawContext, string) {
+func freezeRawContext(t *testing.T) (c *RawContext, augmentPath string) {
 	t.Helper()
 	dir := t.TempDir()
 	modules := []struct{ name, src string }{
