@@ -92,12 +92,13 @@ var tmplIdentityrefText string
 var tmplIdentityref = template.Must(template.New("identityref").Parse(tmplIdentityrefText))
 
 type identityrefMemberView struct {
-	Const     string
-	Name      string
-	JSONName  string
-	Foreign   bool
-	Prefix    string
-	Namespace string
+	Const         string
+	Name          string
+	JSONName      string
+	QualifiedName string
+	Foreign       bool
+	Prefix        string
+	Namespace     string
 }
 
 type identityrefView struct {

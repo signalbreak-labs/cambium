@@ -1,0 +1,14 @@
+module reject-mandatory-under-absent-container {
+  yang-version 1.1;
+  namespace "urn:reject-mandatory-under-absent-container";
+  prefix rmuac;
+  revision 2026-09-27;
+
+  leaf hostname { type string; }
+  container ntp {
+    leaf server {
+      type string;
+      mandatory true;
+    }
+  }
+}

@@ -18,7 +18,8 @@ binding implements against:
   review.
 - **[`/conformance`](../../conformance/)** — a shared corpus of fixtures plus
   `golden/` outputs and `manifest.toml`. Every binding runs the same corpus through
-  its own runner and reproduces the same golden bytes. Parity is defined by behavior
+  its own runner, reproduces the same golden bytes, and refuses the same
+  must-reject documents (`expect = "reject"`). Parity is defined by behavior
   on shared inputs, not by which language landed first. See
   [conformance](conformance.md). Releases also publish this corpus with `/VERSIONS`
   as a standalone tarball for external runners; see

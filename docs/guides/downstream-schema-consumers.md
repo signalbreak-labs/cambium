@@ -43,9 +43,15 @@ Caller responsibilities:
   before `Close`, and keep your own annotations in your own maps keyed by
   qualified path.
 
-Known limits: `Build` accepts leafref cycles (`ResolveLeafrefChain` reports
-them), length restrictions keep the lexical `min`/`max` bounds, and `must` /
-`when` constraints carry no source location.
+`Build` rejects leafref cycles, including cycles through leafref union
+members, with a diagnostic that lists the path chain. Vendor-compatible mode
+reports each cycle as a `LoadReport` warning instead, and `ResolveLeafrefChain`
+still reports a cycle at query time. For range and length restrictions,
+`RangeBound.Min()`/`Max()` keep the lexical form; use `MinNumber()`/`MaxNumber()`
+(and `MinLength()`/`MaxLength()` for lengths) for the numeric bounds with
+`min`/`max` resolved against the type being restricted.
+
+Known limit: `must` / `when` constraints carry no source location.
 
 ## Versioned schema IR
 
@@ -99,14 +105,17 @@ equals unique nodes for any depth. Prefer v2 for deep or large schemas.
 ### What the JSON export does and does not carry
 
 Both JSON versions are deliberately narrow. They carry node names, kinds,
-paths, the base type name, defaults and `must`/`when` as expression strings,
-config state, source location, provenance, and deviation records without
-description or source location. Typedef chains, restrictions, union members,
-enum and bit values, presence, ordering, cardinality, description, units,
-status, extensions, constraint error metadata, and XPath prefix context are
-available only through the native Go handles (`SchemaIRNode.Ref`,
-`SchemaIRTableNode.Ref`). A consumer that needs those facts should use the Go
-API rather than the JSON export.
+paths, the base type name, range and length bounds, defaults and `must`/`when`
+as expression strings, config state, source location, provenance, and
+deviation records without description or source location. Range and length
+bounds appear as `type.range` (integer and decimal64 types) or `type.length`
+(string and binary types): ordered `{"min", "max"}` segments with `min`/`max`
+resolved, as canonical decimal strings so 64-bit and decimal64 values keep full
+precision. Typedef chains, patterns, union members, enum and bit values,
+presence, ordering, cardinality, description, units, status, extensions,
+constraint error metadata, and XPath prefix context are available only through
+the native Go handles (`SchemaIRNode.Ref`, `SchemaIRTableNode.Ref`). A consumer
+that needs those facts should use the Go API rather than the JSON export.
 
 For command-line consumers, `cmd/cambium-ir` exports the pure-Go SchemaIR as JSON
 without importing the cgo backend. Its output is the JSON form of the same
@@ -184,7 +193,7 @@ are reported here as warnings while the schema still loads. This includes
 duplicate or out-of-order revisions, direct submodule entrypoints resolved to
 their parent module, augment and deviation targets excluded by the enabled
 feature set, mandatory config augments, config false mandatory typedef defaults,
-and unambiguous local-name path fallbacks. Duplicate `Module.Revisions()`
+unambiguous local-name path fallbacks, and leafref cycles. Duplicate `Module.Revisions()`
 entries are preserved in declaration order.
 
 An augment or deviation target that does not resolve fails in every mode unless

@@ -101,6 +101,12 @@ after the target's already-declared children, in module-load order then augment
 source order, also when the target was itself created by another augment;
 deviations modify in place without reordering unaffected siblings.
 
+Top-level data nodes of a document can come from several modules, which share no
+schema parent. The data tiers order them the way the pinned libyang does: grouped
+by module, modules in bytewise name order, each module's nodes in declaration
+order, whatever the input, load, or namespace order (I2, fixture
+`multi-module-top-level-order`).
+
 ### 2. `ordered-by user` entries and values
 
 List entries and leaf-list values declared `ordered-by user` carry caller insertion

@@ -1,0 +1,9 @@
+module mmo-a-ext {
+  namespace "urn:mmo:2";
+  prefix p2;
+  import mmo-a { prefix a; }
+  import mmo-b { prefix b; }
+  revision 2026-09-27;
+  leaf ext-ref { type leafref { path "/b:b-list/b:name"; } }
+  augment "/a:a-box" { leaf added { type string; } }
+}

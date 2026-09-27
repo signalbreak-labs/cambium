@@ -1,0 +1,8 @@
+{
+  "reject-leafref-leaf-list-missing-target:interface": [
+    {
+      "name": "eth0"
+    }
+  ],
+  "reject-leafref-leaf-list-missing-target:monitored": ["eth0", "eth9"]
+}

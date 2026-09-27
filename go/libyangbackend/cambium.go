@@ -20,6 +20,11 @@ import (
 // a libyang context after the owning Context has been closed.
 var ErrContextClosed = libyang.ErrContextClosed
 
+// ErrContextFrozen is returned, wrapped in an *Error with RuleCodeContext, by
+// LoadModule and LoadModuleFromPath once the Context has created a data tree
+// (Parse, ParseOp, or NewData). The freeze is permanent for that Context.
+var ErrContextFrozen = libyang.ErrContextFrozen
+
 // Format is an on-wire encoding. Every format is produced by a single ordered
 // walk of the libyang sibling chain — never a native map/struct serializer.
 type Format int
@@ -255,6 +260,12 @@ func wrap(op string, err error) error {
 // schema reads, parsing, and creation of independent data trees. Mutators
 // (SetSearchPath, LoadModule, LoadModuleFromPath) and Close must not race with
 // those operations.
+//
+// The freeze is enforced: the first data tree created by Parse, ParseOp, or
+// NewData freezes the Context permanently, and later LoadModule and
+// LoadModuleFromPath calls return ErrContextFrozen (RuleCodeContext) instead
+// of recompiling the schema that live trees point at. Closing every tree does
+// not lift the freeze; use a new Context for a different module set.
 type Context struct {
 	raw      *libyang.RawContext
 	forestMu sync.Mutex
@@ -277,7 +288,10 @@ func (c *Context) SetSearchPath(path string) error {
 }
 
 // LoadModule loads a YANG module (all features) into the context. It is part of
-// context construction and must not race with reads or parses.
+// context construction and must not race with reads or parses. Once the Context
+// has created a data tree it fails with ErrContextFrozen (RuleCodeContext) and
+// leaves the schema unchanged. Module and SchemaNodeRef handles obtained
+// before a successful load are snapshots of the earlier schema; fetch new ones.
 func (c *Context) LoadModule(name string) error {
 	if err := c.raw.LoadModule(name); err != nil {
 		return wrap("load module", err)
@@ -290,7 +304,9 @@ func (c *Context) LoadModule(name string) error {
 
 // LoadModuleFromPath loads a YANG module from a file path into the context.
 // The path may be absolute or relative to the current working directory. It is
-// part of context construction and must not race with reads or parses.
+// part of context construction and must not race with reads or parses. Like
+// LoadModule, it fails with ErrContextFrozen once the Context has created a
+// data tree.
 func (c *Context) LoadModuleFromPath(path string) error {
 	if err := c.raw.LoadModuleFromPath(path); err != nil {
 		return wrap("load module", err)
@@ -334,7 +350,8 @@ func (c *Context) schemaForest() (*schemaForest, error) {
 	return c.forest, nil
 }
 
-// Parse parses a whole data document against this context.
+// Parse parses a whole data document against this context. A successful parse
+// freezes the Context (see LoadModule); a failed one does not.
 func (c *Context) Parse(format Format, mode ParseMode, data []byte) (*DataTree, error) {
 	opts, err := mode.raw()
 	if err != nil {
@@ -347,7 +364,8 @@ func (c *Context) Parse(format Format, mode ParseMode, data []byte) (*DataTree, 
 	return &DataTree{owner: c, raw: raw}, nil
 }
 
-// ParseOp parses an RPC, action, or notification against this context.
+// ParseOp parses an RPC, action, or notification against this context. Like
+// Parse, a successful parse freezes the Context.
 func (c *Context) ParseOp(format Format, opType OpType, data []byte) (*DataTree, error) {
 	raw, err := c.raw.ParseOp(format.raw(), opType.raw(), data)
 	if err != nil {
@@ -356,9 +374,10 @@ func (c *Context) ParseOp(format Format, opType OpType, data []byte) (*DataTree,
 	return &DataTree{owner: c, raw: raw}, nil
 }
 
-// NewData creates an empty in-memory data tree against this context. If called
-// after Close, it still returns a closable DataTree for API compatibility, but
-// operations that require the libyang context fail with ErrContextClosed.
+// NewData creates an empty in-memory data tree against this context and
+// freezes the Context (see LoadModule). If called after Close, it still
+// returns a closable DataTree for API compatibility, but operations that
+// require the libyang context fail with ErrContextClosed.
 func (c *Context) NewData() *DataTree {
 	return &DataTree{owner: c, raw: c.raw.NewData()}
 }
