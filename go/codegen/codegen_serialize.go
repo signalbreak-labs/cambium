@@ -26,10 +26,10 @@ func (g *goEmitter) emitFieldXML(f fieldInfo, currentNS string, out *strings.Bui
 		if f.jsonKind == "Empty" {
 			if f.optional {
 				fmt.Fprintf(out, "\tif n.%s != nil {\n", ident)
-				fmt.Fprintf(out, "\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, wire)
+				fmt.Fprintf(out, "\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, f.metaKey)
 				out.WriteString("\t}\n")
 			} else {
-				fmt.Fprintf(out, "\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, wire)
+				fmt.Fprintf(out, "\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \"/>\\n\")\n", wire, nsAttr, f.metaKey)
 			}
 			return
 		}
@@ -91,9 +91,9 @@ func (g *goEmitter) emitLeafValue(wire string, f fieldInfo, valueExpr, currentNS
 	if f.isIdentityref {
 		g.helpers["xmlEscape"] = true
 		fmt.Fprintf(out, "\t\tif pfx, ns, ok := %s.XMLPrefixNS(); ok && cambiumValidateXMLPrefix(pfx) == nil {\n", valueExpr)
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, valueExpr, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, valueExpr, wire)
 		out.WriteString("\t\t} else {\n")
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, valueExpr, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, valueExpr, wire)
 		out.WriteString("\t\t}\n")
 		return
 	}
@@ -104,9 +104,9 @@ func (g *goEmitter) emitLeafValue(wire string, f fieldInfo, valueExpr, currentNS
 	if f.isUnion {
 		g.helpers["xmlEscape"] = true
 		fmt.Fprintf(out, "\t\tif pfx, ns, ok := %s.XMLPrefixNS(); ok && cambiumValidateXMLPrefix(pfx) == nil {\n", valueExpr)
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, valueExpr, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, valueExpr, wire)
 		out.WriteString("\t\t} else {\n")
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, valueExpr, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, valueExpr, wire)
 		out.WriteString("\t\t}\n")
 		return
 	}
@@ -114,7 +114,7 @@ func (g *goEmitter) emitLeafValue(wire string, f fieldInfo, valueExpr, currentNS
 	if strings.Contains(expr, "cambiumXMLEscapeText") {
 		g.helpers["xmlEscape"] = true
 	}
-	fmt.Fprintf(out, "\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, wire, expr, wire)
+	fmt.Fprintf(out, "\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, expr, wire)
 }
 
 func (g *goEmitter) emitLeafListValue(wire string, f fieldInfo, currentNS string, out *strings.Builder) {
@@ -122,9 +122,9 @@ func (g *goEmitter) emitLeafListValue(wire string, f fieldInfo, currentNS string
 	if f.isIdentityref {
 		g.helpers["xmlEscape"] = true
 		fmt.Fprintf(out, "\t\tif pfx, ns, ok := v.XMLPrefixNS(); ok && cambiumValidateXMLPrefix(pfx) == nil {\n")
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, wire)
 		out.WriteString("\t\t} else {\n")
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, wire)
 		out.WriteString("\t\t}\n")
 		return
 	}
@@ -135,9 +135,9 @@ func (g *goEmitter) emitLeafListValue(wire string, f fieldInfo, currentNS string
 	if f.isUnion {
 		g.helpers["xmlEscape"] = true
 		fmt.Fprintf(out, "\t\tif pfx, ns, ok := v.XMLPrefixNS(); ok && cambiumValidateXMLPrefix(pfx) == nil {\n")
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \" xmlns:\" + pfx + \"=\\\"\" + cambiumXMLEscapeAttr(ns) + \"\\\">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, wire)
 		out.WriteString("\t\t} else {\n")
-		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, wire, wire)
+		fmt.Fprintf(out, "\t\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + v.XMLValue() + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, wire)
 		out.WriteString("\t\t}\n")
 		return
 	}
@@ -145,7 +145,7 @@ func (g *goEmitter) emitLeafListValue(wire string, f fieldInfo, currentNS string
 	if strings.Contains(expr, "cambiumXMLEscapeText") {
 		g.helpers["xmlEscape"] = true
 	}
-	fmt.Fprintf(out, "\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, wire, expr, wire)
+	fmt.Fprintf(out, "\t\tb.WriteString(indent + \"<%s%s\" + cambiumMetadataXMLAttrs(n.CambiumMetadata[%q]) + \">\" + %s + \"</%s>\\n\")\n", wire, nsAttr, f.metaKey, expr, wire)
 }
 
 func (g *goEmitter) emitInstanceIdentifierLeafValue(wire, valueExpr, nsAttr string, out *strings.Builder) {
@@ -297,22 +297,21 @@ func (g *goEmitter) emitSortSlice(items string, f fieldInfo, out *strings.Builde
 }
 
 func (g *goEmitter) listKeyFields(f fieldInfo) []fieldInfo {
-	keyNames := make([]string, 0)
-	for key := range f.node.ListKeys().Iter() {
-		keyNames = append(keyNames, key.Name())
-	}
-	if len(keyNames) == 0 {
+	listKeys := f.node.ListKeys()
+	if listKeys.Len() == 0 {
 		return nil
 	}
-	ordered := orderedListChildren(f.node.DataChildren(true), f.node.ListKeys())
+	ordered := orderedListChildren(f.node.DataChildren(true), listKeys)
 	fields := g.collectFields(fieldConcreteType(f), ordered)
-	byName := make(map[string]fieldInfo, len(fields))
+	// Match by qualified name so a same-named leaf augmented from another
+	// module never stands in for the key.
+	byName := make(map[cambium.QualifiedName]fieldInfo, len(fields))
 	for _, field := range fields {
-		byName[field.wire] = field
+		byName[field.node.QualifiedName()] = field
 	}
-	keys := make([]fieldInfo, 0, len(keyNames))
-	for _, name := range keyNames {
-		if field, ok := byName[name]; ok {
+	keys := make([]fieldInfo, 0, listKeys.Len())
+	for key := range listKeys.Iter() {
+		if field, ok := byName[key.QualifiedName()]; ok {
 			keys = append(keys, field)
 		}
 	}
@@ -410,14 +409,14 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 				out.WriteString("\t\tfirst = false\n")
 				out.WriteString("\t\tcambiumJSONIndent(b, depth+1)\n")
 				fmt.Fprintf(out, "\t\tb.WriteString(\"\\\"%s\\\": [null]\")\n", wire)
-				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 				out.WriteString("\t}\n")
 			} else {
 				out.WriteString("\tif !first { b.WriteByte(',') }\n")
 				out.WriteString("\tfirst = false\n")
 				out.WriteString("\tcambiumJSONIndent(b, depth+1)\n")
 				fmt.Fprintf(out, "\tb.WriteString(\"\\\"%s\\\": [null]\")\n", wire)
-				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 			}
 			return
 		}
@@ -431,11 +430,11 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 			if hasDefault {
 				fmt.Fprintf(out, "\t\tif mode != WithDefaultsTrim || %s != %s {\n", g.jsonLiteralExpr(valueRef, f), g.defaultJSONLiteralExpr(f, defaultValue))
 				g.emitScalarJSON(wire, "b", "depth+1", valueRef, f, out)
-				fmt.Fprintf(out, "\t\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\t\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 				out.WriteString("\t\t}\n")
 			} else {
 				g.emitScalarJSON(wire, "b", "depth+1", valueRef, f, out)
-				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 			}
 			out.WriteString("\t}\n")
 			if hasDefault {
@@ -451,11 +450,11 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 			if defaultValue, hasDefault := f.node.DefaultEntry(); hasDefault {
 				fmt.Fprintf(out, "\tif mode != WithDefaultsTrim || %s != %s {\n", g.jsonLiteralExpr("n."+ident, f), g.defaultJSONLiteralExpr(f, defaultValue))
 				g.emitScalarJSON(wire, "b", "depth+1", "n."+ident, f, out)
-				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 				out.WriteString("\t}\n")
 			} else {
 				g.emitScalarJSON(wire, "b", "depth+1", "n."+ident, f, out)
-				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+				fmt.Fprintf(out, "\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 			}
 		}
 	case cambium.SchemaNodeKindLeafList:
@@ -474,7 +473,7 @@ func (g *goEmitter) emitFieldJSON(f fieldInfo, currentModule string, byNode map[
 		}
 		itemsExpr := g.emitCollectionItems("n", f, out, "\t\t")
 		g.emitLeafListJSONArray(wire, "b", "depth+1", "depth+2", itemsExpr, f, out)
-		fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.wire)
+		fmt.Fprintf(out, "\t\tcambiumWriteMetadataJSON(b, depth+1, %q, n.CambiumMetadata[%q], &first)\n", wire, f.metaKey)
 		if defaultVar != "" {
 			out.WriteString("\t\t}\n")
 		}
@@ -891,7 +890,7 @@ func bitsDefaultCanonical(value string, values []cambium.EnumValue) (string, boo
 		seen[token] = true
 	}
 	canonical := make([]string, 0, len(seen))
-	for _, bit := range values {
+	for _, bit := range bitsInPositionOrder(values) {
 		if seen[bit.Name()] {
 			canonical = append(canonical, bit.Name())
 		}

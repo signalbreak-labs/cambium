@@ -83,6 +83,7 @@ type fieldInfo struct {
 	node          cambium.SchemaNodeRef
 	ident         string // exported Go field identifier
 	wire          string // YANG wire name
+	metaKey       string // CambiumMetadata key: wire, or module:wire when an earlier sibling shares wire
 	moduleName    string // owner module for JSON_IETF namespace qualification
 	namespace     string // owner XML namespace
 	goType        string // Go type expression
@@ -535,10 +536,18 @@ func (g *goEmitter) ensureBits(name, yangName string, values []cambium.EnumValue
 	}
 	g.bitsTypes[name] = true
 	view := bitsView{Name: name, YangName: yangName}
-	for _, ev := range values {
+	for _, ev := range bitsInPositionOrder(values) {
 		view.Bits = append(view.Bits, bitVariantView{Name: ev.Name(), Pos: ev.Value()})
 	}
 	g.typeSnippets[name] = g.renderType(tmplBits, view)
+}
+
+// bitsInPositionOrder returns the bits of a bits type ordered by position, the
+// order of set bits in a canonical bits value (RFC 7950 section 9.7.2).
+func bitsInPositionOrder(values []cambium.EnumValue) []cambium.EnumValue {
+	ordered := append([]cambium.EnumValue(nil), values...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Value() < ordered[j].Value() })
+	return ordered
 }
 
 type identityrefMember struct {
@@ -1545,15 +1554,24 @@ func (g *goEmitter) collectFields(prefix string, children []cambium.SchemaNodeRe
 	fields := make([]fieldInfo, 0, len(children))
 	used := make(map[string]bool)
 	usedTypeComponents := make(map[string]bool)
+	usedWires := make(map[string]bool)
 	for _, child := range children {
 		mod := child.Module()
 		ident := safeFieldIdent(child.Name(), used)
 		typeIdent := safeTypeIdent(child.Name(), usedTypeComponents)
 		goType, optional, shape := g.fieldType(prefix, child, ident, typeIdent)
+		// A sibling augmented from another module may share an earlier
+		// sibling's local name; key its metadata by module-qualified name.
+		metaKey := child.Name()
+		if usedWires[metaKey] {
+			metaKey = mod.Name() + ":" + metaKey
+		}
+		usedWires[child.Name()] = true
 		fields = append(fields, fieldInfo{
 			node:          child,
 			ident:         ident,
 			wire:          child.Name(),
+			metaKey:       metaKey,
 			moduleName:    mod.Name(),
 			namespace:     mod.Namespace(),
 			goType:        goType,
@@ -1745,48 +1763,34 @@ func (g *goEmitter) operationChildren(node cambium.SchemaNodeRef) []cambium.Sche
 	return ops
 }
 
+// orderedListChildren returns a list entry's emitted children: the keys in
+// key-statement order (I3), then every other child in effective schema order
+// (I2). Keys are matched by qualified identity (module and local name): a leaf
+// augmented into the list from another module may share a key's local name
+// but is a distinct, non-key child.
 func orderedListChildren(allChildren, keys cambium.SchemaChildren) []cambium.SchemaNodeRef {
-	keySet := make(map[string]struct{})
+	keySet := make(map[cambium.QualifiedName]struct{}, keys.Len())
 	for key := range keys.Iter() {
-		keySet[key.Name()] = struct{}{}
+		keySet[key.QualifiedName()] = struct{}{}
 	}
 
-	var keysOrdered, others []cambium.SchemaNodeRef
+	ordered := make([]cambium.SchemaNodeRef, 0, allChildren.Len())
+	for key := range keys.Iter() {
+		for child := range allChildren.Iter() {
+			if isEmittedKind(child.Kind()) && child.QualifiedName() == key.QualifiedName() {
+				ordered = append(ordered, child)
+				break
+			}
+		}
+	}
 	for child := range allChildren.Iter() {
 		if !isEmittedKind(child.Kind()) {
 			continue
 		}
-		if _, ok := keySet[child.Name()]; ok {
-			keysOrdered = append(keysOrdered, child)
-		} else {
-			others = append(others, child)
+		if _, ok := keySet[child.QualifiedName()]; !ok {
+			ordered = append(ordered, child)
 		}
 	}
-
-	// Reorder keys to match key-statement order.
-	ordered := make([]cambium.SchemaNodeRef, 0, len(keysOrdered)+len(others))
-	for key := range keys.Iter() {
-		for _, k := range keysOrdered {
-			if k.Name() == key.Name() {
-				ordered = append(ordered, k)
-				break
-			}
-		}
-	}
-	// Append any keys not in key-statement order (defensive).
-	for _, k := range keysOrdered {
-		found := false
-		for _, o := range ordered {
-			if o.Name() == k.Name() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			ordered = append(ordered, k)
-		}
-	}
-	ordered = append(ordered, others...)
 	return ordered
 }
 

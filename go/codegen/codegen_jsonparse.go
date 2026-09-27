@@ -500,7 +500,7 @@ func (g *goEmitter) emitJSONParseField(owner, key string, f fieldInfo, byNode ma
 		fmt.Fprintf(out, "\t\titems, err := cambiumParseMetadataJSON(rawMeta, %q, %q, %q)\n", module.Name(), module.Prefix(), module.Namespace())
 		out.WriteString("\t\tif err != nil { return err }\n")
 		fmt.Fprintf(out, "\t\tif %s.CambiumMetadata == nil { %s.CambiumMetadata = make(map[string][]MetadataAnnotation) }\n", owner, owner)
-		fmt.Fprintf(out, "\t\t%s.CambiumMetadata[%q] = items\n", owner, f.wire)
+		fmt.Fprintf(out, "\t\t%s.CambiumMetadata[%q] = items\n", owner, f.metaKey)
 		out.WriteString("\t}\n")
 	}
 }
