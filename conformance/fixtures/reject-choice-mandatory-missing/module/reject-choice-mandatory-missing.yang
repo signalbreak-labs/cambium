@@ -1,0 +1,15 @@
+module reject-choice-mandatory-missing {
+  yang-version 1.1;
+  namespace "urn:reject-choice-mandatory-missing";
+  prefix rcmm;
+  revision 2026-09-27;
+
+  container tunnel {
+    leaf description { type string; }
+    choice mode {
+      mandatory true;
+      leaf remote { type string; }
+      leaf label { type uint32; }
+    }
+  }
+}

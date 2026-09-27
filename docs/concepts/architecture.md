@@ -241,7 +241,8 @@ attach as a first-class peer rather than a bolt-on.
   A binding implements *against* this spec; it does not fork it.
 - **`/conformance`** — a shared corpus of fixtures plus `golden/` outputs and
   `manifest.toml`. Every binding runs the same corpus through its own runner and is
-  expected to reproduce the same golden bytes, so parity is defined by behavior on
+  expected to reproduce the same golden bytes and refuse the same must-reject
+  documents (`expect = "reject"`), so parity is defined by behavior on
   shared inputs, not by which language landed first. The corpus is also packaged as
   a versioned, checksummed artifact for out-of-repo consumers
   ([guide](../guides/conformance-artifact.md),

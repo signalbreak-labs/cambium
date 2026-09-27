@@ -1258,6 +1258,8 @@ Behavior specified here is verified by the shared `/conformance` corpus
 (`manifest.toml` plus golden outputs) and the binding's unit tests — never by
 hand-authored expectations. Every ordering invariant (I1–I6) has at least one
 fixture and coverage is a floor; per the TDD house rule, a change to observable
-behavior lands its failing fixture or test before the implementation. The fixture
+behavior lands its failing fixture or test before the implementation. Data
+validation verdicts are covered too: must-reject cases (`expect = "reject"`)
+hold invalid documents that every engine a case covers must refuse. The fixture
 tiers and runner contract are specified in
 [`ordering-invariants.md`](./ordering-invariants.md) §6.

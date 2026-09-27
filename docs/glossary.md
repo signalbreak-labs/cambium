@@ -27,8 +27,10 @@ is true.
 
 The shared, language-neutral set of fixtures and golden outputs under
 `/conformance` (fixtures, golden, `manifest.toml`) that every binding runs to
-prove it honors the ordering invariants. Reusing the same corpus and golden files
-is how parity is defined across bindings — not by which language landed first.
+prove it honors the ordering invariants. Its must-reject cases
+(`expect = "reject"`) hold invalid data documents that a binding's validating
+parse must refuse. Reusing the same corpus and golden files is how parity is
+defined across bindings — not by which language landed first.
 
 ## Deviation
 

@@ -1,0 +1,14 @@
+module reject-unique-violation {
+  yang-version 1.1;
+  namespace "urn:reject-unique-violation";
+  prefix ruv;
+  revision 2026-09-27;
+
+  list server {
+    key name;
+    unique "address port";
+    leaf name { type string; }
+    leaf address { type string; }
+    leaf port { type uint16; }
+  }
+}

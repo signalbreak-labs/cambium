@@ -7,8 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- 156 more conformance cases opt into the `datatree` differential lane
-  (`datatree = true`), for 161 of the 195 backend/data cases.
+- 156 more existing conformance cases opt into the `datatree` differential
+  lane (`datatree = true`).
 - `cambium.schema-ir.v2` bounded node table (`Context.SchemaIRTable`,
   `SchemaIRNodeID`, `SchemaIRNoParent`), `Context.SchemaIRStats`, and
   `Context.SchemaIRWithLimit`, which fails with a `resource_limit` diagnostic
@@ -29,6 +29,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- Must-reject conformance cases: `expect = "reject"` in
+  `conformance/manifest.toml` marks a data document that a strict, validating
+  parse must refuse. `cmd/cambium` asserts that libyang (and the `yanglint`
+  oracle, when configured) refuses it, and `datatree-diff` asserts that
+  datatree does too for `datatree = true` cases; verdicts are compared, not
+  error texts. 24 such cases cover choice and case, `unique`, mandatory nodes
+  under an absent container, leafref leaf-lists, canonical leaf-list
+  duplicates, the decimal64 range, and plain mandatory, cardinality, pattern,
+  range, duplicate-key, and `must` violations. Two accept cases cover data
+  datatree used to reject (a mandatory leaf in an unselected case, duplicate
+  `config false` leaf-list values).
 - Generated code for a module with `anydata`/`anyxml` nodes has
   `ToXMLChecked() (string, error)` on every struct. It returns an error for an
   anydata/anyxml value parsed from JSON_IETF, which has no XML form, instead of
@@ -58,6 +69,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   parse time, so `Entries`/`LeafListValues` return canonical order.
 - `datatree` XML identityref values resolve prefixes only against in-scope
   `xmlns` declarations, not the schema's import prefixes.
+- The `datatree-diff` lane runs `Tree.Validate` on every accept case before
+  comparing output, so a flagged case fails if datatree rejects valid data.
 - Codegen names every package-level identifier from one allocator per file,
   seeded with the runtime helper names. A colliding type family gets the
   smallest free numeric suffix, chosen in a canonical order (own-module nodes

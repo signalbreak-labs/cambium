@@ -4,6 +4,14 @@
 # Cambium serializes to every file listed in `expected` byte-for-byte. When
 # `oracle = true` the runner also checks the output against an independent
 # `yanglint` invocation.
+#
+# A case with `expect = "reject"` (the default is "accept") holds a data
+# document that breaks an RFC 7950 rule instead: a validating parse (unknown
+# data is an error, then full validation of the datastore) must refuse it. It
+# has no `expected` outputs, no op-type, serialize-defaults, or gnmi-path, and
+# at least one top-level data node. With `oracle = true` yanglint must refuse it
+# too, and with `datatree = true` so must the pure-Go datatree. Runners compare
+# the verdict, never the error text.
 
 
 
@@ -3605,3 +3613,249 @@ oracle = true
 xml = "golden/rpc-action-notification-coexistence/output.xml"
 json = "golden/rpc-action-notification-coexistence/output.json"
 json_ietf = "golden/rpc-action-notification-coexistence/output.json_ietf"
+
+# Must-reject cases (expect = "reject"): each input violates one RFC 7950 rule,
+# so a validating parse must refuse it. They have no goldens; the runners
+# compare verdicts, never error texts.
+
+[[case]]
+name = "reject-choice-two-cases"
+expect = "reject"
+module = "fixtures/reject-choice-two-cases/module"
+input = "fixtures/reject-choice-two-cases/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-choice-two-cases-xml"
+expect = "reject"
+module = "fixtures/reject-choice-two-cases/module"
+input = "fixtures/reject-choice-two-cases/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-choice-mandatory-missing"
+expect = "reject"
+module = "fixtures/reject-choice-mandatory-missing/module"
+input = "fixtures/reject-choice-mandatory-missing/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-choice-mandatory-missing-xml"
+expect = "reject"
+module = "fixtures/reject-choice-mandatory-missing/module"
+input = "fixtures/reject-choice-mandatory-missing/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-unique-violation"
+expect = "reject"
+module = "fixtures/reject-unique-violation/module"
+input = "fixtures/reject-unique-violation/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-unique-violation-xml"
+expect = "reject"
+module = "fixtures/constraints-unique-violation-reject/module"
+input = "fixtures/constraints-unique-violation-reject/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-mandatory-under-absent-container"
+expect = "reject"
+module = "fixtures/reject-mandatory-under-absent-container/module"
+input = "fixtures/reject-mandatory-under-absent-container/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-mandatory-under-absent-container-xml"
+expect = "reject"
+module = "fixtures/reject-mandatory-under-absent-container/module"
+input = "fixtures/reject-mandatory-under-absent-container/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leafref-leaf-list-missing-target"
+expect = "reject"
+module = "fixtures/reject-leafref-leaf-list-missing-target/module"
+input = "fixtures/reject-leafref-leaf-list-missing-target/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leafref-leaf-list-missing-target-xml"
+expect = "reject"
+module = "fixtures/reject-leafref-leaf-list-missing-target/module"
+input = "fixtures/reject-leafref-leaf-list-missing-target/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leaflist-canonical-duplicate"
+expect = "reject"
+module = "fixtures/reject-leaflist-canonical-duplicate/module"
+input = "fixtures/reject-leaflist-canonical-duplicate/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-leaflist-canonical-duplicate-xml"
+expect = "reject"
+module = "fixtures/reject-leaflist-canonical-duplicate/module"
+input = "fixtures/reject-leaflist-canonical-duplicate/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-decimal64-implicit-range"
+expect = "reject"
+module = "fixtures/reject-decimal64-implicit-range/module"
+input = "fixtures/reject-decimal64-implicit-range/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-decimal64-implicit-range-xml"
+expect = "reject"
+module = "fixtures/reject-decimal64-implicit-range/module"
+input = "fixtures/reject-decimal64-implicit-range/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-mandatory-leaf-missing"
+expect = "reject"
+module = "fixtures/reject-mandatory-leaf-missing/module"
+input = "fixtures/reject-mandatory-leaf-missing/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-min-elements"
+expect = "reject"
+module = "fixtures/min-elements-reject/module"
+input = "fixtures/min-elements-reject/input-invalid.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-min-elements-xml"
+expect = "reject"
+module = "fixtures/min-elements-reject/module"
+input = "fixtures/min-elements-reject/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-max-elements"
+expect = "reject"
+module = "fixtures/max-elements-reject/module"
+input = "fixtures/max-elements-reject/input-invalid.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-max-elements-xml"
+expect = "reject"
+module = "fixtures/max-elements-reject/module"
+input = "fixtures/max-elements-reject/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-pattern-violation"
+expect = "reject"
+module = "fixtures/reject-pattern-violation/module"
+input = "fixtures/reject-pattern-violation/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-range-violation"
+expect = "reject"
+module = "fixtures/reject-range-violation/module"
+input = "fixtures/reject-range-violation/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-duplicate-list-key"
+expect = "reject"
+module = "fixtures/reject-duplicate-list-key/module"
+input = "fixtures/reject-duplicate-list-key/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-duplicate-list-key-xml"
+expect = "reject"
+module = "fixtures/reject-duplicate-list-key/module"
+input = "fixtures/reject-duplicate-list-key/input.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+[[case]]
+name = "reject-must-violation-xml"
+expect = "reject"
+module = "fixtures/constraints-when-must/module"
+input = "fixtures/constraints-when-must/input-invalid.xml"
+input-format = "xml"
+oracle = true
+datatree = true
+
+# Accept counterparts: data RFC 7950 permits that datatree once rejected.
+
+[[case]]
+name = "leaflist-config-false-duplicates"
+module = "fixtures/leaflist-config-false-duplicates/module"
+input = "fixtures/leaflist-config-false-duplicates/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+[case.expected]
+xml = "golden/leaflist-config-false-duplicates/output.xml"
+json = "golden/leaflist-config-false-duplicates/output.json"
+json_ietf = "golden/leaflist-config-false-duplicates/output.json_ietf"
+
+[[case]]
+name = "choice-unselected-case-mandatory"
+module = "fixtures/choice-unselected-case-mandatory/module"
+input = "fixtures/choice-unselected-case-mandatory/input.json"
+input-format = "json_ietf"
+oracle = true
+datatree = true
+[case.expected]
+xml = "golden/choice-unselected-case-mandatory/output.xml"
+json = "golden/choice-unselected-case-mandatory/output.json"
+json_ietf = "golden/choice-unselected-case-mandatory/output.json_ietf"
