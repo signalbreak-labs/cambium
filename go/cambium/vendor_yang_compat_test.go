@@ -415,7 +415,12 @@ func TestVendorYANGVendorCompatibleRejectsDuplicateImportPrefixConflicts(t *test
 	}
 }
 
-func TestVendorYANGStrictRejectsTopLevelExtensionBeforeRevision(t *testing.T) {
+// An extension instance has no place in the module statement order: the RFC
+// 7950 section 14 (and RFC 6020 section 12) ABNF lets an unknown-statement
+// appear in every stmtsep, so it may sit between the meta and revision
+// statements, as oc-ext:openconfig-version does in OpenConfig modules. libyang
+// accepts it as well. The non-extension statements around it stay ordered.
+func TestStrictAllowsTopLevelExtensionBeforeRevision(t *testing.T) {
 	metadata := `module metadata-extension {
     namespace "urn:test:metadata-extension";
     prefix me;
@@ -439,17 +444,46 @@ func TestVendorYANGStrictRejectsTopLevelExtensionBeforeRevision(t *testing.T) {
 
     container top;
 }`
-	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	ctx := buildVendorYANGModules(t, cambium.ValidationStrict, metadata, source)
+	mod, err := ctx.Schema("extension-before-revision")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Schema: %v", err)
 	}
-	if err := builder.LoadModuleStr(metadata); err != nil {
-		t.Fatalf("LoadModuleStr metadata: %v", err)
+	if got, ok := mod.Revision(); !ok || got != "2025-01-01" {
+		t.Fatalf("Revision = (%q,%v), want 2025-01-01,true", got, ok)
 	}
-	if err := builder.LoadModuleStr(source); err == nil {
-		t.Fatal("LoadModuleStr accepted top-level extension before revision in strict mode")
-	} else if !strings.Contains(err.Error(), `revision "2025-01-01" is out of order`) {
-		t.Fatalf("LoadModuleStr error = %v, want revision placement error", err)
+	if warnings := ctx.LoadReport().Warnings; len(warnings) != 0 {
+		t.Fatalf("LoadReport().Warnings = %v, want none", warnings)
+	}
+
+	misordered := `module revision-after-body {
+    namespace "urn:test:revision-after-body";
+    prefix rab;
+
+    import metadata-extension {
+        prefix me;
+    }
+
+    container top;
+    me:version "1.0.0";
+    revision 2025-01-01;
+}`
+	for _, mode := range []cambium.ValidationMode{cambium.ValidationStrict, cambium.ValidationVendorCompatible} {
+		builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.SetValidationMode(mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.LoadModuleStr(metadata); err != nil {
+			t.Fatalf("LoadModuleStr metadata: %v", err)
+		}
+		if err := builder.LoadModuleStr(misordered); err == nil {
+			t.Fatalf("mode %d: LoadModuleStr accepted revision after body statement", mode)
+		} else if !strings.Contains(err.Error(), `revision "2025-01-01" is out of order`) {
+			t.Fatalf("mode %d: LoadModuleStr error = %v, want revision placement error", mode, err)
+		}
 	}
 }
 
@@ -1024,6 +1058,86 @@ func TestVendorYANGVendorCompatibleLeafrefUnprefixedAbsoluteFallback(t *testing.
 	}
 	if !diagnosticContains(ctx.LoadReport().Warnings, "leafref-local-grouping", "unprefixed") {
 		t.Fatalf("warnings = %#v, want unprefixed leafref fallback warning", ctx.LoadReport().Warnings)
+	}
+}
+
+// RFC 7950 section 6.4.1: names without a prefix in a leafref path belong to
+// the module of the current node; inside a grouping that is the module where
+// the grouping is used, inside a typedef the module where it is referenced.
+// OpenConfig's openconfig-evpn grouping, used by openconfig-network-instance,
+// relies on this. Prefixes keep resolving in the defining module.
+func TestStrictLeafrefUnprefixedPathUsesInstantiatingModule(t *testing.T) {
+	definitions := `module leafref-unprefixed-defs {
+    namespace "urn:test:leafref-unprefixed-defs";
+    prefix defs;
+
+    container network-instances {
+        list network-instance {
+            key "name";
+            leaf name { type int8; }
+        }
+    }
+
+    typedef ni-ref {
+        type leafref {
+            path "/network-instances/network-instance/name";
+        }
+    }
+
+    grouping overlay-config {
+        leaf overlay-endpoint-network-instance {
+            type leafref {
+                path "/network-instances/network-instance/name";
+            }
+        }
+        leaf typed-ref { type ni-ref; }
+        leaf prefixed-ref {
+            type leafref {
+                path "/defs:network-instances/defs:network-instance/defs:name";
+            }
+        }
+    }
+}`
+	user := `module leafref-unprefixed-user {
+    namespace "urn:test:leafref-unprefixed-user";
+    prefix user;
+
+    import leafref-unprefixed-defs {
+        prefix defs;
+    }
+
+    container network-instances {
+        list network-instance {
+            key "name";
+            leaf name { type string; }
+            container evpn {
+                uses defs:overlay-config;
+            }
+        }
+    }
+}`
+	ctx := buildVendorYANGModules(t, cambium.ValidationStrict, definitions, user)
+	mod, err := ctx.Schema("leafref-unprefixed-user")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	evpn := "/user:network-instances/network-instance/evpn/"
+	for _, tc := range []struct{ leaf, want string }{
+		{"overlay-endpoint-network-instance", "/leafref-unprefixed-user/network-instances/network-instance/name"},
+		{"typed-ref", "/leafref-unprefixed-user/network-instances/network-instance/name"},
+		{"prefixed-ref", "/leafref-unprefixed-defs/network-instances/network-instance/name"},
+	} {
+		lr := resolvedTypeFor[cambium.ResolvedLeafRef](t, mod, evpn+tc.leaf)
+		target, ok := lr.Target()
+		if !ok {
+			t.Fatalf("%s: leafref target unresolved", tc.leaf)
+		}
+		if got := target.Path(); got != tc.want {
+			t.Errorf("%s: leafref target = %q, want %q", tc.leaf, got, tc.want)
+		}
+	}
+	if warnings := ctx.LoadReport().Warnings; len(warnings) != 0 {
+		t.Fatalf("LoadReport().Warnings = %v, want none", warnings)
 	}
 }
 

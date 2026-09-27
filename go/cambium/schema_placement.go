@@ -25,7 +25,10 @@ func validateTopLevelStatementOrderMode(root *yangparse.Statement, mode Validati
 	var warnings []Diagnostic
 	var previousRevision *yangparse.Statement
 	for _, st := range root.SubStatements() {
-		if mode == ValidationVendorCompatible && strings.Contains(st.Keyword, ":") {
+		// An extension instance has no place in the statement order: the
+		// RFC 7950 section 14 ABNF allows an unknown-statement in every
+		// stmtsep, so it may appear between any two statements.
+		if hasPrefix(st.Keyword) {
 			continue
 		}
 		next, ok := topLevelOrderPhase(st.Keyword)

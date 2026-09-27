@@ -627,6 +627,13 @@ func (m *moduleData) typedefDefaultEntryFromSeen(qname string, from *yangparse.S
 	return DefaultValue{}, false
 }
 
+// absolutePathStartsUnprefixed reports whether the first step of an absolute
+// path has no module prefix.
+func absolutePathStartsUnprefixed(path string) bool {
+	parts := splitPath(path)
+	return len(parts) > 0 && !hasPrefix(pathStepQName(parts[0]))
+}
+
 func resolveLeafRef(n *schemaNodeData, source *moduleData, lr *ResolvedLeafRef) {
 	resolveLeafRefWithSeen(n, source, lr, nil)
 }
@@ -640,13 +647,22 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	}
 	var target *schemaNodeData
 	if strings.HasPrefix(lr.path, "/") {
-		_, target = source.ctx.findNodeBySourceSchemaPathFrom(source, lr.path, lr.sourceStmt)
+		// RFC 7950 section 6.4.1: a name without a prefix belongs to the
+		// module of the current node, which is where a grouping is used or a
+		// typedef referenced, not the module that wrote the path. Prefixes
+		// still resolve through the writing module's imports.
+		if current := n.module; current != nil && current != source && absolutePathStartsUnprefixed(lr.path) {
+			target = findLeafrefDataPath(n, source, current, lr.path, lr.sourceStmt)
+		}
+		if target == nil {
+			_, target = source.ctx.findNodeBySourceSchemaPathFrom(source, lr.path, lr.sourceStmt)
+		}
 	} else {
 		target = findRelativeSchemaPathWithSeen(n, source, lr.path, lr.sourceStmt, seen)
 	}
 	if target == nil {
 		// A leafref path is a data path: choice and case nodes are not steps.
-		target = findLeafrefDataPath(n, source, lr.path, lr.sourceStmt)
+		target = findLeafrefDataPath(n, source, source, lr.path, lr.sourceStmt)
 	}
 	if target == nil || target.typeInfo == nil {
 		return
@@ -660,8 +676,10 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 // findLeafrefDataPath resolves a leafref path over the data tree, where ".."
 // moves to the nearest data-node ancestor and each named step matches a data
 // child, looking through choice and case nodes. It does not follow deref().
-func findLeafrefDataPath(start *schemaNodeData, source *moduleData, path string, fromStmt *yangparse.Statement) *schemaNodeData {
-	if start == nil || source == nil || source.ctx == nil {
+// Prefixes resolve in source; an absolute path whose first step has no prefix
+// starts at unprefixedRoot's top level.
+func findLeafrefDataPath(start *schemaNodeData, source, unprefixedRoot *moduleData, path string, fromStmt *yangparse.Statement) *schemaNodeData {
+	if start == nil || source == nil || source.ctx == nil || unprefixedRoot == nil {
 		return nil
 	}
 	parts := splitPath(path)
@@ -671,7 +689,7 @@ func findLeafrefDataPath(start *schemaNodeData, source *moduleData, path string,
 			return nil
 		}
 		first := pathStepQName(parts[0])
-		root := source
+		root := unprefixedRoot
 		if hasPrefix(first) {
 			root = source.resolveSourceQNameModuleFrom(first, fromStmt)
 		}

@@ -61,3 +61,45 @@ func TestLeafRefPredicateSkipped(t *testing.T) {
 		}
 	}
 }
+
+// TestLeafRefUnprefixedPathInForeignGroupingUsesCurrentModule: RFC 7950
+// section 6.4.1 puts unprefixed names in a leafref path in the module of the
+// current node, which is where the grouping is used or the typedef referenced,
+// not the module that wrote the path.
+func TestLeafRefUnprefixedPathInForeignGroupingUsesCurrentModule(t *testing.T) {
+	defs := `module lr-defs {
+        namespace "urn:lr-defs"; prefix defs;
+        typedef inst-ref {
+            type leafref { path "/instances/instance/name"; }
+        }
+        grouping overlay {
+            leaf absolute-ref { type leafref { path "/instances/instance/name"; } }
+            leaf typed-ref { type inst-ref; }
+            leaf parent-ref { type leafref { path "../../name"; } }
+        }
+    }`
+	user := `module lr-user {
+        namespace "urn:lr-user"; prefix user;
+        import lr-defs { prefix defs; }
+        container instances {
+            list instance {
+                key name;
+                leaf name { type string; }
+                container overlay { uses defs:overlay; }
+            }
+        }
+    }`
+	mod := loadMultiModSrc(t, "lr-user", defs, user)
+	valid := `{"lr-user:instances":{"instance":[{"name":"blue","overlay":` +
+		`{"absolute-ref":"blue","typed-ref":"blue","parent-ref":"blue"}}]}}`
+	if err := validateOne(t, mod, valid); err != nil {
+		t.Fatalf("leafrefs to existing instances should be valid: %v", err)
+	}
+	for _, leaf := range []string{"absolute-ref", "typed-ref", "parent-ref"} {
+		in := `{"lr-user:instances":{"instance":[{"name":"blue","overlay":{"` + leaf + `":"red"}}]}}`
+		err := validateOne(t, mod, in)
+		if err == nil || !strings.Contains(err.Error(), "no matching instance") {
+			t.Fatalf("%s=red has no instance, expected violation, got %v", leaf, err)
+		}
+	}
+}

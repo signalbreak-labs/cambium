@@ -655,7 +655,7 @@ func findModuleDirect(dir, name, revision string, mode ValidationMode) (file str
 			if moduleFileMatchesRevision(revisioned, name, revision, mode) {
 				return revisioned, true, nil
 			}
-			return "", false, fmt.Errorf("YANG file %q does not declare filename revision %q", revisioned, revision)
+			return "", false, filenameRevisionError(revisioned, revision, mode)
 		}
 		candidate := filepath.Join(dir, name+".yang")
 		if ok, err := fileExists(candidate); err != nil {
@@ -693,7 +693,7 @@ func findModuleDirect(dir, name, revision string, mode ValidationMode) (file str
 			valid = append(valid, match)
 			continue
 		}
-		return "", false, fmt.Errorf("YANG file %q does not declare filename revision %q", match, revision)
+		return "", false, filenameRevisionError(match, revision, mode)
 	}
 	if len(valid) > 0 {
 		return valid[len(valid)-1], true, nil
@@ -726,7 +726,7 @@ func findModuleRecursive(dir, name, revision string, mode ValidationMode) (file 
 				if moduleFileMatchesRevision(path, name, revision, mode) {
 					return path, true, nil
 				}
-				return "", false, fmt.Errorf("YANG file %q does not declare filename revision %q", path, revision)
+				return "", false, filenameRevisionError(path, revision, mode)
 			case moduleFile:
 				if moduleFileMatchesRevision(path, name, revision, mode) {
 					fallback = path
@@ -769,7 +769,7 @@ func findModuleRecursive(dir, name, revision string, mode ValidationMode) (file 
 				revisions = append(revisions, path)
 				continue
 			}
-			return "", false, fmt.Errorf("YANG file %q does not declare filename revision %q", path, filenameRevision)
+			return "", false, filenameRevisionError(path, filenameRevision, mode)
 		}
 	}
 	if len(revisions) > 0 {
@@ -871,6 +871,26 @@ func moduleFileMatchesRevision(path, name, revision string, mode ValidationMode)
 		return moduleDeclaresRevision(stmt, revision)
 	}
 	return effectiveRevision == revision
+}
+
+// filenameRevisionError explains why the file at path failed
+// moduleFileMatchesRevision: its own read, parse or revision error when it
+// has one, rather than a claim about its revision statements.
+func filenameRevisionError(path, revision string, mode ValidationMode) error {
+	raw, err := yangparse.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	stmts, err := yangparse.Parse(raw, path)
+	if err != nil {
+		return err
+	}
+	if len(stmts) == 1 {
+		if _, _, err := moduleRevisionValidatedMode(stmts[0], mode); err != nil {
+			return err
+		}
+	}
+	return fmt.Errorf("YANG file %q does not declare filename revision %q", path, revision)
 }
 
 func moduleDeclaresRevision(stmt *yangparse.Statement, revision string) bool {

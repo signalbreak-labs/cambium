@@ -831,6 +831,46 @@ func TestLoadModuleRejectsRevisionedFileWhenFilenameRevisionIsNotLatest(t *testi
 	}
 }
 
+// TestLoadModuleRevisionedFileReportsItsParseError: a revision-named file
+// that does not parse must report the parse error, not claim that the file
+// does not declare its filename revision.
+func TestLoadModuleRevisionedFileReportsItsParseError(t *testing.T) {
+	src := `module bad-escape {
+    namespace "urn:bad-escape";
+    prefix be;
+    revision 2025-01-01;
+
+    leaf value {
+        type string {
+            pattern "\*";
+        }
+    }
+}
+`
+	for _, recursive := range []bool{false, true} {
+		dir := t.TempDir()
+		writeModuleFile(t, filepath.Join(dir, "bad-escape@2025-01-01.yang"), []byte(src))
+		searchDir := dir
+		if recursive {
+			searchDir = filepath.Join(dir, "...")
+		}
+		builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.SearchPath(searchDir); err != nil {
+			t.Fatal(err)
+		}
+		err = builder.LoadModule("bad-escape", nil, nil)
+		if err == nil {
+			t.Fatalf("recursive=%v: LoadModule accepted a file that does not parse", recursive)
+		}
+		if got := err.Error(); !strings.Contains(got, `invalid escape sequence: \*`) || strings.Contains(got, "does not declare filename revision") {
+			t.Fatalf("recursive=%v: LoadModule error = %q, want the parse error", recursive, got)
+		}
+	}
+}
+
 func TestLoadModuleRevisionPinRejectsMismatchedRevisionedCandidate(t *testing.T) {
 	dir := t.TempDir()
 	mismatched := `module wanted {

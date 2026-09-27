@@ -178,6 +178,96 @@ func TestUsesAugmentAppliesToUseInstanceOnly(t *testing.T) {
 	}
 }
 
+// A module-top-level uses of a grouping that itself contains a uses is valid
+// (RFC 7950 section 7.13: uses is a data definition statement, allowed in
+// module bodies and groupings alike). The nested expansion keeps the
+// grouping's declaration order at the module root.
+func TestTopLevelUsesOfGroupingWithNestedUses(t *testing.T) {
+	source := `module cambium-top-nested-uses {
+    namespace "urn:cambium:top-nested-uses";
+    prefix ctnu;
+
+    grouping inner {
+        leaf inner-leaf { type string; }
+        container inner-box { leaf deep { type string; } }
+    }
+
+    grouping outer {
+        leaf first { type string; }
+        uses inner;
+        leaf last { type string; }
+    }
+
+    uses outer;
+    container after { leaf x { type string; } }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	t.Cleanup(func() { ctx.Close() })
+	mod, err := ctx.Schema("cambium-top-nested-uses")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	if got, want := strings.Join(schemaChildNames(mod.Children()), ","), "first,inner-leaf,inner-box,last,after"; got != want {
+		t.Fatalf("module children = %s, want %s", got, want)
+	}
+	schemaNodeAt(t, mod, "/ctnu:inner-box/deep")
+}
+
+// TestTopLevelUsesPlacesGroupingNotificationsWithNotifications: a YANG 1.1
+// grouping may define notifications (RFC 7950 section 7.12.1); used at module
+// top level they are top-level notifications, not data nodes.
+func TestTopLevelUsesPlacesGroupingNotificationsWithNotifications(t *testing.T) {
+	source := `module cambium-top-uses-notif {
+    yang-version 1.1;
+    namespace "urn:cambium:top-uses-notif";
+    prefix ctun;
+
+    grouping events {
+        leaf status { type string; }
+        notification changed { leaf what { type string; } }
+    }
+
+    notification first-event;
+    uses events;
+    notification last-event;
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	t.Cleanup(func() { ctx.Close() })
+	mod, err := ctx.Schema("cambium-top-uses-notif")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	if got, want := strings.Join(schemaChildNames(mod.TopLevel()), ","), "status"; got != want {
+		t.Fatalf("top-level data nodes = %s, want %s", got, want)
+	}
+	if got, want := strings.Join(schemaChildNames(mod.Notifications()), ","), "first-event,changed,last-event"; got != want {
+		t.Fatalf("notifications = %s, want %s", got, want)
+	}
+	if got, want := strings.Join(schemaChildNames(mod.Children()), ","), "first-event,status,changed,last-event"; got != want {
+		t.Fatalf("module children = %s, want %s", got, want)
+	}
+}
+
 func TestUsesRefineResolvesPrefixedTarget(t *testing.T) {
 	source := `module cambium-uses-refine-prefixed {
     namespace "urn:cambium:uses-refine-prefixed";
