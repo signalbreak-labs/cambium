@@ -67,9 +67,9 @@ declaration order*, not a sorted order:
 `manifest.toml` is the single index of cases. Each `[[case]]` entry names the
 case, optionally declares its tier, lists the ordering invariants it exercises,
 points at its fixture inputs, and lists the expected outputs to compare against.
-As of this writing the manifest holds **234 cases**: **13** carry
-`tier = "schema-ir"` and the remaining **221** are backend/data cases (the
-default tier — they declare an `input`, and 219 of them are additionally marked
+As of this writing the manifest holds **235 cases**: **13** carry
+`tier = "schema-ir"` and the remaining **222** are backend/data cases (the
+default tier — they declare an `input`, and 220 of them are additionally marked
 `oracle = true`). **24** of the backend/data cases are must-reject cases
 (`expect = "reject"`). These counts come from the live manifest; re-derive them
 with `grep -c '^\[\[case\]\]'`, `grep -c '^tier = "schema-ir"'`,
@@ -228,9 +228,12 @@ opt-in differential flag for the experimental datatree lane:
   `datatree = true`. They still belong to the backend/data tier, but
   `cmd/cambium datatree-diff` also parses, validates, and serializes them
   through the experimental pure-Go `datatree` package, then compares normalized
-  XML/JSON output against the libyang backend. The lane compares validation
-  verdicts too: datatree must accept every accept case (`Tree.Validate` returns
-  nil) and, like libyang, refuse every must-reject case. This is an explicit
+  XML/JSON output against the libyang backend. Like the backend, the datatree
+  side binds every implemented module of the case's module directory
+  (`datatree.ParseModules(ctx.Modules(), ...)`), so inputs whose top-level nodes
+  span several modules are compared too. The lane compares validation verdicts
+  too: datatree must accept every accept case (`Tree.Validate` returns nil) and,
+  like libyang, refuse every must-reject case. This is an explicit
   supported-subset gate, not a claim that datatree is a complete conformance
   tier. The normalization is
   compact-only (`formatBytesForDifferential` in `go/conformance/runner.go`):

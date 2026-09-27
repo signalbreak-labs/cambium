@@ -17,10 +17,15 @@ func levelSchema(sn cambium.SchemaNodeRef) []cambium.SchemaNodeRef {
 	return childRefs(sn.DataChildren(false))
 }
 
-// topLevelSchema returns the module's top-level schema nodes with choice and
-// case nodes kept, in effective declaration order.
-func topLevelSchema(m cambium.Module) []cambium.SchemaNodeRef {
-	return childRefs(m.TopLevel())
+// topLevelSchema returns the modules' top-level schema nodes with choice and
+// case nodes kept, module after module in the order given, each module's in
+// effective declaration order.
+func topLevelSchema(mods ...cambium.Module) []cambium.SchemaNodeRef {
+	var out []cambium.SchemaNodeRef
+	for _, m := range mods {
+		out = append(out, childRefs(m.TopLevel())...)
+	}
+	return out
 }
 
 // levelIndex looks up the data nodes present at one level by schema identity.

@@ -16,6 +16,10 @@
 // canonical order libyang uses, by key or value per type (I2). Input member
 // order is irrelevant — output order comes from the schema.
 //
+// Parse binds one module. ParseModules binds several, for a document whose
+// top-level nodes come from different modules; those are grouped by module,
+// modules in name order, as libyang orders them.
+//
 // JSON_IETF (RFC 7951) and XML round-trip containers, leaves, leaf-lists, and
 // lists. Leaf values are held as canonical JSON_IETF tokens (RFC 7950 canonical
 // forms, as libyang stores them), with type-aware validation and XML text
@@ -54,8 +58,8 @@ const (
 // and are not concurrency-safe; give each goroutine its own parsed tree or guard
 // access externally.
 type Tree struct {
-	module cambium.Module
-	roots  []*node
+	modules []cambium.Module // bound modules, in top-level order (see ParseModules)
+	roots   []*node
 }
 
 type nodeKind int
@@ -107,21 +111,29 @@ func dataNodeKey(n *node) nodeKey {
 	return nodeKey{module: n.module, name: n.name}
 }
 
-// Parse decodes data against schema m into an ordered Tree.
+// Parse decodes data against schema m into an ordered Tree. Every top-level
+// node must belong to m; ParseModules accepts a document whose top-level nodes
+// come from several modules.
 func Parse(m cambium.Module, f Format, data []byte) (*Tree, error) {
+	return parseTree([]cambium.Module{m}, f, data)
+}
+
+// parseTree decodes data into a Tree bound to mods, which are in top-level
+// order.
+func parseTree(mods []cambium.Module, f Format, data []byte) (*Tree, error) {
 	switch f {
 	case FormatJSONIETF:
 		raw, err := decodeJSONObject("root", data)
 		if err != nil {
 			return nil, err
 		}
-		roots, err := parseChildren(flattenTopLevel(m), raw, "")
+		roots, err := parseChildren(flattenTopLevel(mods...), raw, "")
 		if err != nil {
 			return nil, err
 		}
-		return &Tree{module: m, roots: roots}, nil
+		return &Tree{modules: mods, roots: roots}, nil
 	case FormatXML:
-		return parseXML(m, data)
+		return parseXML(mods, data)
 	default:
 		return nil, fmt.Errorf("datatree: unsupported format %d", f)
 	}
@@ -173,15 +185,18 @@ func lookupMember(sn cambium.SchemaNodeRef, raw map[string]json.RawMessage, pare
 	return "", nil, false
 }
 
-// flattenTopLevel returns the module's top-level data nodes with choice/case
-// nodes flattened away (their data children spliced in at the choice's
-// position), matching how SchemaNodeRef.DataChildren(true) treats nested levels.
-// TopLevel() alone does not flatten, so without this a leaf inside a top-level
-// choice would be unreachable.
-func flattenTopLevel(m cambium.Module) []cambium.SchemaNodeRef {
+// flattenTopLevel returns the modules' top-level data nodes, module after
+// module in the order given, with choice/case nodes flattened away (their data
+// children spliced in at the choice's position), matching how
+// SchemaNodeRef.DataChildren(true) treats nested levels. TopLevel() alone does
+// not flatten, so without this a leaf inside a top-level choice would be
+// unreachable.
+func flattenTopLevel(mods ...cambium.Module) []cambium.SchemaNodeRef {
 	var out []cambium.SchemaNodeRef
-	for n := range m.TopLevel().Iter() {
-		out = appendFlattened(out, n)
+	for _, m := range mods {
+		for n := range m.TopLevel().Iter() {
+			out = appendFlattened(out, n)
+		}
 	}
 	return out
 }

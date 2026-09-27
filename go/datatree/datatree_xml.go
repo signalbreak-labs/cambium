@@ -103,16 +103,16 @@ type xmlQName struct {
 
 const maxXMLNestingDepth = 10000
 
-func parseXML(m cambium.Module, data []byte) (*Tree, error) {
+func parseXML(mods []cambium.Module, data []byte) (*Tree, error) {
 	roots, err := decodeXMLForest(data)
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := bindXML(flattenTopLevel(m), roots)
+	nodes, err := bindXML(flattenTopLevel(mods...), roots)
 	if err != nil {
 		return nil, err
 	}
-	return &Tree{module: m, roots: nodes}, nil
+	return &Tree{modules: mods, roots: nodes}, nil
 }
 
 // decodeXMLForest reads the (possibly multi-root) top-level elements; YANG data

@@ -14,6 +14,8 @@ import (
 // 6243 report-all, scoped to subtrees that are present). It recurses into
 // present containers and list entries; absent containers and lists are not
 // materialized. Existing values are never overwritten, and it is idempotent.
+// At the top level it fills the defaults of every module the tree is bound to
+// (see ParseModules).
 //
 // Inside a choice, defaults are filled only in the case whose data exists or,
 // when no case has data, in the choice's default case (RFC 7950 §7.6.1,
@@ -26,7 +28,7 @@ import (
 // leaf-list defaults are put in canonical order (I2).
 func (t *Tree) ApplyDefaults() {
 	root := t.xroot()
-	t.roots = applyDefaultsLevel(root, root, topLevelSchema(t.module), t.roots)
+	t.roots = applyDefaultsLevel(root, root, topLevelSchema(t.modules...), t.roots)
 }
 
 func applyDefaultsLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, data []*node) []*node {

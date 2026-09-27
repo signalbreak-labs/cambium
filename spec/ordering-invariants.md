@@ -116,6 +116,12 @@ Backend/data tier:
    configuration lists and configuration leaf-lists are sorted; `config false`
    and keyless lists keep insertion order. Every data-tier implementation,
    engine-backed or not, MUST emit this same order.
+5. Top-level data nodes from several modules have no common schema parent, so
+   they follow the pinned engine's placement: grouped by module, modules in
+   bytewise order of their names, each module's top-level nodes in effective
+   schema declaration order. The order MUST NOT depend on input order, module
+   load order, namespace, or prefix. Every data-tier implementation MUST emit
+   this same order (fixture `multi-module-top-level-order`).
 
 ### I3 - List keys are first and in key-statement order
 
@@ -232,6 +238,7 @@ default is `"accept"`):
 | `ordering-nested-user-cascading` | Backend/data | I1 | nested user-ordered lists |
 | `list-keyless-positional` | Backend/data | I1/I2 | keyless list positional order |
 | `list-ordered-by-system-canonical` | Backend/data | I2 | system-ordered entries canonicalize deterministically |
+| `multi-module-top-level-order` | Backend/data | I2 | top-level nodes of several modules group by module in name order, not input, load, or namespace order |
 | `json-object-determinism` | Backend/data | I5 | deterministic object member output |
 | `gnmi-ordered-atomic` | Backend/data | I6 | ordered list carried as one atomic JSON_IETF gNMI payload value; predicated gNMI paths are rejected with a data-path error so callers pass the list path for the atomic update |
 

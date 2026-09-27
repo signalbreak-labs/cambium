@@ -82,11 +82,36 @@ sync with the API. To cross formats, parse one format and serialize another —
 `Parse(mod, FormatXML, ...)` then `Serialize(FormatJSONIETF)` round-trips XML to
 JSON_IETF.
 
+### Documents from several modules
+
+`Parse` binds one module: a top-level node of any other module is an error.
+`datatree.ParseModules(modules, format, data)` binds several, so a JSON_IETF
+object with members `"a:x"` and `"b:y"`, or XML siblings in different namespaces,
+parse into one tree. Pass `ctx.Modules()` (every implemented module) to accept
+what the libyang backend accepts for a tree parsed against that context:
+
+```go
+tree, err := datatree.ParseModules(ctx.Modules(), datatree.FormatJSONIETF,
+	[]byte(`{"ex-ref:bound-if":"eth0","ex-base:interface":[{"name":"eth0"}]}`))
+```
+
+Top-level nodes come out grouped by module, modules in bytewise name order, each
+module's nodes in schema declaration order — the order libyang gives them,
+whatever the input order or the order of the modules passed (above, `ex-base`'s
+`interface` before `ex-ref`'s `bound-if`). Below the top level nothing changes.
+The bound modules are the tree's schema: `Validate` checks the top-level
+constraints of every one of them, including a module with no data in the document
+(a missing mandatory top-level leaf is reported, as libyang reports it), and
+resolves leafref paths and `must`/`when` expressions across modules;
+`ApplyDefaults` fills the top-level defaults of every bound module. The full
+program is `ExampleParseModules` in `go/datatree/example_test.go`.
+
 ## Reading and navigating
 
 A parsed `*Tree` exposes its data as ordered `Node` values:
 
-- `RootNodes() []Node` — the top-level nodes in schema order.
+- `RootNodes() []Node` — the top-level nodes in schema order (grouped by
+  module in name order when they come from several modules).
 - `Find(path) (Node, bool)` — a slash-path lookup.
 - On a `Node`: `Name()`, `Module()`, the kind predicates (`IsLeaf()`,
   `IsLeafList()`, `IsContainer()`, `IsList()`), `LeafValue()` for a leaf's value,
@@ -173,10 +198,11 @@ validating, does.
 ## Supported scope and limitations
 
 This is the experimental part. `datatree` currently handles containers, leaves,
-leaf-lists, lists, and opaque `anydata`/`anyxml` values in JSON_IETF, with the
-validation above, and it preserves ordering invariants I1/I2/I3/I5 over what it
-supports, including the canonical order of `ordered-by system` data. It does
-**not** yet handle:
+leaf-lists, lists, and opaque `anydata`/`anyxml` values in JSON_IETF, in
+documents of one module or several, with the validation above, and it preserves
+ordering invariants I1/I2/I3/I5 over what it supports, including the canonical
+order of `ordered-by system` data and libyang's order for top-level nodes of
+several modules. It does **not** yet handle:
 
 - Opaque `anydata`/`anyxml` in XML, or cross-format conversion of opaque content.
 - RPC, action, and notification (operation) data.

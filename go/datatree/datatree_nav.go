@@ -20,7 +20,8 @@ func wrapNodes(ns []*node) []Node {
 	return out
 }
 
-// RootNodes returns the top-level data nodes in schema declaration order.
+// RootNodes returns the top-level data nodes in schema declaration order; in a
+// tree from ParseModules, grouped by module in module-name order.
 func (t *Tree) RootNodes() []Node {
 	return wrapNodes(t.roots)
 }

@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- `datatree.ParseModules` parses documents whose top-level nodes come from
+  several modules (JSON_IETF `{"a:x":…,"b:y":…}`, or XML siblings in several
+  namespaces). Top-level nodes are grouped by module in bytewise module-name
+  order, each module's in schema order, as libyang orders them; `Validate`
+  and `ApplyDefaults` cover every bound module, including leafrefs and
+  `must`/`when` that cross modules. `Parse` still binds one module.
+- Conformance case `multi-module-top-level-order` (I2) pins libyang's order
+  for top-level nodes of several modules; it and `types-leafref-cross-module`
+  run in the `datatree` differential lane.
 - Must-reject conformance cases: `expect = "reject"` in
   `conformance/manifest.toml` marks a data document that a strict, validating
   parse must refuse. `cmd/cambium` asserts that libyang (and the `yanglint`
@@ -69,6 +78,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   parse time, so `Entries`/`LeafListValues` return canonical order.
 - `datatree` XML identityref values resolve prefixes only against in-scope
   `xmlns` declarations, not the schema's import prefixes.
+- The `datatree` differential lane parses each case against every implemented
+  module (`ParseModules`), as the backend does, instead of guessing one module
+  from the input, and reports a schema build failure as such.
 - The `datatree-diff` lane runs `Tree.Validate` on every accept case before
   comparing output, so a flagged case fails if datatree rejects valid data.
 - Codegen names every package-level identifier from one allocator per file,

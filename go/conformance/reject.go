@@ -175,11 +175,8 @@ func dataTreeRejection(conformanceDir string, c Case, input []byte) (rejection, 
 	if err != nil {
 		return nil, err
 	}
-	mod, err := dataTreeModuleForInput(ctx, c.InputFormat, input)
-	if err != nil {
-		return nil, err
-	}
-	tree, rejection := datatree.Parse(mod, inFmt, input)
+	// Bind every implemented module, as dataTreeCaseOutputs does.
+	tree, rejection := datatree.ParseModules(ctx.Modules(), inFmt, input)
 	if rejection != nil {
 		return rejection, nil
 	}

@@ -1629,6 +1629,7 @@ json_ietf = "golden/types-leafref-require-instance-false/output.json_ietf"
 
 [[case]]
 name = "types-leafref-cross-module"
+datatree = true
 module = "fixtures/types-leafref-cross-module/module"
 input = "fixtures/types-leafref-cross-module/input.xml"
 input-format = "xml"
@@ -3613,6 +3614,18 @@ oracle = true
 xml = "golden/rpc-action-notification-coexistence/output.xml"
 json = "golden/rpc-action-notification-coexistence/output.json"
 json_ietf = "golden/rpc-action-notification-coexistence/output.json_ietf"
+
+[[case]]
+name = "multi-module-top-level-order"
+datatree = true
+invariants = ["I2"]
+module = "fixtures/multi-module-top-level-order/module"
+input = "fixtures/multi-module-top-level-order/input.xml"
+input-format = "xml"
+oracle = true
+[case.expected]
+xml = "golden/multi-module-top-level-order/output.xml"
+json = "golden/multi-module-top-level-order/output.json"
 
 # Must-reject cases (expect = "reject"): each input violates one RFC 7950 rule,
 # so a validating parse must refuse it. They have no goldens; the runners

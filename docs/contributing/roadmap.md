@@ -39,7 +39,9 @@ lands rather than adding another dated file.
 
 - **Pure-Go data tree** (`datatree`) — a cgo-free generic data tree and the current
   development frontier. What works today: JSON_IETF and XML parse/serialize for
-  containers, leaves, leaf-lists, and lists; structural and type validation
+  containers, leaves, leaf-lists, and lists, including documents whose top-level
+  nodes come from several modules (`ParseModules`, in libyang's top-level
+  order); structural and type validation
   with choice/case semantics; leaf-list, list-key, and `unique` uniqueness over
   canonical values; leafref instance existence;
   `must`/`when` over a growing XPath subset; opaque `anydata`/`anyxml` in
@@ -69,11 +71,10 @@ lands rather than adding another dated file.
   **both** engines in the differential lane (`go run ./cmd/cambium datatree-diff`),
   which byte-compares output after compact-only normalization — element and member
   order is never normalized away. Growing that flagged subset *is* the path to
-  stable. Today 187 of the 221 backend/data cases are flagged, including all 24
+  stable. Today 189 of the 222 backend/data cases are flagged, including all 24
   must-reject cases; the rest are the scope gaps above, with-defaults output
-  modes, RFC 7952 metadata, multi-module documents, gNMI output, one JSON
-  escape-spelling difference, and `ietf-interfaces`, which waits on two
-  schema-build fixes.
+  modes, RFC 7952 metadata, gNMI output, one JSON escape-spelling difference, and
+  `ietf-interfaces`, which waits on two schema-build fixes.
 
 ## Not built yet
 
