@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
 	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
@@ -65,6 +66,7 @@ type goEmitter struct {
 	needsSort          bool
 	emittedAnyData     bool
 	emittedMetadata    bool
+	names              *identAllocator
 	emitErr            error
 }
 
@@ -98,14 +100,8 @@ type fieldInfo struct {
 }
 
 func (g *goEmitter) emit() string {
-	g.helpers = make(map[string]bool)
-	g.typeSnippets = make(map[string]string)
-	g.intRangeTypes = make(map[string]intRangeInfo)
-	g.stringLengthTypes = make(map[string]stringLengthInfo)
-	g.enumTypes = make(map[string]bool)
-	g.bitsTypes = make(map[string]bool)
-	g.identityrefTypes = make(map[string]bool)
-	g.unionTypes = make(map[string]bool)
+	g.initPlanningState()
+	g.allocateNames()
 
 	rootChildren := g.documentTopLevelChildren()
 
@@ -155,7 +151,8 @@ func moduleIdentityKey(mod cambium.Module) string {
 func (g *goEmitter) emitImports(out *strings.Builder) {
 	needStrings := true // strings.Builder, strings.Repeat
 	needJSONParse := g.helpers["jsonParse"]
-	needFmt := needJSONParse || g.helpers["xmlEscape"] || g.helpers["jsonEscape"] || g.helpers["binaryParse"] || g.helpers["patternValidate"] || len(g.intRangeTypes) > 0 || len(g.stringLengthTypes) > 0 || g.emittedDecimal64 || len(g.bitsTypes) > 0
+	needJSON := needJSONParse || g.emittedAnyData // anydata content checks use json and xml
+	needFmt := needJSON || g.helpers["xmlEscape"] || g.helpers["jsonEscape"] || g.helpers["binaryParse"] || g.helpers["patternValidate"] || len(g.intRangeTypes) > 0 || len(g.stringLengthTypes) > 0 || g.emittedDecimal64 || len(g.bitsTypes) > 0
 	needStrconv := needJSONParse || g.helpers["strconv"] || len(g.intRangeTypes) > 0 || g.emittedDecimal64
 	needMathBig := needJSONParse && g.emittedDecimal64
 	needUTF8 := needJSONParse || len(g.stringLengthTypes) > 0
@@ -167,9 +164,12 @@ func (g *goEmitter) emitImports(out *strings.Builder) {
 	if g.helpers["binaryParse"] {
 		imports = append(imports, "\"encoding/base64\"")
 	}
-	if needJSONParse {
+	if needJSON {
 		imports = append(imports, "\"encoding/json\"")
 		imports = append(imports, "\"io\"")
+	}
+	if g.emittedAnyData {
+		imports = append(imports, "\"encoding/xml\"")
 	}
 	if needFmt {
 		imports = append(imports, "\"fmt\"")
@@ -558,31 +558,38 @@ type identityrefMember struct {
 	namespace string
 }
 
-func (g *goEmitter) ensureIdentityref(name, yangName string, members []identityrefMember) {
+// ensureIdentityref registers the identityref type name for a leaf defined in
+// leafModule. Per RFC 7951 section 6.8 an identity from another module than the
+// leaf's is always module-qualified; one from the leaf's own module is emitted
+// bare but parsed in either form. XML prefixes follow the same rule, since the
+// leaf element's default namespace is the leaf module's.
+func (g *goEmitter) ensureIdentityref(name, yangName, leafModule string, members []identityrefMember) {
 	if g.identityrefTypes[name] {
 		return
 	}
 	g.identityrefTypes[name] = true
 	view := identityrefView{Name: name, YangName: yangName}
 	for _, m := range members {
+		foreign := m.module != leafModule
 		jsonName := m.name
-		if m.module != g.moduleName {
+		if foreign {
 			jsonName = m.module + ":" + m.name
 		}
 		view.Members = append(view.Members, identityrefMemberView{
-			Const:     name + m.variant,
-			Name:      m.name,
-			JSONName:  jsonName,
-			Foreign:   m.module != g.moduleName,
-			Prefix:    m.prefix,
-			Namespace: m.namespace,
+			Const:         name + m.variant,
+			Name:          m.name,
+			JSONName:      jsonName,
+			QualifiedName: m.module + ":" + m.name,
+			Foreign:       foreign,
+			Prefix:        m.prefix,
+			Namespace:     m.namespace,
 		})
 	}
 	g.helpers["xmlEscape"] = true
 	g.typeSnippets[name] = g.renderType(tmplIdentityref, view)
 }
 
-func (g *goEmitter) ensureUnion(name, yangName string, members []cambium.TypeInfo, prefix, fieldIdent string) {
+func (g *goEmitter) ensureUnion(name, yangName, leafModule string, members []cambium.TypeInfo, prefix, fieldIdent string) {
 	if g.unionTypes[name] {
 		return
 	}
@@ -596,7 +603,7 @@ func (g *goEmitter) ensureUnion(name, yangName string, members []cambium.TypeInf
 		label := unionMemberLabel(member)
 		variant := safeVariantIdent(label, used)
 		variantType := name + variant
-		payloadType := g.unionPayloadType(name, variant, member, prefix, fieldIdent)
+		payloadType := g.unionPayloadType(name, variant, leafModule, member, prefix, fieldIdent)
 		view.Members = append(view.Members, unionMemberView{
 			VariantType: variantType,
 			Variant:     variant,
@@ -615,11 +622,11 @@ func (g *goEmitter) ensureUnion(name, yangName string, members []cambium.TypeInf
 	g.typeSnippets[name] = g.renderType(tmplUnion, view)
 }
 
-func (g *goEmitter) unionPayloadType(unionName, variant string, member cambium.TypeInfo, prefix, fieldIdent string) string {
+func (g *goEmitter) unionPayloadType(unionName, variant, leafModule string, member cambium.TypeInfo, prefix, fieldIdent string) string {
 	switch r := member.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
-			return g.unionPayloadType(unionName, variant, *realtype, prefix, fieldIdent)
+			return g.unionPayloadType(unionName, variant, leafModule, *realtype, prefix, fieldIdent)
 		}
 		return "string"
 	case cambium.ResolvedBoolean:
@@ -659,16 +666,15 @@ func (g *goEmitter) unionPayloadType(unionName, variant string, member cambium.T
 		g.ensureBits(bitsName, variant, r.Values())
 		return bitsName
 	case cambium.ResolvedIdentityRef:
-		members := collectIdentityrefMembers(r.Bases())
-		if len(members) == 0 {
+		if len(r.Bases()) == 0 {
 			return "string"
 		}
 		identName := unionName + variant + "Enum"
-		g.ensureIdentityref(identName, variant, members)
+		g.ensureIdentityref(identName, variant, leafModule, collectIdentityrefMembers(r.Bases()))
 		return identName
 	case cambium.ResolvedUnion:
 		nestedName := unionName + variant + "Union"
-		g.ensureUnion(nestedName, variant, r.Members(), prefix, fieldIdent+variant)
+		g.ensureUnion(nestedName, variant, leafModule, r.Members(), prefix, fieldIdent+variant)
 		return nestedName
 	default:
 		return "string"
@@ -1241,28 +1247,36 @@ func (g *goEmitter) emitRootStruct(fields []fieldInfo, out *strings.Builder) {
 }
 
 func (g *goEmitter) emitOperationDocuments(out *strings.Builder) {
+	g.visitOperationDocuments(func(op, source cambium.SchemaNodeRef, suffix, validationPath string) {
+		g.emitOperationDocument(op, source, suffix, validationPath, out)
+	})
+}
+
+// visitOperationDocuments calls visit for every RPC/notification document the
+// module emits, in emission order.
+func (g *goEmitter) visitOperationDocuments(visit func(op, source cambium.SchemaNodeRef, suffix, validationPath string)) {
 	for rpc := range g.module.RPCs().Iter() {
 		input := g.operationInputSource(rpc)
 		output := g.operationOutputSource(rpc)
 		switch {
 		case input.Kind() != cambium.SchemaNodeKindUnknown:
-			g.emitOperationDocument(rpc, input, "RPC", "/"+rpc.Module().Name()+"/"+rpc.Name(), out)
+			visit(rpc, input, "RPC", "/"+rpc.Module().Name()+"/"+rpc.Name())
 			if output.Kind() != cambium.SchemaNodeKindUnknown {
-				g.emitOperationDocument(rpc, output, "RPCOutput", "/"+rpc.Module().Name()+"/"+rpc.Name()+"/output", out)
+				visit(rpc, output, "RPCOutput", "/"+rpc.Module().Name()+"/"+rpc.Name()+"/output")
 			}
 		case output.Kind() != cambium.SchemaNodeKindUnknown:
-			g.emitOperationDocument(rpc, output, "RPC", "/"+rpc.Module().Name()+"/"+rpc.Name(), out)
+			visit(rpc, output, "RPC", "/"+rpc.Module().Name()+"/"+rpc.Name())
 		default:
-			g.emitOperationDocument(rpc, rpc, "RPC", "/"+rpc.Module().Name()+"/"+rpc.Name(), out)
+			visit(rpc, rpc, "RPC", "/"+rpc.Module().Name()+"/"+rpc.Name())
 		}
 	}
 	for notif := range g.module.Notifications().Iter() {
-		g.emitOperationDocument(notif, notif, "Notification", "/"+notif.Module().Name()+"/"+notif.Name(), out)
+		visit(notif, notif, "Notification", "/"+notif.Module().Name()+"/"+notif.Name())
 	}
 }
 
 func (g *goEmitter) emitOperationDocument(op, source cambium.SchemaNodeRef, suffix, validationPath string, out *strings.Builder) {
-	structName := g.modulePascal + toPascalCase(op.Name()) + suffix
+	structName := g.operationDocumentName(op, suffix)
 	fields := g.collectFields(structName, g.operationSourcePayloadChildren(op, source))
 
 	g.emitStructDefinition(structName, fields, out)
@@ -1551,23 +1565,26 @@ func stringPatternLiteral(info cambium.TypeInfo) string {
 }
 
 func (g *goEmitter) collectFields(prefix string, children []cambium.SchemaNodeRef) []fieldInfo {
-	fields := make([]fieldInfo, 0, len(children))
+	fields := make([]fieldInfo, len(children))
 	used := make(map[string]bool)
 	usedTypeComponents := make(map[string]bool)
 	usedWires := make(map[string]bool)
-	for _, child := range children {
+	for _, i := range g.allocationOrder(children) {
+		child := children[i]
 		mod := child.Module()
 		ident := safeFieldIdent(child.Name(), used)
 		typeIdent := safeTypeIdent(child.Name(), usedTypeComponents)
 		goType, optional, shape := g.fieldType(prefix, child, ident, typeIdent)
 		// A sibling augmented from another module may share an earlier
 		// sibling's local name; key its metadata by module-qualified name.
+		// "Earlier" is allocation order, so the owning module's node keeps
+		// the plain key whatever order the modules were loaded in.
 		metaKey := child.Name()
 		if usedWires[metaKey] {
 			metaKey = mod.Name() + ":" + metaKey
 		}
 		usedWires[child.Name()] = true
-		fields = append(fields, fieldInfo{
+		fields[i] = fieldInfo{
 			node:          child,
 			ident:         ident,
 			wire:          child.Name(),
@@ -1583,7 +1600,7 @@ func (g *goEmitter) collectFields(prefix string, children []cambium.SchemaNodeRe
 			isBits:        shape.isBits,
 			isIdentityref: shape.isIdentityref,
 			isUnion:       shape.isUnion,
-		})
+		}
 	}
 	return fields
 }
@@ -1632,17 +1649,17 @@ func (g *goEmitter) fieldType(prefix string, node cambium.SchemaNodeRef, fieldId
 		}
 		return "AnyData", optional, scalarShape{goType: "AnyData", jsonKind: "AnyData"}
 	case cambium.SchemaNodeKindContainer:
-		structName := prefix + typeIdent
+		structName := g.names.allocate(nameKey{node: node, role: "struct"}, prefix+typeIdent, structFamily)
 		optional = node.IsPresenceContainer()
 		if optional {
 			structName = "*" + structName
 		}
 		return structName, optional, scalarShape{goType: structName, jsonKind: "String"}
 	case cambium.SchemaNodeKindAction, cambium.SchemaNodeKindNotification:
-		structName := "*" + prefix + typeIdent
+		structName := "*" + g.names.allocate(nameKey{node: node, role: "struct"}, prefix+typeIdent, structFamily)
 		return structName, true, scalarShape{goType: structName, jsonKind: "String"}
 	case cambium.SchemaNodeKindList:
-		entryName := prefix + typeIdent + "Entry"
+		entryName := g.names.allocate(nameKey{node: node, role: "struct"}, prefix+typeIdent+"Entry", structFamily)
 		if node.OrderedBy() == cambium.OrderedByUser {
 			g.emittedUserOrdered = true
 			listType := "UserOrderedVec[" + entryName + "]"
@@ -1661,16 +1678,21 @@ func (g *goEmitter) scalarType(prefix string, node cambium.SchemaNodeRef, fieldI
 	if !ok {
 		return scalarShape{goType: "string", jsonKind: "String"}
 	}
-	return g.scalarTypeForInfo(prefix, node.Name(), info, fieldIdent)
+	return g.scalarTypeForInfo(prefix, node, info, fieldIdent)
 }
 
-// scalarTypeForInfo returns the scalar shape for a resolved type, registering any
-// generated newtype, enum, bits, identityref, or union helper as a side effect.
-func (g *goEmitter) scalarTypeForInfo(prefix, yangName string, info cambium.TypeInfo, fieldIdent string) scalarShape {
+// scalarTypeForInfo returns the scalar shape for node's resolved type,
+// registering any generated newtype, enum, bits, identityref, or union helper
+// as a side effect. Each leaf gets its own helper type, named through the
+// file's identifier allocator, so distinct leaves never share bounds or values.
+func (g *goEmitter) scalarTypeForInfo(prefix string, node cambium.SchemaNodeRef, info cambium.TypeInfo, fieldIdent string) scalarShape {
+	yangName := node.Name()
+	key := nameKey{node: node, role: "type"}
+	base := prefix + toPascalCase(fieldIdent)
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
-			return g.scalarTypeForInfo(prefix, yangName, *realtype, fieldIdent)
+			return g.scalarTypeForInfo(prefix, node, *realtype, fieldIdent)
 		}
 		return scalarShape{goType: "string", jsonKind: "String"}
 	case cambium.ResolvedBoolean:
@@ -1682,7 +1704,7 @@ func (g *goEmitter) scalarTypeForInfo(prefix, yangName string, info cambium.Type
 		}
 		intSigned := isSignedIntKind(r.Kind)
 		if len(r.Range) > 0 {
-			name := prefix + toPascalCase(fieldIdent) + "Range"
+			name := g.names.allocate(key, base+"Range", restrictedScalarFamily)
 			g.intRangeTypes[name] = intRangeInfo{kind: r.Kind, bounds: r.Range}
 			return scalarShape{goType: name, jsonKind: jsonKind, isNewtype: true, intSigned: intSigned}
 		}
@@ -1692,7 +1714,7 @@ func (g *goEmitter) scalarTypeForInfo(prefix, yangName string, info cambium.Type
 		return scalarShape{goType: "Decimal64", jsonKind: "QuotedNumber", isNewtype: true}
 	case cambium.ResolvedString:
 		if len(r.Length) > 0 {
-			name := prefix + toPascalCase(fieldIdent) + "Length"
+			name := g.names.allocate(key, base+"Length", restrictedScalarFamily)
 			g.stringLengthTypes[name] = stringLengthInfo{bounds: r.Length}
 			return scalarShape{goType: name, jsonKind: "String", isNewtype: true}
 		}
@@ -1700,24 +1722,24 @@ func (g *goEmitter) scalarTypeForInfo(prefix, yangName string, info cambium.Type
 	case cambium.ResolvedEmpty:
 		return scalarShape{goType: "struct{}", jsonKind: "Empty"}
 	case cambium.ResolvedEnumeration:
-		name := prefix + toPascalCase(fieldIdent) + "Enum"
+		name := g.names.allocate(key, base+"Enum", enumFamily(r.Values()))
 		g.ensureEnum(name, yangName, r.Values())
 		return scalarShape{goType: name, jsonKind: "String", isEnum: true}
 	case cambium.ResolvedBits:
-		name := prefix + toPascalCase(fieldIdent) + "Bits"
+		name := g.names.allocate(key, base+"Bits", bitsFamily)
 		g.ensureBits(name, yangName, r.Values())
 		return scalarShape{goType: name, jsonKind: "String", isBits: true}
 	case cambium.ResolvedIdentityRef:
-		members := collectIdentityrefMembers(r.Bases())
-		if len(members) == 0 {
+		if len(r.Bases()) == 0 {
 			return scalarShape{goType: "string", jsonKind: "String"}
 		}
-		name := prefix + toPascalCase(fieldIdent) + "Enum"
-		g.ensureIdentityref(name, yangName, members)
+		members := collectIdentityrefMembers(r.Bases())
+		name := g.names.allocate(key, base+"Enum", identityrefFamily(members))
+		g.ensureIdentityref(name, yangName, node.Module().Name(), members)
 		return scalarShape{goType: name, jsonKind: "String", isIdentityref: true}
 	case cambium.ResolvedUnion:
-		name := prefix + toPascalCase(fieldIdent) + "Union"
-		g.ensureUnion(name, yangName, r.Members(), prefix, fieldIdent)
+		name := g.names.allocate(key, base+"Union", unionFamily(r.Members()))
+		g.ensureUnion(name, yangName, node.Module().Name(), r.Members(), prefix, fieldIdent)
 		return scalarShape{goType: name, jsonKind: "String", isUnion: true}
 	case cambium.ResolvedBinary:
 		return scalarShape{goType: "string", jsonKind: "String"}
@@ -1848,8 +1870,9 @@ func collectIdentityrefMembers(bases []cambium.Identity) []identityrefMember {
 			namespace: mod.Namespace(),
 		})
 	}
+	// RFC 7950 section 9.10.2: valid values are identities derived from the
+	// base; the base identity itself is not one.
 	for _, base := range bases {
-		add(base)
 		for _, derived := range base.Derived() {
 			add(derived)
 		}
@@ -1962,7 +1985,7 @@ func safeTypeIdent(name string, used map[string]bool) string {
 
 func isGeneratedFieldReservedIdent(ident string) bool {
 	switch ident {
-	case "CambiumMetadata", "ToXML", "ToJSONIETF", "Validate":
+	case "CambiumMetadata", "ToXML", "ToXMLChecked", "ToJSONIETF", "ToJSONIETFWithDefaults", "Validate":
 		return true
 	default:
 		return false
@@ -2002,20 +2025,23 @@ func safeVariantIdent(name string, used map[string]bool) string {
 	return ident
 }
 
+// toPascalCase turns a YANG name into an identifier fragment: every rune that
+// cannot appear in a Go identifier (anything but a Unicode letter or decimal
+// digit, including '-', '_', '.', spaces, and punctuation in enum names) is a
+// word separator, and each word starts upper-case.
 func toPascalCase(s string) string {
 	out := strings.Builder{}
 	upper := true
 	for _, c := range s {
-		switch c {
-		case '-', '_', '.':
+		if !unicode.IsLetter(c) && !unicode.IsDigit(c) {
 			upper = true
-		default:
-			if upper {
-				out.WriteRune(toUpper(c))
-				upper = false
-			} else {
-				out.WriteRune(c)
-			}
+			continue
+		}
+		if upper {
+			out.WriteRune(toUpper(c))
+			upper = false
+		} else {
+			out.WriteRune(c)
 		}
 	}
 	if out.Len() == 0 {

@@ -75,9 +75,11 @@ For a module, `GenerateGo` produces:
 - **RFC 7952 metadata.** A struct whose leaf or leaf-list children can carry
   instance metadata gets a `CambiumMetadata map[string][]MetadataAnnotation` field,
   keyed by child wire name, that the serializers emit and the deserializer reads.
-  A child augmented from another module that shares an earlier sibling's local
-  name is keyed by its module-qualified name (`module:name`), so each node keeps
-  its own annotations.
+  When siblings from different modules share a local name, the first keeps the
+  plain key and the others are keyed by module-qualified name (`module:name`),
+  so each node keeps its own annotations. "First" puts the struct's own module
+  before the others, which follow in module-name order, so the keys do not
+  depend on the order the modules were loaded in.
 
 Every generated data struct satisfies a generated `CambiumStruct` interface:
 
@@ -89,6 +91,60 @@ type CambiumStruct interface {
     Validate() error
 }
 ```
+
+## Generated names
+
+Type names are the Pascal-cased path from the module root
+(`RoutesRouteEntryMetrics`); a leaf whose type needs its own Go type gets one
+named after the leaf, with a `Range` or `Length` suffix for restricted integers
+and strings. Every leaf with a restricted, enumeration, bits, identityref or
+union type gets its **own** type, even when two leaves would produce the same
+name, so their constraints never merge.
+
+All package-level identifiers in the file come from one allocator, which
+reserves each type together with the names derived from it (`<T>FieldOrder`,
+`New<T>`, `Parse<T>`, enum and union variants) and the fixed helper names
+(`AnyData`, `CambiumStruct`, `WithDefaultsMode`, ...). A name that would
+collide gets the smallest numeric suffix that frees its whole family: in module
+`m`, containers `a-b/c` and `a/b-c` would both be `MABC`, so the one claimed
+second is `MABC2`, and the root type of a module named `cambium-struct` is
+`CambiumStruct2`. Names are claimed depth first in a canonical
+order: each struct's own-module children in schema order, then children from
+other modules by module name, with RPC/notification documents last. Generated
+names therefore depend only on the schema, not on module load order, and a
+schema without collisions keeps the names it always had.
+
+Enum names can be any string. Any character other than a letter or digit
+separates words (`a/b` and `c d` become `AB` and `CD`), a leading digit gets a
+`Value` prefix (`Value10GigE`), a name with no letters or digits becomes
+`Node`, and duplicates get numeric suffixes (`a.b` after `a/b` is `AB2`).
+
+## identityref values
+
+An identityref accepts identities derived from its base, not the base itself
+(RFC 7950 §9.10.2). In JSON_IETF, an identity from the leaf's own module is
+written without a prefix and any other as `module:identity` (RFC 7951 §6.8);
+the parser also accepts the prefixed form of own-module identities.
+"Own module" is the module that defines the leaf, which for an augmented leaf
+is the augmenting module, not the module the code was generated for. With
+several `base` statements, a value derived from any one base is accepted; RFC
+7950 requires derivation from all of them.
+
+## anydata and anyxml
+
+An `anydata` or `anyxml` node is an opaque `AnyData` value with separate raw
+XML and JSON forms (`NewAnyData(xml, json)`). Content is never schema-validated
+or converted between formats, matching the pure-Go data tree: a value parsed by
+`FromJSONIETF` has only its JSON form. `ToXML` writes such a value as an empty
+element; in a module with anydata/anyxml nodes every struct also gets
+`ToXMLChecked() (string, error)`, which returns a `*ValidationError` naming the
+node instead. `ToXMLChecked` is not part of `CambiumStruct`.
+
+`Validate` checks that each non-empty form is well-formed: the XML form must be
+element content (no XML declaration, DTD, or unbalanced tags) and the JSON form
+a single JSON value, so raw content cannot inject sibling data. Parsed JSON
+content nested more than 16 levels deep is written back compact rather than
+indented, keeping output linear in the input size.
 
 ## Ordering guarantees baked into the generated code
 
@@ -138,7 +194,14 @@ schema level:
   `pattern` (RFC 7950 regular expressions);
 - `mandatory` presence and list/leaf-list cardinality;
 - `unique` constraints on list entries;
-- `choice` selection rules, including mandatory-choice and mandatory-within-case.
+- `choice` selection rules, including mandatory-choice and mandatory-within-case;
+- well-formed `anydata`/`anyxml` content (see [anydata and anyxml](#anydata-and-anyxml)).
+
+A mandatory leaf or anydata node outside a `choice` and without `when` is a
+plain value field, not a pointer, so `Validate` cannot tell an unset field from
+its zero value: `FromJSONIETF` rejects a document that omits it, but a struct
+built in Go without it validates and serializes the zero value. Making these
+fields pointers would break every caller, so it is left as a known limitation.
 
 What it does **not** do, by design, is anything that requires evaluating data
 against the rest of an instance tree: there is **no `must`/`when` XPath evaluation
