@@ -36,11 +36,16 @@ func checkLeafRefInstance(sn cambium.SchemaNodeRef, value string, ancestors [][]
 	if !ok {
 		return
 	}
+	// RFC 7950 section 6.4.1: prefixes resolve through the imports of the
+	// module that wrote the path, while an unprefixed name belongs to the
+	// module of the current node (where a grouping is used or a typedef
+	// referenced).
+	current := sn.Module()
 	sourceModule := lr.SourceModule()
 	if sourceModule.Name() == "" {
-		sourceModule = sn.Module()
+		sourceModule = current
 	}
-	targets, supported := resolveLeafRefTargets(expr, ancestors, sourceModule)
+	targets, supported := resolveLeafRefTargets(expr, ancestors, sourceModule, current)
 	if !supported {
 		return // unsupported path construct: skip, do not false-reject
 	}
@@ -55,8 +60,9 @@ func checkLeafRefInstance(sn cambium.SchemaNodeRef, value string, ancestors [][]
 
 // resolveLeafRefTargets resolves a leafref path to the set of target leaf values
 // reachable in the data tree. supported=false means the path used a construct
-// outside the name-step subset and the caller must skip the check.
-func resolveLeafRefTargets(pathExpr string, ancestors [][]*node, module cambium.Module) (values []string, supported bool) {
+// outside the name-step subset and the caller must skip the check. Prefixes
+// resolve in module; unprefixed steps belong to current.
+func resolveLeafRefTargets(pathExpr string, ancestors [][]*node, module, current cambium.Module) (values []string, supported bool) {
 	expr := strings.TrimSpace(pathExpr)
 	if expr == "" || strings.ContainsAny(expr, "[]()") {
 		return nil, false
@@ -81,7 +87,7 @@ func resolveLeafRefTargets(pathExpr string, ancestors [][]*node, module cambium.
 		}
 		start = ancestors[idx]
 	}
-	steps, ok := splitLeafRefSteps(expr, module)
+	steps, ok := splitLeafRefSteps(expr, module, current)
 	if !ok {
 		return nil, false
 	}
@@ -141,13 +147,13 @@ func navigateLeafRef(frames [][]*node, steps []leafRefStep) ([]string, bool) {
 	return nil, true
 }
 
-func splitLeafRefSteps(rest string, module cambium.Module) ([]leafRefStep, bool) {
+func splitLeafRefSteps(rest string, module, current cambium.Module) ([]leafRefStep, bool) {
 	var steps []leafRefStep
 	for _, s := range strings.Split(rest, "/") {
 		if s == "" {
 			continue
 		}
-		mod := module
+		mod := current
 		if i := strings.LastIndex(s, ":"); i >= 0 {
 			var ok bool
 			mod, ok = module.ResolvePrefix(s[:i])

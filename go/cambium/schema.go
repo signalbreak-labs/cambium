@@ -1790,9 +1790,6 @@ const (
 )
 
 func topLevelOrderPhase(keyword string) (topLevelOrderPhaseValue, bool) {
-	if hasPrefix(keyword) {
-		return topLevelOrderBody, true
-	}
 	switch keyword {
 	case "yang-version", "namespace", "prefix", "belongs-to":
 		return topLevelOrderHeader, true
@@ -2168,7 +2165,15 @@ func (m *moduleData) buildIR() {
 			m.root.children = append(m.root.children, node)
 		case st.Keyword == "uses":
 			nodes := m.expandUses(st, m.root, m, false)
-			m.top = append(m.top, nodes...)
+			for _, node := range nodes {
+				// A grouping's notifications (RFC 7950 section 7.12.1)
+				// used at top level are top-level notifications.
+				if node.kind == SchemaNodeKindNotification {
+					m.notifs = append(m.notifs, node)
+				} else {
+					m.top = append(m.top, node)
+				}
+			}
 			m.root.children = append(m.root.children, nodes...)
 		}
 	}
@@ -2399,7 +2404,9 @@ func validateUsesParent(uses *yangparse.Statement, parent *schemaNodeData) error
 	}
 	if parent != nil {
 		switch parent.kind {
-		case SchemaNodeKindContainer, SchemaNodeKindList, SchemaNodeKindCase, SchemaNodeKindInput, SchemaNodeKindOutput, SchemaNodeKindNotification:
+		// A uses nested in a grouping that is itself used at module top
+		// level is expanded under the module root.
+		case SchemaNodeKindModule, SchemaNodeKindContainer, SchemaNodeKindList, SchemaNodeKindCase, SchemaNodeKindInput, SchemaNodeKindOutput, SchemaNodeKindNotification:
 			return nil
 		}
 	}

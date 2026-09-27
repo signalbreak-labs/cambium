@@ -50,6 +50,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- A module-top-level `uses` of a grouping that itself contains `uses` failed
+  with "only valid at module top level".
+- Strict mode rejected an extension statement before `revision`, as in every
+  OpenConfig module; RFC 7950 allows extension instances between any
+  statements.
+- Unprefixed names in a leafref path written in another module's grouping or
+  typedef resolved in that module instead of the current node's (RFC 7950
+  §6.4.1), in schema resolution and in `datatree` instance checks.
+- Notifications from a grouping used at module top level were listed by
+  `TopLevel()` instead of `Notifications()`.
+- A revision-named file that does not parse reported "does not declare
+  filename revision" instead of its parse error.
 
 ## [go/v0.4.0] - 2026-07-02
 
