@@ -126,5 +126,33 @@ func defaultToken(sn cambium.SchemaNodeRef, def cambium.DefaultValue) json.RawMe
 	if source.Name() == "" {
 		source = sn.Module()
 	}
-	return canonicalLeafToken(sn, jsonTokenFromText(ti, def.Value(), sn.Module(), schemaScope{module: source}))
+	return canonicalLeafToken(sn, defaultValueToken(ti, def.Value(), sn.Module(), schemaScope{module: source}))
+}
+
+// defaultValueToken converts a schema default value to its instance-data JSON
+// token. It differs from jsonTokenFromText, the XML data-value conversion, only
+// in integer notation: a default written in a module may use RFC 7950 section
+// 9.2.1 hexadecimal or octal notation, which instance data may not, and is
+// instantiated as its canonical decimal value.
+func defaultValueToken(ti cambium.TypeInfo, text string, leafModule cambium.Module, scope valueScope) json.RawMessage {
+	switch r := ti.Resolved().(type) {
+	case cambium.ResolvedInt:
+		if canonical, ok := cambium.CanonicalIntegerDefault(text, r.Kind); ok {
+			return jsonTokenFromIntegerText(canonical, r.Kind)
+		}
+	case cambium.ResolvedUnion:
+		for _, member := range r.Members() {
+			token := defaultValueToken(member, text, leafModule, scope)
+			var trial []string
+			validateLeafValue(member, token, "", leafModule.Name(), &trial)
+			if len(trial) == 0 {
+				return token
+			}
+		}
+	case cambium.ResolvedLeafRef:
+		if rt, ok := r.Realtype(); ok && rt != nil {
+			return defaultValueToken(*rt, text, leafModule, scope)
+		}
+	}
+	return jsonTokenFromText(ti, text, leafModule, scope)
 }

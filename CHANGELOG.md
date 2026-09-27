@@ -31,6 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Consumer contract tests (traversal, identity, types, loading, lifetime), a
   compiled integration example, and a check that the v2 table matches the
   conformance goldens' ordering.
+- `CanonicalIntegerDefault`, which turns a schema integer default written in
+  decimal, hexadecimal, or octal notation into canonical decimal; codegen and
+  `datatree` use it when they instantiate defaults.
 - `ContextBuilder.SetMaxSchemaNodes` and `DefaultMaxSchemaNodes` (8,388,608):
   a budget on the schema nodes `Build` instantiates (every `uses` and augment
   expansion, plus the standalone check of each grouping body). 0 selects the
@@ -87,6 +90,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   feature-gated nodes or reorders augments.
 - Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
   scales with unique nodes.
+- Integer `default` values accept hexadecimal (`0x1F`) and octal (`052`)
+  notation (RFC 7950 §9.2.1). A leading `0` now means octal, so `052` is 42
+  (it was read as 52) and `08` is rejected. Leaf-list defaults that write one
+  value twice (`16`, `0x10`) are duplicates. `Default()` and SchemaIR report
+  the value as written, as libyang does; instance data stays decimal-only.
 - `Build` fails with a `resource_limit` diagnostic as soon as grouping and
   augment expansion exceeds the schema node budget, instead of running until
   memory is exhausted (a 1.2 KB module of nested `uses` used 4 GB and 45 s).

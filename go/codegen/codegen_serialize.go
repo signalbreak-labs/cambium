@@ -697,24 +697,18 @@ func (g *goEmitter) jsonStringLiteralExpr(value string) string {
 	return "cambiumJSONEscape(" + strconv.Quote(value) + ")"
 }
 
+// integerDefaultJSONValue returns the canonical decimal value of an integer
+// schema default, which may be written in RFC 7950 section 9.2.1 hexadecimal
+// or octal notation.
 func integerDefaultJSONValue(value string, resolved cambium.ResolvedInt) (string, bool) {
 	limits := intTypeLimits(resolved.Kind)
-	var normalized string
-	var numeric *big.Int
-	if isSignedIntKind(resolved.Kind) {
-		parsed, err := strconv.ParseInt(value, 10, intKindBitSize(resolved.Kind))
-		if err != nil {
-			return "", false
-		}
-		normalized = strconv.FormatInt(parsed, 10)
-		numeric = big.NewInt(parsed)
-	} else {
-		parsed, err := strconv.ParseUint(value, 10, intKindBitSize(resolved.Kind))
-		if err != nil {
-			return "", false
-		}
-		normalized = strconv.FormatUint(parsed, 10)
-		numeric = new(big.Int).SetUint64(parsed)
+	normalized, ok := cambium.CanonicalIntegerDefault(value, resolved.Kind)
+	if !ok {
+		return "", false
+	}
+	numeric, ok := new(big.Int).SetString(normalized, 10)
+	if !ok {
+		return "", false
 	}
 	if !integerDefaultInRange(numeric, resolved.Range, limits) {
 		return "", false

@@ -71,6 +71,33 @@ func TestApplyDefaultsIdempotent(t *testing.T) {
 	}
 }
 
+// RFC 7950 section 9.2.1 lets a module write an integer default in
+// hexadecimal or octal notation; the instantiated default is the canonical
+// decimal value (as libyang creates it), while instance data stays
+// decimal-only.
+const mhoSchema = `module mho {
+    namespace "urn:mho"; prefix mho;
+    leaf limit { type int32; default "0x7FFFFFFF"; }
+    leaf mode { type uint8; default "052"; }
+    leaf big { type int64; default "-0x10"; }
+    leaf mixed { type union { type int8; type string; } default "0x10"; }
+}`
+
+func TestApplyDefaultsCanonicalizesHexOctalIntegerDefaults(t *testing.T) {
+	got := applyDefaultsJSON(t, mhoSchema, "mho", `{}`)
+	want := `{"mho:limit":2147483647,"mho:mode":42,"mho:big":"-16","mho:mixed":16}`
+	if got != want {
+		t.Fatalf("ApplyDefaults hex/octal:\n got: %s\nwant: %s", got, want)
+	}
+	mod := loadModSrc(t, mhoSchema, "mho")
+	if err := validateOne(t, mod, `{"mho:limit":"0x10"}`); err == nil {
+		t.Fatal("hexadecimal instance data value was accepted for int32")
+	}
+	if tree, err := datatree.Parse(mod, datatree.FormatXML, []byte(`<limit xmlns="urn:mho">0x10</limit>`)); err == nil && tree.Validate() == nil {
+		t.Fatal("hexadecimal XML instance data value was accepted for int32")
+	}
+}
+
 const miSchema = `module mi {
     namespace "urn:mi"; prefix mi;
     identity base-id;

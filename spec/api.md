@@ -600,7 +600,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     string, `false`, or `0` default is present; absence is reported as no entry.
   - Illegal defaults fail schema/context construction with `CAMBIUM_E0001`:
     defaults are valid only on leaf, leaf-list, and choice nodes; leaves may not
-    have multiple defaults, leaf-list default values may not be duplicated,
+    have multiple defaults, leaf-list default values may not be duplicated
+    (integer defaults compare by value, whatever their notation),
     leaf-list defaults require `yang-version 1.1`, leaf-lists with
     `min-elements` greater than zero may not have defaults, mandatory leaves may
     not have defaults, list key leaves may not have defaults, choice defaults must name an existing case, mandatory choices may
@@ -612,7 +613,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     `refine` defaults are singleton statements and preserve the exact argument,
     including the empty string. Boolean defaults must be `true` or `false`;
     integer defaults must parse within the effective base type and range
-    restriction; decimal64 defaults must satisfy the effective
+    restriction, in decimal, hexadecimal (`0x`/`0X`), or octal (leading `0`)
+    notation (RFC 7950/6020 §9.2.1), and are reported as written, like
+    libyang's lexical default; `CanonicalIntegerDefault` gives the canonical
+    decimal value that codegen and `datatree` instantiate (instance data stays
+    decimal-only); decimal64 defaults must satisfy the effective
     `fraction-digits` and range restriction; enumeration defaults must name an
     effective enum value not marked with `if-feature`; bits defaults must name
     effective bit values not marked with `if-feature`, without duplicate
