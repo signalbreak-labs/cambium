@@ -130,6 +130,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- An augment whose target another augment creates failed with `target not
+  found` unless the creating augment happened to be applied first (within a
+  module, or depending on `LoadModule` order). Augment targets now resolve to
+  a fixpoint; contributions to one target keep module-load order, then source
+  order. In vendor-compatible mode the local-name path fallback no longer
+  claims a node before an exact target has been created.
+- A `refine` `if-feature` was treated as a condition on the refine: with the
+  feature disabled the target stayed in the schema and the refine's other
+  properties were dropped. It now adds the `if-feature` to the target (RFC 7950
+  §7.13.2), removing it from the effective schema when disabled, and augment or
+  deviation paths into it are reported as feature exclusions.
+- A `refine` of a grouping node excluded by the enabled feature set failed with
+  `target not found`.
 - `Build` rejected an augment into another module when a mandatory node sat
   below a presence container, a list, or a case of the augment (for example
   `ietf-ip@2014-06-16`, RFC 7277). Only the augment's own nodes, through

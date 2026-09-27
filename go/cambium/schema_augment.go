@@ -5,6 +5,7 @@ package cambium
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
@@ -55,66 +56,178 @@ func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statem
 	n.musts = append(n.musts, n.mustsFrom(source, refine)...)
 }
 
-func (m *moduleData) applyAugments() {
-	for _, aug := range m.sourceTopStatements() {
-		if aug.Keyword != "augment" {
-			continue
-		}
-		if !m.featureIncluded(aug) {
-			m.recordFeatureExcludedAugment(m.ctx.findDisabledAugmentTarget(m, aug), aug, m)
-			continue
-		}
-		if err := validateAbsoluteSchemaNodeIDStatement("augment", aug, m.yangVersionForStatement(aug) == "1.1"); err != nil {
-			m.recordSchemaError(err)
-			continue
-		}
-		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, aug.Argument, aug)
-		if target == nil || targetMod == nil {
-			excluded, ok := m.ctx.featureExcludedSchemaPathStep(m, aug.Argument, aug)
-			if !ok {
-				// A typo or missing dependency is never relaxed: the schema
-				// would silently lose the augment's content.
-				m.recordSchemaError(fmt.Errorf("augment %q target not found at %s", aug.Argument, aug.Location()))
+// augmentJob is one top-level augment statement. rank is its position in
+// module-load order, then augment statement source order; it fixes where the
+// augment's children land among other augments of the same target, whichever
+// resolution pass applies it.
+type augmentJob struct {
+	mod  *moduleData
+	stmt *yangparse.Statement
+	rank int
+	// disabled marks an augment whose if-feature the enabled feature set
+	// rejects: it only records its content as feature-excluded on its target.
+	disabled bool
+	// targetMod is the module owning the target once the augment is applied.
+	targetMod *moduleData
+}
+
+// applyAugments applies every loaded module's top-level augments. An augment
+// may target a node that another augment creates, so resolution repeats until
+// no pending augment's target resolves: whether a target resolves does not
+// depend on the order augments are declared in or modules are loaded, and each
+// augment's children are placed by rank whichever pass applies it
+// (spec/ordering-invariants.md §1.1 rule 3). Exact schema paths are resolved
+// to a fixpoint before the vendor-compatible local-name fallback is tried, one
+// augment at a time, so the fallback never claims a node in place of a target
+// another augment has yet to create. Augments whose target never resolves are
+// reported in rank order.
+func (c *Context) applyAugments() {
+	var jobs []*augmentJob
+	for _, m := range c.loadOrder {
+		for _, aug := range m.sourceTopStatements() {
+			if aug.Keyword != "augment" {
 				continue
 			}
-			if m.ctx.validationMode == ValidationVendorCompatible {
-				m.recordOmittedContentWarning(aug, "augment %q target not found at %s: target node %q is excluded by feature policy; augment skipped in vendor-compatible mode", aug.Argument, aug.Location(), excluded)
-				continue
-			}
-			m.recordSchemaError(fmt.Errorf("augment %q target not found at %s: target node %q is excluded by feature policy", aug.Argument, aug.Location(), excluded))
-			continue
-		}
-		if m.implemented {
-			m.ctx.markImplemented(targetMod)
-		}
-		children := m.buildChildren(aug, target, m, false, "")
-		if targetMod != m {
-			if mandatory := firstMandatoryConfigNode(children); mandatory != nil {
-				if m.yangVersionForStatement(aug) != "1.1" {
-					if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
-						m.recordVendorCompatibleWarning(mandatory.stmt, []*yangparse.Statement{aug}, "augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s; allowed in vendor-compatible mode", aug.Argument, mandatory.name, mandatory.stmt.Location())
-					} else {
-						m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
-						continue
-					}
-				}
-				if len(direct(aug, "when")) == 0 {
-					if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
-						m.recordVendorCompatibleWarning(mandatory.stmt, []*yangparse.Statement{aug}, "augment %q adds mandatory config node %q to another module without a when statement at %s; allowed in vendor-compatible mode", aug.Argument, mandatory.name, mandatory.stmt.Location())
-					} else {
-						m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module without a when statement at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
-						continue
-					}
+			job := &augmentJob{mod: m, stmt: aug, rank: len(jobs) + 1, disabled: !m.featureIncluded(aug)}
+			if !job.disabled {
+				if err := validateAbsoluteSchemaNodeIDStatement("augment", aug, m.yangVersionForStatement(aug) == "1.1"); err != nil {
+					m.recordSchemaError(err)
+					continue
 				}
 			}
+			jobs = append(jobs, job)
 		}
-		m.applyAugmentWhen(aug, children)
-		prependIfFeatures(children, ifFeatureArgs(aug))
-		target.children = append(target.children, children...)
-		target.resolveListKeys()
-		target.resolveUniqueConstraints()
-		appendUnique(&targetMod.augmentedBy, m.name)
 	}
+	pending := jobs
+	for len(pending) > 0 {
+		var progress bool
+		if pending, progress = c.applyResolvableAugments(pending, false); progress {
+			continue
+		}
+		if c.validationMode != ValidationVendorCompatible {
+			break
+		}
+		if pending, progress = c.applyResolvableAugments(pending, true); !progress {
+			break
+		}
+	}
+	for _, job := range pending {
+		if !job.disabled {
+			job.mod.reportUnresolvedAugment(job.stmt)
+		}
+	}
+	for _, job := range jobs {
+		if job.targetMod != nil {
+			appendUnique(&job.targetMod.augmentedBy, job.mod.name)
+		}
+	}
+}
+
+// applyResolvableAugments applies, in rank order, each pending augment whose
+// target resolves and returns the augments still pending. With fallback it
+// resolves through the vendor-compatible local-name fallback instead and stops
+// after the first augment it resolves, so exact resolution runs again first.
+func (c *Context) applyResolvableAugments(pending []*augmentJob, fallback bool) ([]*augmentJob, bool) {
+	progress := false
+	var rest []*augmentJob
+	for i, job := range pending {
+		if fallback && progress {
+			rest = append(rest, pending[i:]...)
+			break
+		}
+		m, aug := job.mod, job.stmt
+		var targetMod *moduleData
+		var target *schemaNodeData
+		var reason string
+		if fallback {
+			targetMod, target, reason = c.findNodeByVendorCompatibleSchemaPath(m, aug.Argument, aug)
+		} else {
+			targetMod, target, _, _ = c.findNodeBySchemaPathDetail(m, aug.Argument, true, aug)
+		}
+		if target == nil || targetMod == nil {
+			rest = append(rest, job)
+			continue
+		}
+		progress = true
+		if job.disabled {
+			// A disabled augment contributes nothing, so its path adds no
+			// warnings to the load report.
+			m.recordFeatureExcludedAugment(target, aug, m)
+			continue
+		}
+		if fallback {
+			m.recordVendorCompatibleWarning(aug, nil, "schema path %q resolved by %s in vendor-compatible mode", aug.Argument, reason)
+		}
+		if m.applyAugment(aug, targetMod, target, job.rank) {
+			job.targetMod = targetMod
+		}
+	}
+	return rest, progress
+}
+
+func (m *moduleData) reportUnresolvedAugment(aug *yangparse.Statement) {
+	excluded, ok := m.ctx.featureExcludedSchemaPathStep(m, aug.Argument, aug)
+	if !ok {
+		// A typo or missing dependency is never relaxed: the schema would
+		// silently lose the augment's content.
+		m.recordSchemaError(fmt.Errorf("augment %q target not found at %s", aug.Argument, aug.Location()))
+		return
+	}
+	if m.ctx.validationMode == ValidationVendorCompatible {
+		m.recordOmittedContentWarning(aug, "augment %q target not found at %s: target node %q is excluded by feature policy; augment skipped in vendor-compatible mode", aug.Argument, aug.Location(), excluded)
+		return
+	}
+	m.recordSchemaError(fmt.Errorf("augment %q target not found at %s: target node %q is excluded by feature policy", aug.Argument, aug.Location(), excluded))
+}
+
+// applyAugment adds aug's children to its resolved target and reports whether
+// the augment was applied.
+func (m *moduleData) applyAugment(aug *yangparse.Statement, targetMod *moduleData, target *schemaNodeData, rank int) bool {
+	if m.implemented {
+		m.ctx.markImplemented(targetMod)
+	}
+	children := m.buildChildren(aug, target, m, false, "")
+	if targetMod != m {
+		if mandatory := firstMandatoryConfigNode(children); mandatory != nil {
+			if m.yangVersionForStatement(aug) != "1.1" {
+				if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
+					m.recordVendorCompatibleWarning(mandatory.stmt, []*yangparse.Statement{aug}, "augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s; allowed in vendor-compatible mode", aug.Argument, mandatory.name, mandatory.stmt.Location())
+				} else {
+					m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module and requires yang-version 1.1 at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
+					return false
+				}
+			}
+			if len(direct(aug, "when")) == 0 {
+				if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible {
+					m.recordVendorCompatibleWarning(mandatory.stmt, []*yangparse.Statement{aug}, "augment %q adds mandatory config node %q to another module without a when statement at %s; allowed in vendor-compatible mode", aug.Argument, mandatory.name, mandatory.stmt.Location())
+				} else {
+					m.recordSchemaError(fmt.Errorf("augment %q adds mandatory config node %q to another module without a when statement at %s", aug.Argument, mandatory.name, mandatory.stmt.Location()))
+					return false
+				}
+			}
+		}
+	}
+	m.applyAugmentWhen(aug, children)
+	prependIfFeatures(children, ifFeatureArgs(aug))
+	insertAugmentChildren(target, children, rank)
+	target.resolveListKeys()
+	target.resolveUniqueConstraints()
+	return true
+}
+
+// insertAugmentChildren places one augment's children on target after the
+// target's declared and already-expanded children and after the children of
+// every augment of lower rank, so their position does not depend on which
+// resolution pass applied the augment.
+func insertAugmentChildren(target *schemaNodeData, children []*schemaNodeData, rank int) {
+	for _, child := range children {
+		child.augmentRank = rank
+	}
+	at := len(target.children)
+	for at > 0 && target.children[at-1] != nil && target.children[at-1].augmentRank > rank {
+		at--
+	}
+	target.children = slices.Insert(target.children, at, children...)
 }
 
 func (m *moduleData) applyAugmentWhen(aug *yangparse.Statement, roots []*schemaNodeData) {

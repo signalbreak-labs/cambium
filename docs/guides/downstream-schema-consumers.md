@@ -198,8 +198,8 @@ entries are preserved in declaration order.
 
 An augment or deviation target that does not resolve fails in every mode unless
 the path stops at a node the enabled feature set excluded (by its own
-`if-feature`, an enclosing `uses`, or a disabled `augment` that declares it); a
-typo, a wrong prefix, or a missing dependency is never relaxed. Strict mode rejects the feature-excluded case too,
+`if-feature`, one a `refine` added, an enclosing `uses`, or a disabled `augment`
+that declares it); a typo, a wrong prefix, or a missing dependency is never relaxed. Strict mode rejects the feature-excluded case too,
 naming the excluded node. Vendor mode skips it with a warning, and a skipped
 augment's warning has kind `omitted_schema_content` so
 `LoadReport.OmittedContent()` lists every relaxation that dropped declared

@@ -97,8 +97,9 @@ means after grouping expansion, augment application, and deviation processing; t
 placement rules are specified in
 [`/spec/ordering-invariants.md` §1.1](../../spec/ordering-invariants.md). `uses`
 expands at the exact position of the `uses` statement; augment children are inserted
-after the target's already-declared children; deviations modify in place without
-reordering unaffected siblings.
+after the target's already-declared children, in module-load order then augment
+source order, also when the target was itself created by another augment;
+deviations modify in place without reordering unaffected siblings.
 
 Top-level data nodes of a document can come from several modules, which share no
 schema parent. The data tiers order them the way the pinned libyang does: grouped
