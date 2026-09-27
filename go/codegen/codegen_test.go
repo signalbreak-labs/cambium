@@ -9015,48 +9015,16 @@ func TestGeneratedGoChoiceDefaultCaseMandatoryDescendantRejects(t *testing.T) {
 	if err := builder.LoadModuleStr(source); err != nil {
 		t.Fatalf("LoadModuleStr: %v", err)
 	}
+	// RFC 7950 §7.9.3: no mandatory node directly under the default case, so
+	// the schema is rejected before any code is generated.
 	ctx, err := builder.Build()
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	defer ctx.Close()
-	src, err := codegen.GenerateGo(ctx, "choice-default-mandatory-codegen")
-	if err != nil {
-		t.Fatalf("generate: %v", err)
-	}
-
-	testBody := `
-func TestGeneratedChoiceDefaultCaseMandatoryDescendantRejects(t *testing.T) {
-	empty := ChoiceDefaultMandatoryCodegen{}
-	err := empty.Validate()
 	if err == nil {
-		t.Fatal("Validate accepted missing mandatory descendant in default choice case")
+		ctx.Close()
+		t.Fatal("Build accepted a mandatory node under the choice default case")
 	}
-	if got, want := err.Error(), "/choice-default-mandatory-codegen/auth/password/username: missing mandatory field"; got != want {
-		t.Fatalf("Validate error = %q, want %q", got, want)
+	if want := `choice "auth" default case "password" must not contain mandatory node "username"`; !strings.Contains(err.Error(), want) {
+		t.Fatalf("Build error = %v, want it to contain %q", err, want)
 	}
-	if _, err := FromJSONIETF([]byte("{}")); err == nil {
-		t.Fatal("FromJSONIETF accepted missing mandatory descendant in default choice case")
-	} else if got, want := err.Error(), "/choice-default-mandatory-codegen/auth/password/username: missing mandatory field"; got != want {
-		t.Fatalf("FromJSONIETF error = %q, want %q", got, want)
-	}
-
-	alternate := ChoiceDefaultMandatoryCodegen{Token: ptr("tok-123")}
-	if err := alternate.Validate(); err != nil {
-		t.Fatalf("Validate rejected alternate case: %v", err)
-	}
-	if _, err := FromJSONIETF([]byte("{\"choice-default-mandatory-codegen:token\":\"tok-123\"}")); err != nil {
-		t.Fatalf("FromJSONIETF rejected alternate case: %v", err)
-	}
-
-	selectedDefault := ChoiceDefaultMandatoryCodegen{Username: ptr("alice")}
-	if err := selectedDefault.Validate(); err != nil {
-		t.Fatalf("Validate rejected default case with mandatory descendant: %v", err)
-	}
-}
-`
-
-	runGeneratedGoTest(t, src, testBody)
 }
 
 func TestGeneratedGoGroupingSimpleMatchesLibyang(t *testing.T) {

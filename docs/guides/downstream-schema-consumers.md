@@ -184,8 +184,11 @@ are reported here as warnings while the schema still loads. This includes
 duplicate or out-of-order revisions, direct submodule entrypoints resolved to
 their parent module, augment and deviation targets excluded by the enabled
 feature set, mandatory config augments, config false mandatory typedef defaults,
-and unambiguous local-name path fallbacks. Duplicate `Module.Revisions()`
-entries are preserved in declaration order.
+unambiguous local-name path fallbacks, import and include cycles, `yang-version`
+mismatches between a module and its submodules or a YANG 1.0 module importing a
+YANG 1.1 module by revision, and same-module references to deprecated or
+obsolete definitions. Duplicate `Module.Revisions()` entries are preserved in
+declaration order.
 
 An augment or deviation target that does not resolve fails in every mode unless
 the path stops at a node the enabled feature set excluded (by its own
@@ -201,7 +204,9 @@ keeps nodes targeted by `deviate not-supported` while still applying other
 deviations, decided before references are validated.
 `LoadReport.IgnoredDeviations` lists what the policy kept, and each
 `Deviation` reports `Applied()` and `SourceLocation()`. To apply none of a
-deviation module's effects, do not load it.
+deviation module's effects, do not load it. Only implemented modules
+contribute augments and deviations: a module that is merely imported
+contributes none, so load an augmenting or deviation module explicitly.
 
 ## Schema diffs
 

@@ -40,6 +40,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   feature-gated nodes or reorders augments.
 - Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
   scales with unique nodes.
+- Only implemented modules contribute augments and deviations (RFC 7950
+  §5.6.5). An import-only module's augments and deviations were applied, and
+  declaring a deviation made a module implemented; load an augmenting or
+  deviation module explicitly for its effects. Modules that an implemented
+  module's augment, deviation, or leafref paths name become implemented, and
+  their own augments and deviations then apply.
+- Strict loading rejects more RFC 7950 compile-time errors (each fails with
+  `CAMBIUM_E0001`): import and include cycles; a module and submodule with
+  different `yang-version`s; a YANG 1.0 module importing a YANG 1.1 module by
+  revision; malformed leafref path predicates (unknown or repeated key, a
+  right-hand side that is not a `current()/..` path or resolves to no leaf, a
+  predicate on a non-list); `deviate add config`/`mandatory` over an explicit
+  statement; a mandatory node directly in a choice's default case; same-module
+  references from current to deprecated/obsolete (or deprecated to obsolete)
+  typedefs, groupings, identities, and features; derived enumeration/bits
+  restrictions in YANG 1.0; enum names that are empty or have leading or
+  trailing whitespace; and an identityref default equal to its base.
+  Vendor-compatible mode reports the cycles, version mismatches, and status
+  references as warnings.
+- `compat`: `IgnoreSubmoduleCircularDependencies` now has goyang's effect. A
+  circular submodule include fails `Process()` without it; with it, `Process()`
+  uses vendor-compatible loading and reports the cycle in `LoadReport()`.
 
 ### Fixed
 
@@ -63,6 +85,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   deviation paths into it are reported as feature exclusions.
 - A `refine` of a grouping node excluded by the enabled feature set failed with
   `target not found`.
+- Data nodes in different cases of a choice, or in a case and outside the
+  choice, could share a name (RFC 7950 §6.2.1); they now fail as duplicate
+  schema children.
 
 ## [go/v0.4.0] - 2026-07-02
 
