@@ -69,7 +69,10 @@ type SchemaProvenance struct {
 }
 
 // SchemaIR returns a versioned value projection of the implemented modules in
-// context load order.
+// context load order. Each node embeds full copies of its Children,
+// DataChildren and ListKeys subtrees, so the projection can grow exponentially
+// with schema depth. Use SchemaIRWithLimit to bound it, or SchemaIRTable for a
+// projection linear in the number of schema nodes.
 func (c *Context) SchemaIR() SchemaIR {
 	ir := SchemaIR{Version: SchemaIRVersion}
 	if c == nil || c.closed {
@@ -108,8 +111,18 @@ func (n SchemaNodeRef) NamespaceQualifiedPath() string {
 }
 
 func schemaIRModule(mod Module) SchemaIRModule {
+	out := schemaIRModuleHeader(mod)
+	for child := range mod.Children().Iter() {
+		out.Children = append(out.Children, schemaIRNode(child))
+	}
+	return out
+}
+
+// schemaIRModuleHeader returns the module-level projection fields without any
+// node subtree.
+func schemaIRModuleHeader(mod Module) SchemaIRModule {
 	revision, _ := mod.Revision()
-	out := SchemaIRModule{
+	return SchemaIRModule{
 		Module:      mod,
 		Name:        mod.Name(),
 		Namespace:   mod.Namespace(),
@@ -120,13 +133,28 @@ func schemaIRModule(mod Module) SchemaIRModule {
 		Imports:     mod.Imports(),
 		Includes:    mod.Includes(),
 	}
-	for child := range mod.Children().Iter() {
+}
+
+// schemaIRNode materializes ref with full copies of each view's subtree. This
+// is the v1 nested shape; its size can grow exponentially with depth because
+// Children and DataChildren repeat the same subtrees. SchemaIRTable is the
+// bounded alternative.
+func schemaIRNode(ref SchemaNodeRef) SchemaIRNode {
+	out := schemaIRNodeFacts(ref)
+	for child := range ref.Children().Iter() {
 		out.Children = append(out.Children, schemaIRNode(child))
+	}
+	for child := range ref.DataChildren(true).Iter() {
+		out.DataChildren = append(out.DataChildren, schemaIRNode(child))
+	}
+	for key := range ref.ListKeys().Iter() {
+		out.ListKeys = append(out.ListKeys, schemaIRNode(key))
 	}
 	return out
 }
 
-func schemaIRNode(ref SchemaNodeRef) SchemaIRNode {
+// schemaIRNodeFacts returns ref's per-node facts with no view subtrees.
+func schemaIRNodeFacts(ref SchemaNodeRef) SchemaIRNode {
 	out := SchemaIRNode{
 		Ref:                    ref,
 		Name:                   ref.Name(),
@@ -149,15 +177,6 @@ func schemaIRNode(ref SchemaNodeRef) SchemaIRNode {
 	if typ, ok := ref.LeafType(); ok {
 		info := typ
 		out.Type = &info
-	}
-	for child := range ref.Children().Iter() {
-		out.Children = append(out.Children, schemaIRNode(child))
-	}
-	for child := range ref.DataChildren(true).Iter() {
-		out.DataChildren = append(out.DataChildren, schemaIRNode(child))
-	}
-	for key := range ref.ListKeys().Iter() {
-		out.ListKeys = append(out.ListKeys, schemaIRNode(key))
 	}
 	return out
 }

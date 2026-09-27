@@ -148,8 +148,8 @@ func DiffContexts(oldCtx, newCtx *Context) (SchemaDiff, error) {
 	}
 
 	diff := SchemaDiff{Version: SchemaDiffVersion}
-	oldModules := oldCtx.SchemaIR().Modules
-	newModules := newCtx.SchemaIR().Modules
+	oldModules := oldCtx.schemaIRModuleHeaders()
+	newModules := newCtx.schemaIRModuleHeaders()
 	oldByKey := schemaDiffModuleMap(oldModules)
 	newByKey := schemaDiffModuleMap(newModules)
 
@@ -171,6 +171,19 @@ func DiffContexts(oldCtx, newCtx *Context) (SchemaDiff, error) {
 		}
 	}
 	return diff, nil
+}
+
+// schemaIRModuleHeaders returns module-level projection fields in context load
+// order without materializing any node subtree.
+func (c *Context) schemaIRModuleHeaders() []SchemaIRModule {
+	var out []SchemaIRModule
+	for _, mod := range c.loadOrder {
+		if mod == nil || mod.stmt == nil {
+			continue
+		}
+		out = append(out, schemaIRModuleHeader(Module{mod: mod}))
+	}
+	return out
 }
 
 func collectSchemaDiffRefs(mod Module) []SchemaNodeRef {

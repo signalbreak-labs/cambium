@@ -32,6 +32,12 @@ const (
 	// DiagnosticUnsupportedConstruct is a syntactically valid construct Cambium
 	// does not support in the selected tier.
 	DiagnosticUnsupportedConstruct DiagnosticKind = "unsupported_construct"
+	// DiagnosticOmittedSchemaContent is a warning for declared schema content
+	// that a vendor-compatible relaxation left out of the effective schema.
+	DiagnosticOmittedSchemaContent DiagnosticKind = "omitted_schema_content"
+	// DiagnosticResourceLimit is an operation refused because its output would
+	// exceed a caller-selected resource limit.
+	DiagnosticResourceLimit DiagnosticKind = "resource_limit"
 )
 
 // Diagnostic is a structured error or warning. Related contains secondary
@@ -182,7 +188,8 @@ func sourceLocationKnown(location SourceLocation) bool {
 func classifyDiagnostic(message string) DiagnosticKind {
 	lower := strings.ToLower(message)
 	switch {
-	case strings.Contains(lower, "invalid identifier"):
+	case strings.Contains(lower, "invalid identifier"),
+		strings.Contains(lower, "unknown prefix"):
 		return DiagnosticInvalidIdentifier
 	case strings.Contains(lower, "not found in search path"),
 		strings.Contains(lower, "no such module"),

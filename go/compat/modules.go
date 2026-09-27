@@ -317,6 +317,13 @@ func (ms *Modules) Process() []error {
 	if err != nil {
 		return []error{err}
 	}
+	// Deviation options select a native policy, so every projection comes from
+	// one ordered effective schema and feature visibility is unaffected.
+	if err := builder.SetDeviationPolicy(cambium.DeviationPolicy{
+		IgnoreNotSupported: ms.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported,
+	}); err != nil {
+		return []error{err}
+	}
 	staged, cleanup, err := ms.stageInMemorySources()
 	if err != nil {
 		return []error{err}
@@ -356,11 +363,6 @@ func (ms *Modules) Process() []error {
 	for _, mod := range ctx.Modules() {
 		ms.recordModule(mod)
 	}
-	if ms.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported {
-		if errs := ms.rebuildSourceEntriesWithDeviateOptions(); len(errs) != 0 {
-			return errs
-		}
-	}
 	return nil
 }
 
@@ -375,77 +377,6 @@ func (ms *Modules) ClearEntryCache() {
 	for _, module := range ms.SubModules {
 		clearModuleEntry(module)
 	}
-}
-
-func (ms *Modules) rebuildSourceEntriesWithDeviateOptions() []error {
-	records := ms.moduleRecords()
-	for _, record := range records {
-		if record == nil || record.Source == nil {
-			continue
-		}
-		clearModuleEntry(record)
-		entry := entryFromCompatModuleSource(record)
-		if entry == nil {
-			continue
-		}
-		entry.modules = ms
-		setModuleEntry(record, entry)
-	}
-
-	entries := make([]*Entry, 0, len(records))
-	for _, record := range records {
-		if entry, ok := moduleEntry(record); ok {
-			entries = append(entries, entry)
-		}
-	}
-
-	var errs []error
-	for _, entry := range entries {
-		errs = append(errs, entry.GetErrors()...)
-	}
-	if len(errs) != 0 {
-		return errs
-	}
-
-	unresolved := append([]*Entry(nil), entries...)
-	for len(unresolved) > 0 {
-		processed := 0
-		for i := 0; i < len(unresolved); {
-			entry := unresolved[i]
-			p, s := entry.Augment(false)
-			processed += p
-			if s == 0 {
-				unresolved[i] = unresolved[len(unresolved)-1]
-				unresolved = unresolved[:len(unresolved)-1]
-				continue
-			}
-			i++
-		}
-		if processed == 0 {
-			break
-		}
-	}
-
-	for _, entry := range entries {
-		entry.FixChoice()
-	}
-	for _, entry := range unresolved {
-		entry.Augment(true)
-		errs = append(errs, entry.GetErrors()...)
-	}
-	if len(errs) != 0 {
-		return errs
-	}
-
-	applied := map[string]bool{}
-	for _, entry := range entries {
-		if applied[entry.Name] {
-			continue
-		}
-		errs = append(errs, entry.ApplyDeviate(ms.ParseOptions.DeviateOptions)...)
-		applied[entry.Name] = true
-	}
-	return errs
 }
 
 func (ms *Modules) moduleRecords() []*Module {

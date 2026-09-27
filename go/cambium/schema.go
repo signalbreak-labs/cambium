@@ -985,6 +985,15 @@ func (d Deviation) IfFeatures() []string {
 	return append([]string(nil), d.ifFeatures...)
 }
 
+// Applied reports whether the deviation changed the effective schema. It is
+// false only for a not-supported deviation kept by
+// DeviationPolicy.IgnoreNotSupported.
+func (d Deviation) Applied() bool { return !d.ignored }
+
+// SourceLocation returns the location of the deviate statement, or of the
+// deviated property statement when the deviate targets one.
+func (d Deviation) SourceLocation() SourceLocation { return sourceLocation(d.source) }
+
 // Import is a value type for module import metadata.
 type Import struct {
 	Prefix   string
@@ -1104,7 +1113,12 @@ type submoduleData struct {
 }
 
 type schemaNodeData struct {
-	name                string
+	name string
+	// featureExcluded holds local names of schema children whose declaring
+	// statement (or the uses that would instantiate them) was dropped by the
+	// enabled feature set. It lets augment/deviation resolution tell a target
+	// excluded by feature policy apart from a typo or missing dependency.
+	featureExcluded     []string
 	kind                SchemaNodeKind
 	module              *moduleData
 	sourceModule        *moduleData
@@ -2096,6 +2110,24 @@ func (m *moduleData) recordVendorCompatibleWarning(source *yangparse.Statement, 
 	}})
 }
 
+// recordOmittedContentWarning records a vendor-compatible relaxation that drops
+// declared schema content, so callers can detect an incomplete schema through
+// LoadReport.OmittedContent.
+func (m *moduleData) recordOmittedContentWarning(source *yangparse.Statement, format string, args ...any) {
+	if m == nil || m.ctx == nil {
+		return
+	}
+	message := fmt.Sprintf(format, args...)
+	m.ctx.addLoadWarnings([]Diagnostic{{
+		Kind:       DiagnosticOmittedSchemaContent,
+		Code:       RuleCodeContext,
+		Message:    message,
+		Module:     m.name,
+		Source:     sourceLocation(source),
+		Underlying: fmt.Errorf("%s", message),
+	}})
+}
+
 func (n *schemaNodeData) recordVendorCompatibleWarning(source *yangparse.Statement, related []*yangparse.Statement, format string, args ...any) {
 	mod := (*moduleData)(nil)
 	if n != nil {
@@ -2110,6 +2142,7 @@ func (n *schemaNodeData) recordVendorCompatibleWarning(source *yangparse.Stateme
 func (m *moduleData) buildIR() {
 	for _, st := range m.sourceTopStatements() {
 		if !m.featureIncluded(st) {
+			m.recordFeatureExcluded(m.root, st)
 			continue
 		}
 		switch {
@@ -2248,6 +2281,7 @@ func (m *moduleData) buildChildrenSeen(st *yangparse.Statement, parent *schemaNo
 	var out []*schemaNodeData
 	for _, child := range st.SubStatements() {
 		if !m.featureIncluded(child) {
+			m.recordFeatureExcluded(parent, child)
 			continue
 		}
 		switch {
@@ -2273,6 +2307,7 @@ func (m *moduleData) buildChoiceSeen(st *yangparse.Statement, parent *schemaNode
 	var children []*schemaNodeData
 	for _, child := range st.SubStatements() {
 		if !m.featureIncluded(child) {
+			m.recordFeatureExcluded(n, child)
 			continue
 		}
 		switch {
@@ -2303,6 +2338,32 @@ func (m *moduleData) buildChoiceSeen(st *yangparse.Statement, parent *schemaNode
 	n.children = children
 	propagateChoiceCaseWhens(n)
 	return n
+}
+
+// recordFeatureExcluded notes, on parent, the schema-node names that st would
+// have contributed had its if-feature condition held. A disabled uses records
+// the names its grouping would instantiate, following nested uses.
+func (m *moduleData) recordFeatureExcluded(parent *schemaNodeData, st *yangparse.Statement) {
+	if parent == nil || st == nil {
+		return
+	}
+	m.collectFeatureExcludedNames(parent, st, make(map[*yangparse.Statement]bool))
+}
+
+func (m *moduleData) collectFeatureExcludedNames(parent *schemaNodeData, st *yangparse.Statement, seen map[*yangparse.Statement]bool) {
+	switch {
+	case st.Keyword == "uses":
+		groupMod, group := m.findGroupingFrom(st.Argument, st)
+		if group == nil || seen[group] {
+			return
+		}
+		seen[group] = true
+		for _, child := range group.SubStatements() {
+			groupMod.collectFeatureExcludedNames(parent, child, seen)
+		}
+	case isSchemaChildKeyword(st.Keyword), st.Keyword == "case", st.Keyword == "rpc", st.Keyword == "notification", st.Keyword == "input", st.Keyword == "output":
+		appendUnique(&parent.featureExcluded, st.Argument)
+	}
 }
 
 func validateUsesParent(uses *yangparse.Statement, parent *schemaNodeData) error {
@@ -3362,6 +3423,27 @@ func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string
 	return mod, node
 }
 
+// featureExcludedSchemaPathStep reports whether an unresolved absolute schema
+// path fails at a step the enabled feature set excluded, returning that step's
+// local name. Paths that fail at an undeclared name, or under an unresolvable
+// module prefix, are not feature exclusions.
+func (c *Context) featureExcludedSchemaPathStep(source *moduleData, path string, fromStmt *yangparse.Statement) (string, bool) {
+	if c == nil || source == nil {
+		return "", false
+	}
+	_, node, segment, from := c.findNodeBySchemaPathDetail(source, path, true, fromStmt)
+	if node != nil || from == nil || segment == "" {
+		return "", false
+	}
+	name := localName(pathStepQName(segment))
+	for _, excluded := range from.featureExcluded {
+		if excluded == name {
+			return name, true
+		}
+	}
+	return "", false
+}
+
 func (c *Context) findNodeByVendorCompatibleSchemaPath(source *moduleData, path string, fromStmt *yangparse.Statement) (*moduleData, *schemaNodeData, string) {
 	if c == nil || source == nil || !strings.HasPrefix(path, "/") {
 		return nil, nil, ""
@@ -3913,10 +3995,43 @@ func (i Identity) Derived() []Identity {
 type DefaultValue struct {
 	value        string
 	sourceModule *moduleData
+	origin       DefaultOrigin
+}
+
+// DefaultOrigin names the statement that supplied an effective default.
+type DefaultOrigin uint8
+
+const (
+	// DefaultOriginNode is a default statement on the leaf or leaf-list itself.
+	DefaultOriginNode DefaultOrigin = iota
+	// DefaultOriginTypedef is a default inherited from the node's typedef chain.
+	DefaultOriginTypedef
+	// DefaultOriginRefine is a default set by a uses refine.
+	DefaultOriginRefine
+	// DefaultOriginDeviation is a default added or replaced by a deviation.
+	DefaultOriginDeviation
+)
+
+// String returns a stable lowercase name for the origin.
+func (o DefaultOrigin) String() string {
+	switch o {
+	case DefaultOriginTypedef:
+		return "typedef"
+	case DefaultOriginRefine:
+		return "refine"
+	case DefaultOriginDeviation:
+		return "deviation"
+	default:
+		return "node"
+	}
 }
 
 // Value returns the lexical default value.
 func (d DefaultValue) Value() string { return d.value }
+
+// Origin reports which statement supplied the default, so an explicit node
+// default can be told apart from one inherited from a typedef.
+func (d DefaultValue) Origin() DefaultOrigin { return d.origin }
 
 // SourceModule returns the module whose statement supplied the default.
 func (d DefaultValue) SourceModule() Module {
