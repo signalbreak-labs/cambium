@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          submodules: recursive
+          submodules: true
       - name: Install OSV scanner
         env:
           OSV_SCANNER_VERSION: 2.3.8
@@ -37,4 +37,4 @@ jobs:
       - name: Build vendored C engine
         run: bash go/internal/libyang/build.sh
       - name: Run OSV scanner
-        run: osv-scanner --recursive .
+        run:  osv-scanner --config osv-scanner.toml --recursive .

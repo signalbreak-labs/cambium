@@ -8,6 +8,6 @@ cmake_flags = ["-DBUILD_SHARED_LIBS=OFF", "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
 
 [pcre2]
 repo = "https://github.com/PCRE2Project/pcre2"
-tag  = "pcre2-10.44"
-sha  = "6ae58beca071f13ccfed31d03b3f479ab520639b"
+tag  = "pcre2-10.48"
+sha  = "7978954dbd2efc6f2196869290553cf1871b4ce6"
 cmake_flags = ["-DBUILD_SHARED_LIBS=OFF", "-DPCRE2_BUILD_PCRE2_8=ON", "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"]

@@ -1,6 +1,217 @@
 News about PCRE2 releases
 -------------------------
 
+Version 10.48 31-August-2026
+----------------------------
+
+This is a regular release, incorporating security fixes along with small
+improvements and fixes to library behaviour.
+
+Only changes to behaviour, changes to the API, and other significant changes
+are described here. Please see the ChangeLog and Git log for further details.
+
+As well as the tarball and Git tag for this release, there are detailed
+instructions for backporting security and correctness fixes, for the last
+five years of releases.
+
+* (Git change) Renamed the default development branch from master to main.
+
+* (Maintenance change) Added a five-year support lifecycle policy and
+publication of backport patches for security and high-severity fixes in older
+releases.
+
+* (Security fix for very specific API usage, GHSA-2p8c-ff85-vh9x) If
+pcre2_jit_compile() is called with options for some match modes, and then
+pcre2_match() is used to perform a match for a different match mode, an
+out-of-bounds read can occur if the match is attempted against invalid UTF input.
+
+* (Security fix for pattern conversion, GHSA-q8g2-wprr-34m9) If pcre2_convert()
+is called on untrusted input on platforms with 32-bit size_t, an out-of-bounds
+heap write can occur.
+
+* (Security fix, GHSA-3r4p-g7gg-ppmf) Fixed an out-of-bounds write in DFA
+matching when using a heap limit; also fixed possible integer overflows which
+could cause under-allocation of the workspace.
+
+* (Security fix, GHSA-fmgr-6ggq-9859) Added bounds checks for several integer
+overflows while compiling patterns on 32-bit CPUs, which could cause
+under-allocation followed by out-of-bounds writes.
+
+* (Security fix, GHSA-9qww-pwc4-77qq) Applied lower buffer bound to prevent
+two out-of-bounds reads while scanning backwards through invalid UTF data with
+PCRE2_MATCH_INVALID_UTF.
+
+* (Matching correctness) Fixed several matching issues:
+  - A JIT-specific matching bug affecting prefix scanning on patterns with
+    repeats (#875).
+  - A JIT-specific matching bug in variable-length lookbehinds (#912).
+  - Miscompiled Unicode character classes combining characters at or below
+    U+00FF with characters at U+0100 and U+8000 or above (#841).
+  - Incorrect JIT character advancement with PCRE2_MATCH_INVALID_UTF in UTF-8
+    and UTF-16 modes, which could skip adjacent characters (#945).
+
+* (Behaviour change) Updated Unicode support to Unicode 17.0.
+
+* (Small behaviour changes) Many small fixes, including pcre2_substitute()
+improvements, optimisation of possessive backreference matching, and
+pcre2_compile() fixes.
+
+* (Small build changes) Many small adjustments to the CMake and Zig builds.
+
+* (Security fix for very specific API usage, #937) Fixed a leak and later
+invalid free when calling the fast-path pcre2_jit_match() function with a match
+data object previously used with pcre2_match() and
+PCRE2_COPY_MATCHED_SUBJECT.
+
+* (Low-severity security fix, GHSA-q7rw-r7qq-2hx6) Fixed exposure of two
+uninitialised bytes from malloc() via pcre2_serialize_encode().
+
+
+Version 10.47 21-October-2025
+-----------------------------
+
+This is a regular semi-annual release, incorporating a few new features and
+several maintenance and build improvements.
+
+Only changes to behaviour, changes to the API, and other significant changes
+are described here. Please see the ChangeLog and Git log for further details.
+
+* (Powerful new feature) Pattern recursion of the form
+"(?1(GROUP_NAME_OR_NUM,...))" acts as a subroutine call which additionally
+returns the listed capturing groups to the calling context.
+
+* (Significant bugfix) Fixed a crash in pcre2_callout_enumerate() which is
+easily reachable on any pattern that contains a Unicode character class. If your
+application uses this function, please read the details for this change and
+evaluate its severity for your application.
+
+* (Build change) There are now linker scripts to enable symbol versioning for
+the PCRE2 dynamic libraries. Downstream Linux distributions may make use of
+this, or disable it with the new Autoconf `--disable-symvers` and CMake
+`-DPCRE2_SYMVERS` options. Linux, Solaris, and FreeBSD (GNU ld, LLVM lld, and
+Solaris ld) are tested and supported.
+
+* (New API function) Added pcre2_next_match(). This function makes it both
+simpler and safer for clients to iterate over all matches in a subject. The
+documentation in `pcre2api` also provides improved guidance in the section
+"Iterating over all matches".
+
+* (Minor API addition) Added the PCRE2_CONFIG_EFFECTIVE_LINKSIZE option to
+pcre2_config().
+
+* (Minor replacement syntax extension) Added support for $+ replacement to
+pcre2_substitute().
+
+* (Build change) Modernize the CMake build files, to use the
+"$<BUILD_INTERFACE:...>", "$<INSTALL_INTERFACE:...>" and "install(EXPORT...)"
+expressions to export the PCRE2 targets.
+
+
+Version 10.46 27-August-2025
+----------------------------
+
+This is a security-only release, to address CVE-2025-58050.
+
+Compared to 10.45, this release has only a minimal code change to prevent a
+read-past-the-end memory error, of arbitrary length. An attacker-controlled
+regex pattern is required, and it cannot be triggered by providing crafted
+subject (match) text. The (*ACCEPT) and (*scs:) pattern features must be used
+together.
+
+Release 10.44 and earlier are not affected.
+
+This could have implications of denial-of-service or information disclosure,
+and could potentially be used to escalate other vulnerabilities in a system
+(such as information disclosure being used to escalate the severity of an
+unrelated bug in another system).
+
+
+Version 10.45 05-February-2025
+------------------------------
+
+This is a comparatively large release, incorporating new features, some
+bugfixes, and a few changes with slight backwards compatibility implications.
+Please see the ChangeLog and Git log for further details.
+
+Only changes to behaviour, changes to the API, and major changes to the pattern
+syntax are described here.
+
+This release is the first to be available as a (signed) Git tag, or
+alternatively as a (signed) tarball of the Git tag.
+
+This is also the first release to be made by the new maintainers of PCRE2, and
+we would like to thank Philip Hazel, creator and maintainer of PCRE and PCRE2.
+
+* (Git change) The sljit project has been split out into a separate Git
+  repository. Git users must now run `git submodule init; git submodule update`
+  after a Git checkout.
+
+* (Behaviour change) Update Unicode support to UCD 16.
+
+* (Match behaviour change) Case-insensitive matching of Unicode properties
+  Ll, Lt, and Lu has been changed to match Perl. Previously, /\p{Ll}/i would
+  match only lower-case characters (even though case-insensitive matching was
+  specified). This also affects case-insensitive matching of POSIX classes such
+  as [:lower:].
+
+* (Minor match behaviour change) Case-insensitive matching of backreferences now
+  respects the PCRE2_EXTRA_CASELESS_RESTRICT option.
+
+* (Minor pattern syntax change) Parsing of the \x escape is stricter, and is
+  no longer parsed as an escape for the NUL character if not followed by '{' or
+  a hexadecimal digit. Use \x00 instead.
+
+* (Major new feature) Add a new feature called scan substring. This is a new
+  type of assertion which matches the content of a capturing block to a
+  sub-pattern.
+
+  Example: to find a word that contains the rare (in English) sequence of
+  letters "rh" not at the start:
+
+      \b(\w++)(*scan_substring:(1).+rh)
+
+  The first group captures a word which is then scanned by the
+  (*scan_substring:(1) ... ) assertion, which tests whether the pattern ".+rh"
+  matches the capture group "(1)".
+
+* (Major new feature) Add support for UTS#18 compatible character classes,
+  using the new option PCRE2_ALT_EXTENDED_CLASS. This adds '[' as a
+  metacharacter within character classes and the operators '&&', '--' and '~~',
+  allowing subtractions and intersections of character classes to be easily
+  expressed.
+
+  Example: to match Thai or Greek letters (but not letters or other characters
+  in those scripts), use [\p{L}&&[\p{Thai}||\p{Greek}]].
+
+* (Major new feature) Add support for Perl-style extended character classes,
+  using the syntax (?[...]). This also allows expressing subtractions and
+  intersections of character classes, but using a different syntax to UTS#18.
+
+  Example: to match Thai or Greek letters (but not letters or other characters
+  in those scripts), use (?[\p{L} & (\p{Thai} + \p{Greek})]).
+
+* (Minor feature) Significant improvements to the character class match engine.
+  Compiled character classes are now more compact, and have faster matching
+  for large or complex character sets, using binary search through the set.
+
+* JIT compilation now fails with the new error code PCRE2_ERROR_JIT_UNSUPPORTED
+  for patterns which use features not supported by the JIT compiler.
+
+* (Minor feature) New options PCRE2_EXTRA_NO_BS0 (disallow \0 as an escape for
+  the NUL character); PCRE2_EXTRA_PYTHON_OCTAL (use Python disambiguation rules
+  for deciding whether \12 is a backreference or an octal escape);
+  PCRE2_EXTRA_NEVER_CALLOUT (disable callout syntax entirely);
+  PCRE2_EXTRA_TURKISH_CASING (use Turkish rules for case-insensitive matching).
+
+* (Minor feature) Add new API function pcre2_set_optimize() for controlling
+  which optimizations are enabled.
+
+* (Minor new features) A variety of extensions have been made to
+  pcre2_substitute() and its syntax for replacement strings. These now support:
+  \123 octal escapes; titlecasing \u\L; \1 backreferences; \g<1> and $<NAME>
+  backreferences; $& $` $' and $_; new function
+  pcre2_set_substitute_case_callout() to allow locale-aware case transformation.
+
 
 Version 10.44 07-June-2024
 --------------------------
@@ -13,7 +224,7 @@ increased to 128. Some auxiliary files for building under VMS are added.
 Version 10.43 16-February-2024
 ------------------------------
 
-There are quite a lot of changes in this release (see ChangeLog and git log for
+There are quite a lot of changes in this release (see ChangeLog and Git log for
 a list). Those that are not bugfixes or code tidies are:
 
 * The JIT code no longer supports ARMv5 architecture.
@@ -52,7 +263,7 @@ a list). Those that are not bugfixes or code tidies are:
   matches the "fullwidth" versions of hex digits. PCRE2_EXTRA_ASCII_DIGIT can
   be used to keep it ASCII only.
 
-* Make PCRE2_UCP the default in UTF mode in pcre2grep and add -no_ucp,
+* Make PCRE2_UCP the default in UTF mode in pcre2grep and add --no-ucp,
   --case-restrict and --posix-digit.
 
 * Add --group-separator and --no-group-separator to pcre2grep.

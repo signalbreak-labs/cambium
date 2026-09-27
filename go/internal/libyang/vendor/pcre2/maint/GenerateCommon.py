@@ -1,5 +1,3 @@
-#! /usr/bin/python
-
 #                   PCRE2 UNICODE PROPERTY SUPPORT
 #                   ------------------------------
 
@@ -232,7 +230,7 @@ def reorder_scripts():
 
   extended_script_abbrevs = set()
   with open("Unicode.tables/ScriptExtensions.txt") as f:
-    names_re = re.compile(r'^[0-9A-F]{4,6}(?:\.\.[0-9A-F]{4,6})? +; ([A-Za-z_ ]+) #')
+    names_re = re.compile(r'^[0-9A-F]{4,6}(?:\.\.[0-9A-F]{4,6})? +; ([A-Za-z_ ]+[A-Za-z]) +#')
 
     for line in f:
       match_obj = names_re.match(line)
@@ -350,7 +348,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 -----------------------------------------------------------------------------
 */
-\n""")
+\n\n""")
   return file
 
 # End of UcpCommon.py
