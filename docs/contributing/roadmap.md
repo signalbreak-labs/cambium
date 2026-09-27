@@ -78,6 +78,12 @@ lands rather than adding another dated file.
   ADR 0002 policy. Related schema gaps: `Build` accepts leafref cycles (the
   chain helper reports them), length bounds stay lexical, and `must`/`when`
   carry no source location.
+- **Codegen value gaps.** Mandatory leaves outside a `choice` are value fields,
+  so `Validate` cannot detect one left unset in Go (fixing it means pointer
+  fields, a breaking change); an identityref with several bases accepts
+  identities derived from any base rather than all; and anydata/anyxml content
+  is not converted between XML and JSON. See the
+  [codegen guide](../guides/codegen.md).
 - **An additional language binding.** The contract (`/spec`, `/conformance`,
   `/VERSIONS`) is kept language-neutral so another binding can attach as a peer;
   none exists today. The enabling step has landed: the corpus is published as a

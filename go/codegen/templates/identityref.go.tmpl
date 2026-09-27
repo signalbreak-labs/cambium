@@ -74,7 +74,7 @@ func (v {{.Name}}) String() string { return v.AsName() }
 func Parse{{.Name}}(name string) ({{.Name}}, bool) {
 	switch name {
 {{- range .Members}}
-	case {{printf "%q" .JSONName}}:
+	case {{printf "%q" .JSONName}}{{if not .Foreign}}, {{printf "%q" .QualifiedName}}{{end}}:
 		return {{.Const}}, true
 {{- end}}
 	default:

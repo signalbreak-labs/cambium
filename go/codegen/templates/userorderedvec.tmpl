@@ -1,25 +1,34 @@
 // UserOrderedVec is a positional-only list for YANG ordered-by user nodes.
+//
+// It has value semantics: every mutator builds a fresh backing slice
+// (copy-on-write) and never writes into the one it replaces, so an edit through
+// one copy never changes the entries or order of another copy. Each mutation is
+// O(n); build a long vector in one step with NewUserOrderedVec.
 type UserOrderedVec[T any] struct {
 	items []T
 }
 
-// NewUserOrderedVec creates a user-ordered vector from items in order.
+// NewUserOrderedVec creates a user-ordered vector from items in order. It
+// copies items, so later changes to the caller's slice do not affect it.
 func NewUserOrderedVec[T any](items []T) UserOrderedVec[T] {
 	copyItems := append([]T(nil), items...)
 	return UserOrderedVec[T]{items: copyItems}
 }
 
 // InsertFirst inserts value at the first position.
-func (v *UserOrderedVec[T]) InsertFirst(value T) { v.items = append([]T{value}, v.items...) }
+func (v *UserOrderedVec[T]) InsertFirst(value T) { v.InsertBefore(0, value) }
 
 // InsertLast inserts value at the last position.
-func (v *UserOrderedVec[T]) InsertLast(value T) { v.items = append(v.items, value) }
+func (v *UserOrderedVec[T]) InsertLast(value T) { v.InsertBefore(len(v.items), value) }
 
 // InsertBefore inserts value before index.
 func (v *UserOrderedVec[T]) InsertBefore(index int, value T) {
 	if index < 0 { index = 0 }
 	if index > len(v.items) { index = len(v.items) }
-	v.items = append(v.items[:index], append([]T{value}, v.items[index:]...)...)
+	items := make([]T, 0, len(v.items)+1)
+	items = append(items, v.items[:index]...)
+	items = append(items, value)
+	v.items = append(items, v.items[index:]...)
 }
 
 // InsertAfter inserts value after index.
@@ -28,25 +37,33 @@ func (v *UserOrderedVec[T]) InsertAfter(index int, value T) { v.InsertBefore(ind
 // MoveBefore moves one entry before another.
 func (v *UserOrderedVec[T]) MoveBefore(what, point int) {
 	if what < 0 || what >= len(v.items) || point < 0 || point >= len(v.items) || what == point { return }
-	item := v.items[what]
-	v.items = append(v.items[:what], v.items[what+1:]...)
-	if what < point { point-- }
-	v.InsertBefore(point, item)
+	v.move(what, point)
 }
 
 // MoveAfter moves one entry after another.
 func (v *UserOrderedVec[T]) MoveAfter(what, point int) {
 	if what < 0 || what >= len(v.items) || point < 0 || point >= len(v.items) || what == point { return }
-	item := v.items[what]
-	v.items = append(v.items[:what], v.items[what+1:]...)
-	if what < point { point-- }
-	v.InsertBefore(point+1, item)
+	v.move(what, point+1)
+}
+
+// move places the entry at index what immediately before the entry at index
+// before (last when before == Len), in a fresh backing slice.
+func (v *UserOrderedVec[T]) move(what, before int) {
+	items := make([]T, 0, len(v.items))
+	for i, item := range v.items {
+		if i == before { items = append(items, v.items[what]) }
+		if i != what { items = append(items, item) }
+	}
+	if before == len(v.items) { items = append(items, v.items[what]) }
+	v.items = items
 }
 
 // Remove removes and returns index.
 func (v *UserOrderedVec[T]) Remove(index int) T {
 	item := v.items[index]
-	v.items = append(v.items[:index], v.items[index+1:]...)
+	items := make([]T, 0, len(v.items)-1)
+	items = append(items, v.items[:index]...)
+	v.items = append(items, v.items[index+1:]...)
 	return item
 }
 

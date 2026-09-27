@@ -32,3 +32,15 @@ if [ -n "$cgo_files" ]; then
   printf 'default Go dependency closure contains packages with cgo files:\n%s\n' "$cgo_files" >&2
   exit 1
 fi
+
+# CGO_ENABLED=0 drops cgo files from the listing, so the check above cannot see
+# a dependency that has a pure-Go fallback. List again with cgo enabled. The
+# standard library is excluded: net, os/user and runtime/cgo carry cgo files
+# there but build pure Go under CGO_ENABLED=0.
+cgo_enabled_files="$(
+  CGO_ENABLED=1 go list -deps -f '{{if and .CgoFiles (not .Standard)}}{{.ImportPath}} {{.CgoFiles}}{{end}}' "${pkgs[@]}"
+)"
+if [ -n "$cgo_enabled_files" ]; then
+  printf 'default Go dependency closure contains non-standard packages with cgo files (CGO_ENABLED=1):\n%s\n' "$cgo_enabled_files" >&2
+  exit 1
+fi
