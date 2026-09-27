@@ -19,10 +19,10 @@ run_in() {
   (cd "$dir" && "$@")
 }
 
-# Default (cgo-free) Go surface: schema + codegen.
+# Default (cgo-free) Go surface: the pure gate runs CGO_ENABLED=0 go vet + go
+# test over the default packages (plus the cgo-free fitness tests) and checks
+# their dependency closure.
 run "$ROOT/scripts/check-go-default-pure.sh"
-run_in "$ROOT/go" env CGO_ENABLED=0 go vet ./cambium ./codegen ./compat ./datatree ./cmd/cambium-ir
-run_in "$ROOT/go" env CGO_ENABLED=0 go test ./cambium ./codegen ./compat ./datatree ./cmd/cambium-ir
 
 # Optional libyang backend (cgo) + conformance.
 run bash "$ROOT/go/internal/libyang/build.sh"

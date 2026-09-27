@@ -180,7 +180,10 @@ The script:
    `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
    `github.com/openconfig/goyang`, or the vendored `internal/yangparse/upstream`
    raw-statement lexer.
-3. Fails if any package in that closure has cgo source files at all.
+3. Fails if any package in that closure has cgo source files at all. Because
+   `CGO_ENABLED=0` hides cgo files, it also lists the closure with
+   `CGO_ENABLED=1` and fails on any non-standard-library package with cgo files,
+   so a dependency with a pure-Go fallback cannot slip through.
 
 Because the check inspects the *actual resolved dependency graph*, the cgo-free
 guarantee is verified, not asserted. `scripts/green-bar.sh` runs it as the first
@@ -206,6 +209,9 @@ concurrency rules are part of the architecture, not an implementation detail.
   is the mutable phase and `Build()` returns a frozen `*Context`. The libyang
   `ly_ctx` follows the same discipline — assemble the schema, then treat it as
   read-only and shareable for schema reads and parsing independent data trees.
+  The backend enforces the freeze: once a context has created a data tree,
+  module loads return `ErrContextFrozen` (`CAMBIUM_E0001`) instead of letting
+  libyang recompile the schema under live trees.
   Mutators and `Close()` must not race with those operations; the FFI seam is
   additionally **fail-closed** as a safety net — operations after (or racing)
   `Close` return `ErrContextClosed` instead of reaching freed memory, and the
