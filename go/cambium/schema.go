@@ -381,6 +381,10 @@ func (p Pattern) IsInverted() bool { return p.inverted }
 type RangeBound struct {
 	min          string
 	max          string
+	minValue     Number
+	maxValue     Number
+	resolved     bool
+	length       bool
 	errorMessage string
 	errorAppTag  string
 	description  string
@@ -392,6 +396,30 @@ func (r RangeBound) Min() string { return r.min }
 
 // Max returns the upper bound in YANG lexical form.
 func (r RangeBound) Max() string { return r.max }
+
+// MinNumber returns the lower bound as a Number, with a min or max keyword
+// resolved against the effective bounds of the type being restricted. Integer
+// and length bounds have no fraction digits; decimal64 bounds carry the type's
+// fraction-digits. It reports false for a bound Cambium did not resolve.
+func (r RangeBound) MinNumber() (Number, bool) { return r.minValue, r.resolved }
+
+// MaxNumber returns the upper bound as a Number; see MinNumber.
+func (r RangeBound) MaxNumber() (Number, bool) { return r.maxValue, r.resolved }
+
+// MinLength returns the lower bound of a length restriction, with min resolved
+// against the effective length bounds of the type being restricted (0 for the
+// built-in string and binary types). It reports false for a range bound.
+func (r RangeBound) MinLength() (uint64, bool) {
+	return r.minValue.Value, r.resolved && r.length
+}
+
+// MaxLength returns the upper bound of a length restriction, with max resolved
+// against the effective length bounds of the type being restricted
+// (18446744073709551615 for the built-in string and binary types). It reports
+// false for a range bound.
+func (r RangeBound) MaxLength() (uint64, bool) {
+	return r.maxValue.Value, r.resolved && r.length
+}
 
 // ErrorMessage returns the custom error-message and whether one was present.
 func (r RangeBound) ErrorMessage() (string, bool) { return optional(r.errorMessage) }
@@ -6010,6 +6038,14 @@ func intKind(base BaseType) IntKind {
 }
 
 func restrictionRanges(st *yangparse.Statement, keyword string, base BaseType, fractionDigits uint8) ([]RangeBound, error) {
+	return derivedRestrictionRanges(st, keyword, base, fractionDigits, nil)
+}
+
+// derivedRestrictionRanges parses the keyword restriction under st. A min or
+// max bound stands for the matching bound of parent, the effective restriction
+// of the type being restricted, or for the built-in limit when parent is empty
+// (RFC 7950 sections 9.2.4 and 9.4.4).
+func derivedRestrictionRanges(st *yangparse.Statement, keyword string, base BaseType, fractionDigits uint8, parent []RangeBound) ([]RangeBound, error) {
 	statements := direct(st, keyword)
 	if len(statements) == 0 {
 		return nil, nil
@@ -6021,7 +6057,7 @@ func restrictionRanges(st *yangparse.Statement, keyword string, base BaseType, f
 	if err != nil {
 		return nil, err
 	}
-	out, err := ranges(statements[0].Argument, keyword, base, fractionDigits)
+	out, err := ranges(statements[0].Argument, keyword, base, fractionDigits, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -6056,7 +6092,7 @@ func restrictionMetadata(st *yangparse.Statement) (restrictionMetadataData, erro
 	return out, nil
 }
 
-func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeBound, error) {
+func ranges(expr, keyword string, base BaseType, fractionDigits uint8, parent []RangeBound) ([]RangeBound, error) {
 	expr = yangTrimSpace(expr)
 	if expr == "" {
 		return nil, fmt.Errorf("%s expression is empty", keyword)
@@ -6081,11 +6117,11 @@ func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeB
 		if lo == "" || hi == "" {
 			return nil, fmt.Errorf("%s expression %q has missing bound in segment %q", keyword, expr, part)
 		}
-		lower, err := normalizeBound(lo, keyword, base, fractionDigits)
+		lower, minValue, err := normalizeBound(inheritedBound(lo, parent), keyword, base, fractionDigits)
 		if err != nil {
 			return nil, err
 		}
-		upper, err := normalizeBound(hi, keyword, base, fractionDigits)
+		upper, maxValue, err := normalizeBound(inheritedBound(hi, parent), keyword, base, fractionDigits)
 		if err != nil {
 			return nil, err
 		}
@@ -6102,55 +6138,90 @@ func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeB
 			}
 		}
 		out = append(out, RangeBound{
-			min: lower,
-			max: upper,
+			min:      lower,
+			max:      upper,
+			minValue: minValue,
+			maxValue: maxValue,
+			resolved: keyword == "length" || isIntBase(base) || base == BaseTypeDecimal64,
+			length:   keyword == "length",
 		})
 		prevMax = upper
 	}
 	return out, nil
 }
 
-func normalizeBound(s, keyword string, base BaseType, fractionDigits uint8) (string, error) {
+// inheritedBound replaces a min or max keyword with the matching bound of
+// parent, the effective restriction of the type being restricted. Without a
+// parent restriction the keyword keeps its built-in meaning.
+func inheritedBound(s string, parent []RangeBound) string {
+	if len(parent) == 0 {
+		return s
+	}
+	switch s {
+	case "min":
+		return parent[0].min
+	case "max":
+		return parent[len(parent)-1].max
+	}
+	return s
+}
+
+// normalizeBound returns bound s in lexical form and as a Number. Integer range
+// keywords become the built-in limits lexically; length and decimal64 keywords
+// stay lexical and resolve to the built-in limits only numerically.
+func normalizeBound(s, keyword string, base BaseType, fractionDigits uint8) (string, Number, error) {
 	if keyword == "length" {
-		if s == "min" || s == "max" {
-			return s, nil
+		switch s {
+		case "min":
+			return s, FromUint(0), nil
+		case "max":
+			return s, FromUint(^uint64(0)), nil
 		}
 		parsed, err := parseRangeUint(s, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid length bound %q", s)
+			return "", Number{}, fmt.Errorf("invalid length bound %q", s)
 		}
-		return strconv.FormatUint(parsed, 10), nil
+		return strconv.FormatUint(parsed, 10), FromUint(parsed), nil
 	}
 	if isIntBase(base) {
-		if s == "min" {
-			return intMin(base), nil
-		}
-		if s == "max" {
-			return intMax(base), nil
+		switch s {
+		case "min":
+			s = intMin(base)
+		case "max":
+			s = intMax(base)
 		}
 		if isSignedIntBase(base) {
 			parsed, err := strconv.ParseInt(s, 10, intBitSize(base))
 			if err != nil {
-				return "", fmt.Errorf("invalid range bound %q for %s", s, base.String())
+				return "", Number{}, fmt.Errorf("invalid range bound %q for %s", s, base.String())
 			}
-			return strconv.FormatInt(parsed, 10), nil
+			return strconv.FormatInt(parsed, 10), FromInt(parsed), nil
 		}
 		parsed, err := parseRangeUint(s, intBitSize(base))
 		if err != nil {
-			return "", fmt.Errorf("invalid range bound %q for %s", s, base.String())
+			return "", Number{}, fmt.Errorf("invalid range bound %q for %s", s, base.String())
 		}
-		return strconv.FormatUint(parsed, 10), nil
+		return strconv.FormatUint(parsed, 10), FromUint(parsed), nil
 	}
 	if base == BaseTypeDecimal64 {
-		if s == "min" || s == "max" {
-			return s, nil
+		// decimal64 limits are the int64 limits scaled by fraction-digits.
+		switch s {
+		case "min":
+			return s, Number{Value: AbsMinInt64, FractionDigits: fractionDigits, Negative: true}, nil
+		case "max":
+			return s, Number{Value: MaxInt64, FractionDigits: fractionDigits}, nil
 		}
 		if !validDecimal64Bound(s, fractionDigits) {
-			return "", fmt.Errorf("invalid decimal64 range bound %q", s)
+			return "", Number{}, fmt.Errorf("invalid decimal64 range bound %q", s)
 		}
-		return formatDecimalBound(s, fractionDigits), nil
+		formatted := formatDecimalBound(s, fractionDigits)
+		value, err := ParseDecimal(formatted, fractionDigits)
+		if err != nil {
+			return "", Number{}, fmt.Errorf("invalid decimal64 range bound %q", s)
+		}
+		return formatted, value, nil
 	}
-	return s, nil
+	return s, Number{}, nil
 }
 
 func boundsOrdered(keyword string, base BaseType, lower, upper string) bool {

@@ -458,12 +458,21 @@ func TestS3NegativeReferences(t *testing.T) {
 		}
 	}
 
-	// A leafref cycle is reported by chain resolution as a distinct cause.
-	mod := s3Module(t, `module cyc { yang-version 1.1; namespace "urn:cyc"; prefix c;
+	// A leafref cycle fails Build as a distinct cause; vendor-compatible mode
+	// only warns, and chain resolution still reports the cycle.
+	const cyc = `module cyc { yang-version 1.1; namespace "urn:cyc"; prefix c;
   leaf a { type leafref { path "/c:b"; } }
-  leaf b { type leafref { path "/c:a"; } } }`)
-	_, err := cambium.ResolveLeafrefChain(schemaNodeAt(t, mod, "/c:a"))
+  leaf b { type leafref { path "/c:a"; } } }`
+	_, err := buildPolicyContext(t, cambium.DeviationPolicy{}, cyc)
 	var lerr *cambium.LeafrefResolutionError
+	if !errors.As(err, &lerr) || lerr.Reason != cambium.LeafrefFailureCycle {
+		t.Fatalf("Build cycle error = %v", err)
+	}
+	ctx, err := buildModeContext(t, cambium.ValidationVendorCompatible, nil, cyc)
+	if err != nil {
+		t.Fatalf("vendor Build: %v", err)
+	}
+	_, err = cambium.ResolveLeafrefChain(schemaNodeAt(t, ctx.Modules()[0], "/c:a"))
 	if !errors.As(err, &lerr) || lerr.Reason != cambium.LeafrefFailureCycle {
 		t.Fatalf("cycle error = %v", err)
 	}

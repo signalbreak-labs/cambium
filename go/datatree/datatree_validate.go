@@ -21,11 +21,19 @@ func (e *ValidationError) Error() string {
 		len(e.Violations), strings.Join(e.Violations, "; "))
 }
 
-// Validate checks: mandatory leaves present, list / leaf-list min- and
-// max-elements, leaf-list value uniqueness, list keys present in every entry,
-// list key uniqueness, per-leaf value types, leafref instance existence, and
-// must/when XPath constraints. It returns a *ValidationError listing every
-// violation, or nil if the tree is valid.
+// Validate checks: mandatory leaves and choices present, list / leaf-list
+// min- and max-elements, choice/case exclusivity, leaf-list value uniqueness
+// (configuration data only), list keys present in every entry, list key and
+// unique-statement uniqueness, per-leaf value types, leafref instance
+// existence, and must/when XPath constraints. It returns a *ValidationError
+// listing every violation, or nil if the tree is valid.
+//
+// Constraints follow the data tree RFC 7950 describes: only the case of a
+// choice whose data exists is validated, and a non-presence container exists
+// whenever its parent does, so the constraints below an absent one still apply
+// (libyang instantiates it). Values are compared in canonical form. The top
+// level of every module the tree is bound to is checked, with or without data
+// in the document (see ParseModules).
 //
 // must/when expressions and leafref paths that use constructs outside the
 // supported XPath subset (unimplemented functions, explicit axes, unresolved
@@ -35,7 +43,8 @@ func (e *ValidationError) Error() string {
 func (t *Tree) Validate() error {
 	var violations []string
 	root := t.xroot()
-	validateLevel(root, root, flattenTopLevel(t.module), [][]*node{t.roots}, "", &violations)
+	v := validator{root: root, out: &violations}
+	v.level(root, topLevelSchema(t.modules...), [][]*node{t.roots}, "")
 	t.checkMustWhen(&violations)
 	if len(violations) == 0 {
 		return nil
@@ -43,62 +52,127 @@ func (t *Tree) Validate() error {
 	return &ValidationError{Violations: violations}
 }
 
-// validateLevel walks the schema children in declaration order and checks each
-// against the data present at this level. Driving from the schema (not the data)
-// is what surfaces absent-but-required nodes.
-func validateLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, ancestors [][]*node, path string, out *[]string) {
-	data := ancestors[len(ancestors)-1]
-	present := make(map[nodeKey]*node, len(data))
-	for _, d := range data {
-		present[dataNodeKey(d)] = d
-	}
+// validator walks the schema in declaration order and checks it against the
+// data. Driving from the schema (not the data) is what surfaces
+// absent-but-required nodes.
+type validator struct {
+	root *xnode
+	out  *[]string
+}
+
+func (v *validator) report(format string, args ...any) {
+	*v.out = append(*v.out, fmt.Sprintf(format, args...))
+}
+
+// level validates the data of one level (the last ancestors frame) against
+// schema, the level's children with choice and case nodes kept. parent is the
+// level's XPath node: a detached placeholder when the level is an absent
+// non-presence container.
+func (v *validator) level(parent *xnode, schema []cambium.SchemaNodeRef, ancestors [][]*node, path string) {
+	v.nodes(parent, schema, indexLevel(ancestors[len(ancestors)-1]), ancestors, path)
+}
+
+func (v *validator) nodes(parent *xnode, schema []cambium.SchemaNodeRef, present levelIndex, ancestors [][]*node, path string) {
 	for _, sn := range schema {
+		if sn.IsChoice() {
+			v.choice(parent, sn, present, ancestors, path)
+			continue
+		}
 		childPath := path + "/" + sn.Name()
-		dn := present[schemaNodeKey(sn)]
+		dn := present.node(sn)
 		if dn == nil {
-			active := schemaNodeActiveForMissing(root, parent, sn)
-			if active && sn.IsMandatory() {
-				*out = append(*out, fmt.Sprintf("missing mandatory node %s", childPath))
-			}
-			if minE, ok := sn.MinElements(); active && ok && minE > 0 {
-				*out = append(*out, fmt.Sprintf("%s has 0 entries, fewer than min-elements %d", childPath, minE))
-			}
+			v.missing(parent, sn, ancestors, childPath)
 			continue
 		}
 		switch {
 		case sn.IsList():
-			checkElements(sn, len(dn.entries), childPath, out)
-			checkListKeys(sn, dn, childPath, out)
+			checkElements(sn, len(dn.entries), childPath, v.out)
+			checkListKeys(sn, dn, childPath, v.out)
 			listNodes := matchingChildXNodes(parent, sn)
+			v.checkUnique(sn, dn, listNodes, childPath)
 			for i, entry := range dn.entries {
 				var listParent *xnode
 				if i < len(listNodes) {
 					listParent = listNodes[i]
 				}
-				validateLevel(root, listParent, childRefs(sn.DataChildren(true)), appendFrame(ancestors, entry), fmt.Sprintf("%s[%d]", childPath, i), out)
+				v.level(listParent, levelSchema(sn), appendFrame(ancestors, entry), fmt.Sprintf("%s[%d]", childPath, i))
 			}
 		case sn.IsLeafList():
-			checkElements(sn, len(dn.values), childPath, out)
-			checkLeafListUnique(dn, childPath, out)
+			checkElements(sn, len(dn.values), childPath, v.out)
+			if sn.RepresentsConfigurationData() {
+				// RFC 7950 §7.7.1: state leaf-lists may repeat a value.
+				checkLeafListUnique(dn, childPath, v.out)
+			}
 			if ti, ok := sn.LeafType(); ok {
-				for i, v := range dn.values {
-					validateLeafValue(ti, v, fmt.Sprintf("%s[%d]", childPath, i), sn.Module().Name(), out)
+				for i, value := range dn.values {
+					valuePath := fmt.Sprintf("%s[%d]", childPath, i)
+					validateLeafValue(ti, value, valuePath, sn.Module().Name(), v.out)
+					checkLeafRefInstance(sn, value, ancestors, valuePath, v.out)
 				}
 			}
 		case sn.IsContainer():
-			validateLevel(root, firstMatchingChildXNode(parent, sn), childRefs(sn.DataChildren(true)), appendFrame(ancestors, dn.children), childPath, out)
+			v.level(firstMatchingChildXNode(parent, sn), levelSchema(sn), appendFrame(ancestors, dn.children), childPath)
 		case sn.IsLeaf():
 			if ti, ok := sn.LeafType(); ok {
-				validateLeafValue(ti, dn.value, childPath, sn.Module().Name(), out)
+				validateLeafValue(ti, dn.value, childPath, sn.Module().Name(), v.out)
 			}
-			checkLeafRefInstance(sn, string(dn.value), ancestors, childPath, out)
+			checkLeafRefInstance(sn, dn.value, ancestors, childPath, v.out)
 		}
 	}
 }
 
+// missing checks an absent node whose when conditions (if any) hold: it must
+// not be mandatory or require elements, and an absent non-presence container
+// is validated as an empty one.
+func (v *validator) missing(parent *xnode, sn cambium.SchemaNodeRef, ancestors [][]*node, path string) {
+	if !schemaNodeActiveForMissing(v.root, parent, sn) {
+		return
+	}
+	if sn.IsMandatory() {
+		v.report("missing mandatory node %s", path)
+	}
+	if minE, ok := sn.MinElements(); ok && minE > 0 {
+		v.report("%s has 0 entries, fewer than min-elements %d", path, minE)
+	}
+	if sn.IsContainer() && !sn.IsPresenceContainer() {
+		v.level(dummyMissingNode(parent, sn), levelSchema(sn), appendFrame(ancestors, nil), path)
+	}
+}
+
+// choice checks that at most one case has data and that a mandatory choice
+// has one, then validates the selected case only: constraints inside the
+// other cases do not apply (RFC 7950 §7.9). With data in several cases, the
+// first is validated, as libyang does.
+func (v *validator) choice(parent *xnode, choice cambium.SchemaNodeRef, present levelIndex, ancestors [][]*node, path string) {
+	var withData []cambium.SchemaNodeRef
+	for _, c := range choiceCases(choice) {
+		if caseHas(c, present, instantiated) {
+			withData = append(withData, c)
+		}
+	}
+	if len(withData) > 1 {
+		v.report("%s: data for both cases %q and %q of choice %q exist", displayPath(path), withData[0].Name(), withData[1].Name(), choice.Name())
+	}
+	selected, ok := dataCase(choice, present)
+	if !ok {
+		if choice.IsMandatory() && choiceActive(v.root, parent, choice) {
+			v.report("missing mandatory choice %s/%s", path, choice.Name())
+		}
+		return
+	}
+	v.nodes(parent, caseSchema(selected), present, ancestors, path)
+}
+
+func displayPath(path string) string {
+	if path == "" {
+		return "/"
+	}
+	return path
+}
+
 func (t *Tree) xroot() *xnode {
 	root := &xnode{}
-	root.kids = buildXNodes(flattenTopLevel(t.module), t.roots, root)
+	root.kids = buildXNodes(flattenTopLevel(t.modules...), t.roots, root)
 	return root
 }
 
@@ -180,22 +254,24 @@ func checkElements(sn cambium.SchemaNodeRef, count int, path string, out *[]stri
 // key tuples are unique across entries (invariant-neutral: key order in the
 // tuple follows key-statement order, and entries are not reordered).
 func checkListKeys(sn cambium.SchemaNodeRef, dn *node, path string, out *[]string) {
-	keys := sn.KeyNames()
+	keys := childRefs(sn.ListKeys())
 	if len(keys) == 0 {
 		return
 	}
 	seen := make(map[string]bool, len(dn.entries))
 	for i, entry := range dn.entries {
-		byName := make(map[string]*node, len(entry))
+		// Keys are looked up by qualified (module, name) identity: a same-named
+		// leaf augmented in from another module is not the key.
+		byKey := make(map[nodeKey]*node, len(entry))
 		for _, e := range entry {
-			byName[e.name] = e
+			byKey[dataNodeKey(e)] = e
 		}
 		tuple := make([]string, 0, len(keys))
 		complete := true
 		for _, k := range keys {
-			kn := byName[k]
+			kn := byKey[schemaNodeKey(k)]
 			if kn == nil {
-				*out = append(*out, fmt.Sprintf("%s[%d] is missing key leaf %q", path, i, k))
+				*out = append(*out, fmt.Sprintf("%s[%d] is missing key leaf %q", path, i, k.Name()))
 				complete = false
 				continue
 			}

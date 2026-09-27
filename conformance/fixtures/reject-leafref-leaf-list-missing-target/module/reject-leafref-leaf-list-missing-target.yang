@@ -1,0 +1,16 @@
+module reject-leafref-leaf-list-missing-target {
+  yang-version 1.1;
+  namespace "urn:reject-leafref-leaf-list-missing-target";
+  prefix rllmt;
+  revision 2026-09-27;
+
+  list interface {
+    key name;
+    leaf name { type string; }
+  }
+  leaf-list monitored {
+    type leafref {
+      path "/rllmt:interface/rllmt:name";
+    }
+  }
+}

@@ -1913,6 +1913,9 @@ func (c *Context) rebuildIfDirty() error {
 	for _, mod := range c.loadOrder {
 		mod.resolveLeafRefs()
 	}
+	if err := c.validateLeafrefCycles(); err != nil {
+		return err
+	}
 	for _, mod := range c.loadOrder {
 		if err := mod.validateDefaultValues(); err != nil {
 			return err

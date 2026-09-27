@@ -170,6 +170,7 @@ var enabled = []string{
 	"notification-with-container-leaflist",
 	"notification-interleaved-siblings",
 	"rpc-action-notification-coexistence",
+	"multi-module-top-level-order",
 }
 
 func main() {

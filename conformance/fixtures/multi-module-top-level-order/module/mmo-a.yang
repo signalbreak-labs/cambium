@@ -1,0 +1,8 @@
+module mmo-a {
+  namespace "urn:mmo:3";
+  prefix p3;
+  revision 2026-09-27;
+  leaf a-first { type string; }
+  container a-box { leaf inner { type string; } }
+  leaf a-last { type string; }
+}
