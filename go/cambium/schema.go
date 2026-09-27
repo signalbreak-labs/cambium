@@ -2541,7 +2541,7 @@ func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []
 	if len(path) == 0 {
 		return nil
 	}
-	head := path[0]
+	head, rest := path[0], path[1:]
 	if head == "" || strings.TrimSpace(head) != head {
 		return nil
 	}
@@ -2563,10 +2563,10 @@ func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []
 		if wantModule != nil && root.module != wantModule {
 			continue
 		}
-		if len(path) == 1 {
+		if len(rest) == 0 {
 			return root
 		}
-		return findRelativeSchemaNode(source, root.children, path[1:], fromStmt)
+		return findRelativeSchemaNode(source, root.children, rest, fromStmt)
 	}
 	return nil
 }
