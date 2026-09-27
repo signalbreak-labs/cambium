@@ -1,0 +1,4 @@
+<tunnel xmlns="urn:reject-choice-two-cases">
+  <remote>203.0.113.1</remote>
+  <label>16</label>
+</tunnel>

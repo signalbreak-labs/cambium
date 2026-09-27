@@ -685,6 +685,7 @@ func TestModulesFacadeModuleMetadata(t *testing.T) {
 }
 `
 	subSource := `submodule compat-metadata-sub {
+    yang-version 1.1;
     belongs-to compat-metadata-demo { prefix cmd; }
     revision 2026-01-03;
     grouping sub-group {

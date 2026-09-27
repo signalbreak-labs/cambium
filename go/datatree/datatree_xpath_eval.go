@@ -177,6 +177,7 @@ type evaluator struct {
 	unprefixedNS string
 	excluded     map[cambium.SchemaNodeRef]bool
 	current      *xnode
+	prefixNS     map[string]string // explicit prefix bindings, consulted before module's
 }
 
 type ectx struct {
@@ -189,6 +190,9 @@ func (ev *evaluator) resolveName(qname string) (ns, local string, err error) {
 	if i := strings.Index(qname, ":"); i >= 0 {
 		prefix := qname[:i]
 		local = qname[i+1:]
+		if ns, ok := ev.prefixNS[prefix]; ok {
+			return ns, local, nil
+		}
 		mod, ok := ev.module.ResolvePrefix(prefix)
 		if !ok {
 			return "", "", fmt.Errorf("unknown prefix %q", prefix)

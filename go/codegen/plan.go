@@ -89,6 +89,7 @@ func Plan(ctx *cambium.Context, module string) (*ModulePlan, error) {
 		ns:           mod.Namespace(),
 	}
 	g.initPlanningState()
+	g.allocateNames()
 
 	plan := &ModulePlan{Version: PlanVersion, Module: mod}
 	rootChildren := g.documentTopLevelChildren()
@@ -112,6 +113,7 @@ func (g *goEmitter) initPlanningState() {
 	g.bitsTypes = make(map[string]bool)
 	g.identityrefTypes = make(map[string]bool)
 	g.unionTypes = make(map[string]bool)
+	g.names = newIdentAllocator()
 }
 
 func (g *goEmitter) appendRecordPlans(plan *ModulePlan, field fieldInfo) {

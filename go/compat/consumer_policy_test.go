@@ -245,10 +245,11 @@ func TestCompatIgnoredNotSupportedFromImportedDeviationModule(t *testing.T) {
 	}
 }
 
-// IgnoreSubmoduleCircularDependencies is accepted for goyang source
-// compatibility but has no effect: loading is delegated to Cambium, which
-// resolves submodule include cycles the same way whatever the flag says.
-func TestCompatSubmoduleCircularDependencyFlagHasNoEffect(t *testing.T) {
+// IgnoreSubmoduleCircularDependencies keeps goyang's contract: a circular
+// submodule include is an error by default (RFC 7950 forbids it) and loads
+// only when the flag is set, which selects Cambium's vendor-compatible
+// loading and reports the cycle as a LoadReport warning.
+func TestCompatSubmoduleCircularDependencyFlag(t *testing.T) {
 	dir := t.TempDir()
 	files := map[string]string{
 		"circ.yang": `module circ {
@@ -272,31 +273,40 @@ func TestCompatSubmoduleCircularDependencyFlagHasNoEffect(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var outcomes []string
-	for _, flag := range []bool{false, true} {
+	process := func(flag bool) (*compat.Modules, []error) {
 		ms := compat.NewModules()
 		ms.ParseOptions.IgnoreSubmoduleCircularDependencies = flag
 		ms.AddPath(dir)
 		if err := ms.Read("circ"); err != nil {
 			t.Fatalf("Read: %v", err)
 		}
-		var outcome string
-		if errs := ms.Process(); len(errs) != 0 {
-			outcome = "error: " + errs[0].Error()
-		} else {
-			entry, errs := ms.GetModule("circ")
-			if len(errs) != 0 {
-				t.Fatalf("GetModule: %v", errs)
-			}
-			outcome = strings.Join(childNames(entry.Dir["top"].Children()), ",")
+		errs := ms.Process()
+		return ms, errs
+	}
+
+	if _, errs := process(false); len(errs) == 0 || !strings.Contains(errs[0].Error(), "include cycle circ-a -> circ-b -> circ-a") {
+		t.Fatalf("Process without flag errors = %v, want include cycle error", errs)
+	}
+
+	ms, errs := process(true)
+	if len(errs) != 0 {
+		t.Fatalf("Process with flag errors = %v, want none", errs)
+	}
+	entry, errs := ms.GetModule("circ")
+	if len(errs) != 0 {
+		t.Fatalf("GetModule: %v", errs)
+	}
+	// Circular submodule includes load in uses order.
+	if got := strings.Join(childNames(entry.Dir["top"].Children()), ","); got != "a,b" {
+		t.Fatalf("circular submodule include children = %q, want %q", got, "a,b")
+	}
+	var cycleWarnings int
+	for _, warning := range ms.LoadReport().Warnings {
+		if strings.Contains(warning.Message, "include cycle circ-a -> circ-b -> circ-a") {
+			cycleWarnings++
 		}
-		outcomes = append(outcomes, outcome)
 	}
-	if outcomes[0] != outcomes[1] {
-		t.Fatalf("flag changed outcome: false=%q true=%q", outcomes[0], outcomes[1])
-	}
-	// Circular submodule includes load in both modes, in uses order.
-	if outcomes[0] != "a,b" {
-		t.Fatalf("circular submodule include outcome = %q, want %q", outcomes[0], "a,b")
+	if cycleWarnings != 1 {
+		t.Fatalf("include cycle warnings = %d, want 1 in %+v", cycleWarnings, ms.LoadReport().Warnings)
 	}
 }

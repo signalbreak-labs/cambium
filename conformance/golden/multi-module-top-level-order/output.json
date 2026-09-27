@@ -1,0 +1,22 @@
+{
+  "mmo-a:a-first": "a",
+  "mmo-a:a-box": {
+    "inner": "in",
+    "mmo-a-ext:added": "yes"
+  },
+  "mmo-a:a-last": "z",
+  "mmo-a-ext:ext-ref": "second",
+  "mmo-b:b-list": [
+    {
+      "name": "first"
+    },
+    {
+      "name": "second"
+    }
+  ],
+  "mmo-b:b-values": [
+    10,
+    20
+  ],
+  "mmo-b:b-last": "end"
+}

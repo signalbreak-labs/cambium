@@ -84,9 +84,11 @@ boundary, and it is a real trade-off, not a formality.
 - The concurrency contract: schema contexts are build-once-then-frozen. In the pure
   tier, `ContextBuilder.Build()` returns the shareable read-only context. In the
   backend, finish `SetSearchPath`/`LoadModule` first, then share the context for
-  schema reads and parsing independent trees. `*DataTree` values and borrowed
-  handles (`NodeRef`, ordered-list handles, diffs) are **not** concurrency-safe —
-  give each goroutine its own tree (`Duplicate()` when needed) or serialize access.
+  schema reads and parsing independent trees; once the context has created a
+  data tree, module loads fail with `ErrContextFrozen`. `*DataTree` values and
+  borrowed handles (`NodeRef`, ordered-list handles, diffs) are **not**
+  concurrency-safe — give each goroutine its own tree (`Duplicate()` when needed)
+  or serialize access.
   Backend validation is safe on independent trees, but validation-log collection is
   serialized process-wide today.
 
@@ -101,7 +103,8 @@ exercises `cambium`, `codegen`, `compat`, and `datatree` with `CGO_ENABLED=0`, t
 inspects their actual transitive dependency closure and fails if it contains
 `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
 `github.com/openconfig/goyang`, the vendored `internal/yangparse/upstream` lexer, or
-any package carrying cgo source files.
+any package carrying cgo source files (checked with cgo both disabled and
+enabled, so a non-standard dependency with a pure-Go fallback is still caught).
 
 ```bash
 # Prove the default packages have no path to C:

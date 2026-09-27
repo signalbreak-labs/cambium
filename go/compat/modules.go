@@ -204,10 +204,14 @@ func (m *Module) GetPrefix() string {
 
 // Options defines parse/process options accepted for goyang API compatibility.
 //
-// IgnoreSubmoduleCircularDependencies is accepted but has no effect: circular
-// submodule includes load either way. No option selects features; compat
-// projects the native schema with no features enabled, so feature selection
-// requires the native cambium.ContextBuilder.
+// As in goyang, a circular submodule include is an error unless
+// IgnoreSubmoduleCircularDependencies is set. Setting it selects
+// cambium.ValidationVendorCompatible, so the cycle (and any other
+// vendor-compatible relaxation) is reported as a LoadReport warning.
+//
+// No option selects features; compat projects the native schema with no
+// features enabled, so feature selection requires the native
+// cambium.ContextBuilder.
 type Options struct {
 	IgnoreSubmoduleCircularDependencies bool
 	StoreUses                           bool
@@ -336,6 +340,14 @@ func (ms *Modules) Process() []error {
 		IgnoreNotSupported: ms.ParseOptions.DeviateOptions.IgnoreDeviateNotSupported,
 	}); err != nil {
 		return []error{err}
+	}
+	// goyang rejects circular submodule includes unless this flag is set; the
+	// flag selects vendor-compatible loading, which reports the cycle as a
+	// LoadReport warning instead.
+	if ms.ParseOptions.IgnoreSubmoduleCircularDependencies {
+		if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+			return []error{err}
+		}
 	}
 	staged, cleanup, err := ms.stageInMemorySources()
 	if err != nil {

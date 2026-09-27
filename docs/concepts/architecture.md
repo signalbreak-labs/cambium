@@ -100,7 +100,8 @@ instance existence. This tier needs no C build; `go get` is enough.
 Package `datatree`. A generic data tree that parses a document against a Cambium
 schema into an ordered tree and serializes it back in effective schema declaration
 order, with **no libyang and no cgo**. `datatree.Parse(module, format, data)`
-accepts JSON_IETF or XML; `(*Tree).Serialize`, `Validate`, and `ApplyDefaults`
+accepts JSON_IETF or XML (`ParseModules` for a document whose top-level nodes
+span several modules); `(*Tree).Serialize`, `Validate`, and `ApplyDefaults`
 round-trip and check it. For the constructs it supports it preserves I1/I2/I3/I5,
 and it validates mandatory, cardinality, uniqueness, leafref instance existence,
 and `must`/`when` over a growing XPath subset.
@@ -180,7 +181,10 @@ The script:
    `runtime/cgo`, anything matching `libyang`, `internal/libyang`, `libyangbackend`,
    `github.com/openconfig/goyang`, or the vendored `internal/yangparse/upstream`
    raw-statement lexer.
-3. Fails if any package in that closure has cgo source files at all.
+3. Fails if any package in that closure has cgo source files at all. Because
+   `CGO_ENABLED=0` hides cgo files, it also lists the closure with
+   `CGO_ENABLED=1` and fails on any non-standard-library package with cgo files,
+   so a dependency with a pure-Go fallback cannot slip through.
 
 Because the check inspects the *actual resolved dependency graph*, the cgo-free
 guarantee is verified, not asserted. `scripts/green-bar.sh` runs it as the first
@@ -206,6 +210,9 @@ concurrency rules are part of the architecture, not an implementation detail.
   is the mutable phase and `Build()` returns a frozen `*Context`. The libyang
   `ly_ctx` follows the same discipline — assemble the schema, then treat it as
   read-only and shareable for schema reads and parsing independent data trees.
+  The backend enforces the freeze: once a context has created a data tree,
+  module loads return `ErrContextFrozen` (`CAMBIUM_E0001`) instead of letting
+  libyang recompile the schema under live trees.
   Mutators and `Close()` must not race with those operations; the FFI seam is
   additionally **fail-closed** as a safety net — operations after (or racing)
   `Close` return `ErrContextClosed` instead of reaching freed memory, and the
@@ -235,7 +242,8 @@ attach as a first-class peer rather than a bolt-on.
   A binding implements *against* this spec; it does not fork it.
 - **`/conformance`** — a shared corpus of fixtures plus `golden/` outputs and
   `manifest.toml`. Every binding runs the same corpus through its own runner and is
-  expected to reproduce the same golden bytes, so parity is defined by behavior on
+  expected to reproduce the same golden bytes and refuse the same must-reject
+  documents (`expect = "reject"`), so parity is defined by behavior on
   shared inputs, not by which language landed first. The corpus is also packaged as
   a versioned, checksummed artifact for out-of-repo consumers
   ([guide](../guides/conformance-artifact.md),

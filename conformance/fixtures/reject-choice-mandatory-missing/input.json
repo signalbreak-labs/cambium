@@ -1,0 +1,5 @@
+{
+  "reject-choice-mandatory-missing:tunnel": {
+    "description": "core uplink"
+  }
+}

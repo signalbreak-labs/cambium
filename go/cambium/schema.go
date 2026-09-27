@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"iter"
 	"math/big"
+	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
@@ -381,6 +383,10 @@ func (p Pattern) IsInverted() bool { return p.inverted }
 type RangeBound struct {
 	min          string
 	max          string
+	minValue     Number
+	maxValue     Number
+	resolved     bool
+	length       bool
 	errorMessage string
 	errorAppTag  string
 	description  string
@@ -392,6 +398,30 @@ func (r RangeBound) Min() string { return r.min }
 
 // Max returns the upper bound in YANG lexical form.
 func (r RangeBound) Max() string { return r.max }
+
+// MinNumber returns the lower bound as a Number, with a min or max keyword
+// resolved against the effective bounds of the type being restricted. Integer
+// and length bounds have no fraction digits; decimal64 bounds carry the type's
+// fraction-digits. It reports false for a bound Cambium did not resolve.
+func (r RangeBound) MinNumber() (Number, bool) { return r.minValue, r.resolved }
+
+// MaxNumber returns the upper bound as a Number; see MinNumber.
+func (r RangeBound) MaxNumber() (Number, bool) { return r.maxValue, r.resolved }
+
+// MinLength returns the lower bound of a length restriction, with min resolved
+// against the effective length bounds of the type being restricted (0 for the
+// built-in string and binary types). It reports false for a range bound.
+func (r RangeBound) MinLength() (uint64, bool) {
+	return r.minValue.Value, r.resolved && r.length
+}
+
+// MaxLength returns the upper bound of a length restriction, with max resolved
+// against the effective length bounds of the type being restricted
+// (18446744073709551615 for the built-in string and binary types). It reports
+// false for a range bound.
+func (r RangeBound) MaxLength() (uint64, bool) {
+	return r.maxValue.Value, r.resolved && r.length
+}
 
 // ErrorMessage returns the custom error-message and whether one was present.
 func (r RangeBound) ErrorMessage() (string, bool) { return optional(r.errorMessage) }
@@ -1144,6 +1174,7 @@ type schemaNodeData struct {
 	config              Config
 	configProp          *yangparse.Statement
 	mandatory           bool
+	mandatoryProp       *yangparse.Statement
 	presence            bool
 	orderedBy           OrderedBy
 	defaults            []DefaultValue
@@ -1165,6 +1196,11 @@ type schemaNodeData struct {
 	choiceDesc          bool
 	groupOrigin         string
 	devs                []Deviation
+	// augmentRank is the rank of the top-level augment that placed this node
+	// on its parent (module-load order, then augment source order), or 0 for
+	// a node declared or expanded in place. It orders augment contributions
+	// to one target; see insertAugmentChildren.
+	augmentRank int
 }
 
 type identityData struct {
@@ -2389,14 +2425,15 @@ func (m *moduleData) collectFeatureExcludedNames(parent *schemaNodeData, st *yan
 			groupMod.collectFeatureExcludedNames(parent, child, owner, seen)
 		}
 	case isSchemaChildKeyword(st.Keyword), st.Keyword == "case", st.Keyword == "rpc", st.Keyword == "notification", st.Keyword == "input", st.Keyword == "output":
-		name := featureExcludedName{module: owner, name: st.Argument}
-		for _, existing := range parent.featureExcluded {
-			if existing == name {
-				return
-			}
-		}
-		parent.featureExcluded = append(parent.featureExcluded, name)
+		addFeatureExcludedName(parent, featureExcludedName{module: owner, name: st.Argument})
 	}
+}
+
+func addFeatureExcludedName(parent *schemaNodeData, name featureExcludedName) {
+	if parent == nil || slices.Contains(parent.featureExcluded, name) {
+		return
+	}
+	parent.featureExcluded = append(parent.featureExcluded, name)
 }
 
 func validateUsesParent(uses *yangparse.Statement, parent *schemaNodeData) error {
@@ -2436,20 +2473,29 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 	defer delete(groupingStack, group)
 	children := groupMod.buildChildrenSeen(group, parent, owner, choiceDesc, localName(uses.Argument), groupingStack)
 	prependIfFeatures(children, ifFeatureArgs(uses))
+	var refinedOut []*schemaNodeData
 	for _, refine := range direct(uses, "refine") {
-		if !m.featureIncluded(refine) {
-			continue
-		}
 		if err := validateDescendantSchemaNodeIDStatement("refine", refine, m.yangVersionForStatement(refine) == "1.1"); err != nil {
 			m.recordSchemaError(err)
 			continue
 		}
-		target := findRelativeSchemaNode(m, children, strings.Split(refine.Argument, "/"), refine)
+		path := strings.Split(refine.Argument, "/")
+		target := findRelativeSchemaNode(m, children, path, refine)
 		if target == nil {
-			m.recordSchemaError(fmt.Errorf("refine %q target not found at %s", refine.Argument, refine.Location()))
+			// A grouping node the enabled feature set excluded is absent from
+			// the effective schema, so there is nothing to refine.
+			if !m.featureExcludedRelativePath(parent, children, path, refine) {
+				m.recordSchemaError(fmt.Errorf("refine %q target not found at %s", refine.Argument, refine.Location()))
+			}
 			continue
 		}
 		applyRefine(m, target, refine)
+		// RFC 7950 §7.13.2: a refine's if-feature statements are added to its
+		// target, so they gate the target node, not the refine's other
+		// properties.
+		if !m.featureIncluded(refine) {
+			refinedOut = append(refinedOut, target)
+		}
 	}
 	for _, aug := range direct(uses, "augment") {
 		if !m.featureIncluded(aug) {
@@ -2464,8 +2510,45 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 			m.recordSchemaError(fmt.Errorf("uses augment %q target not found at %s", aug.Argument, aug.Location()))
 		}
 	}
+	children = pruneRefinedOut(children, refinedOut)
 	m.applyUsesWhen(uses, children)
 	return children
+}
+
+// pruneRefinedOut removes the uses-expanded nodes whose refine added an
+// if-feature the enabled feature set rejects, and notes each on its parent as
+// feature-excluded so augment and deviation paths into it are recognized as
+// feature exclusions. roots are the expansion's top-level nodes; the pruned
+// roots are removed from the returned slice.
+func pruneRefinedOut(roots, pruned []*schemaNodeData) []*schemaNodeData {
+	for _, n := range pruned {
+		if n.parent == nil {
+			continue
+		}
+		addFeatureExcludedName(n.parent, featureExcludedName{module: n.module, name: n.name})
+		if slices.Contains(roots, n) {
+			roots = removeNodePtr(roots, n)
+		} else {
+			n.parent.children = removeNodePtr(n.parent.children, n)
+		}
+	}
+	return roots
+}
+
+// featureExcludedRelativePath reports whether a descendant schema node path
+// that does not resolve under roots, the nodes expanded under parent, fails at
+// a step the enabled feature set excluded.
+func (m *moduleData) featureExcludedRelativePath(parent *schemaNodeData, roots []*schemaNodeData, path []string, fromStmt *yangparse.Statement) bool {
+	from := parent
+	for _, step := range path {
+		next := findRelativeSchemaNode(m, roots, []string{step}, fromStmt)
+		if next == nil {
+			_, excluded := m.featureExcludedChild(from, step, fromStmt)
+			return excluded
+		}
+		from, roots = next, next.children
+	}
+	return false
 }
 
 func (m *moduleData) applyUsesWhen(uses *yangparse.Statement, roots []*schemaNodeData) {
@@ -2494,7 +2577,7 @@ func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []
 	if len(path) == 0 {
 		return nil
 	}
-	head := path[0]
+	head, rest := path[0], path[1:]
 	if head == "" || strings.TrimSpace(head) != head {
 		return nil
 	}
@@ -2516,10 +2599,10 @@ func findRelativeSchemaNode(source *moduleData, roots []*schemaNodeData, path []
 		if wantModule != nil && root.module != wantModule {
 			continue
 		}
-		if len(path) == 1 {
+		if len(rest) == 0 {
 			return root
 		}
-		return findRelativeSchemaNode(source, root.children, path[1:], fromStmt)
+		return findRelativeSchemaNode(source, root.children, rest, fromStmt)
 	}
 	return nil
 }
@@ -2543,6 +2626,23 @@ func (m *moduleData) findGroupingFrom(qname string, from *yangparse.Statement) (
 	return m, def
 }
 
+// isMandatoryNode reports whether n is a mandatory node as RFC 7950 §3
+// defines it, whatever its config.
+func isMandatoryNode(n *schemaNodeData) bool {
+	if n == nil {
+		return false
+	}
+	switch n.kind {
+	case SchemaNodeKindLeaf, SchemaNodeKindChoice, SchemaNodeKindAnyData, SchemaNodeKindAnyXML:
+		return n.mandatory
+	case SchemaNodeKindLeafList, SchemaNodeKindList:
+		return n.minElements != nil && *n.minElements > 0
+	case SchemaNodeKindContainer:
+		return !n.presence && slices.ContainsFunc(n.children, isMandatoryNode)
+	}
+	return false
+}
+
 func firstMandatoryConfigNode(nodes []*schemaNodeData) *schemaNodeData {
 	for _, node := range nodes {
 		if mandatory := mandatoryConfigNode(node); mandatory != nil {
@@ -2552,6 +2652,10 @@ func firstMandatoryConfigNode(nodes []*schemaNodeData) *schemaNodeData {
 	return nil
 }
 
+// mandatoryConfigNode returns n when it is a configuration mandatory node as
+// RFC 7950 §3 defines it, and nil otherwise. Only a non-presence container
+// inherits mandatory from its children: a mandatory descendant of a presence
+// container, a list, or a case does not make n mandatory.
 func mandatoryConfigNode(n *schemaNodeData) *schemaNodeData {
 	if n == nil || !n.representsConfigurationData() {
 		return nil
@@ -2572,11 +2676,6 @@ func mandatoryConfigNode(n *schemaNodeData) *schemaNodeData {
 					return n
 				}
 			}
-		}
-	}
-	for _, child := range n.children {
-		if mandatory := mandatoryConfigNode(child); mandatory != nil {
-			return mandatory
 		}
 	}
 	return nil
@@ -2634,17 +2733,29 @@ func (m *moduleData) validateSiblingNames() {
 }
 
 func (m *moduleData) validateSiblingNamesFrom(root *schemaNodeData) {
+	type siblingKey struct {
+		module *moduleData
+		name   string
+	}
 	var walk func(*schemaNodeData)
 	walk = func(n *schemaNodeData) {
 		if n == nil || m.schemaErr != nil {
 			return
 		}
-		type siblingKey struct {
-			module *moduleData
-			name   string
+		// Case names are unique within their choice. Data node and choice
+		// identifiers share one namespace per closest ancestor that is neither
+		// a choice nor a case (RFC 7950 §6.2.1, §7.9.2), so a case's children
+		// are checked with that ancestor.
+		var scope []*schemaNodeData
+		switch n.kind {
+		case SchemaNodeKindChoice:
+			scope = n.children
+		case SchemaNodeKindCase:
+		default:
+			scope = identifierNamespaceNodes(n.children, nil)
 		}
-		seen := make(map[siblingKey]*schemaNodeData, len(n.children))
-		for _, child := range n.children {
+		seen := make(map[siblingKey]*schemaNodeData, len(scope))
+		for _, child := range scope {
 			key := siblingKey{module: child.module, name: child.name}
 			if prev := seen[key]; prev != nil {
 				m.recordSchemaError(fmt.Errorf("duplicate schema child %q from module %q under %s; previous child at %s", child.name, childModuleName(child), parentPath(n), prev.path))
@@ -2657,6 +2768,22 @@ func (m *moduleData) validateSiblingNamesFrom(root *schemaNodeData) {
 		}
 	}
 	walk(root)
+}
+
+// identifierNamespaceNodes appends to out, in schema order, the nodes of
+// nodes and of their choice and case descendants that share the identifier
+// namespace of their closest ancestor that is neither a choice nor a case.
+// Case nodes are looked through but not listed.
+func identifierNamespaceNodes(nodes, out []*schemaNodeData) []*schemaNodeData {
+	for _, n := range nodes {
+		if n.kind != SchemaNodeKindCase {
+			out = append(out, n)
+		}
+		if n.kind == SchemaNodeKindChoice || n.kind == SchemaNodeKindCase {
+			out = identifierNamespaceNodes(n.children, out)
+		}
+	}
+	return out
 }
 
 func (m *moduleData) validateListConstraints() {
@@ -2691,6 +2818,9 @@ func (m *moduleData) validateDefaultRules() {
 }
 
 func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
+	// A grouping body is checked before any refine or deviation of a use of
+	// it applies, so the default case rule runs on the effective tree only.
+	effective := root == m.root
 	var walk func(*schemaNodeData)
 	walk = func(n *schemaNodeData) {
 		if n == nil || m.schemaErr != nil {
@@ -2750,6 +2880,21 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 			case len(n.defaults) == 1 && n.directChild(n.defaults[0].value) == nil:
 				n.recordSchemaError(fmt.Errorf("choice %q default %q does not reference a case", n.name, n.defaults[0].value))
 				return
+			}
+			if effective && len(n.defaults) == 1 {
+				// RFC 7950 §7.9.3: no mandatory node directly under the
+				// default case.
+				dflt := n.directChild(n.defaults[0].value)
+				nodes := []*schemaNodeData{dflt}
+				if dflt.kind == SchemaNodeKindCase {
+					nodes = dflt.children
+				}
+				for _, child := range nodes {
+					if isMandatoryNode(child) {
+						n.recordSchemaError(fmt.Errorf("choice %q default case %q must not contain mandatory node %q", n.name, dflt.name, child.name))
+						return
+					}
+				}
 			}
 		}
 		for _, child := range n.children {
@@ -3112,6 +3257,17 @@ func validateBinaryDefaultValue(n *schemaNodeData, value string, resolved Resolv
 	return nil
 }
 
+// inGroupingDefinition reports whether n was built from a grouping body to
+// check the grouping itself (validateGroupingBodyTypes), not from a uses.
+func inGroupingDefinition(n *schemaNodeData) bool {
+	for p := n; p != nil; p = p.parent {
+		if p.parent == nil {
+			return p.stmt != nil && p.stmt.Keyword == "grouping"
+		}
+	}
+	return false
+}
+
 func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolved ResolvedIdentityRef) error {
 	value := def.value
 	source := def.sourceOr(n.module)
@@ -3122,15 +3278,28 @@ func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolv
 		return fmt.Errorf("default %q is not valid for identityref %s %q", value, nodeStatementKeyword(n), n.name)
 	}
 	id := source.identityForQNameFrom(value, n.stmt)
-	if id == nil || !identityDerivedFromAny(id, resolved.Bases(), nil) {
+	// RFC 7950 §9.10.2: a value is an identity derived from the base; the
+	// base itself is not a value.
+	if id == nil || !identityStrictlyDerivedFromAny(id, resolved.Bases(), nil) {
 		return fmt.Errorf("default %q is not valid for identityref %s %q", value, nodeStatementKeyword(n), n.name)
 	}
 	idModule := id.module
 	if idModule == nil {
 		idModule = source
 	}
+	// The data nodes of an import-only module are not part of the schema
+	// (RFC 7950 section 5.6.5), and a grouping body is not a data definition
+	// until a uses instantiates it (section 7.13), so the implemented-identity
+	// rule applies only to instantiated nodes of an implemented module, as in
+	// libyang.
+	if n.module != nil && !n.module.implemented || inGroupingDefinition(n) {
+		return nil
+	}
 	if idModule != nil && !idModule.implemented {
-		if source.ctx != nil && source.ctx.refImplemented && source.implemented && source.resolveSourceQNameModuleFrom(value, n.stmt) == idModule {
+		// The node is instantiated in an implemented module, so its default
+		// implements the identity's module even when the grouping or
+		// typedef that wrote it belongs to an import-only module.
+		if source.ctx != nil && source.ctx.refImplemented && source.resolveSourceQNameModuleFrom(value, n.stmt) == idModule {
 			source.ctx.markImplemented(idModule)
 		}
 		if !idModule.implemented {
@@ -3472,20 +3641,6 @@ func (c *Context) findNodeBySourceSchemaPathFrom(source *moduleData, path string
 	return mod, node
 }
 
-// findDisabledAugmentTarget resolves a feature-disabled augment's target the
-// way an enabled augment would, without recording diagnostics: the augment
-// contributes nothing, so its path must not add warnings to the load report.
-func (c *Context) findDisabledAugmentTarget(source *moduleData, aug *yangparse.Statement) *schemaNodeData {
-	if c == nil || source == nil || aug == nil {
-		return nil
-	}
-	_, node, _, _ := c.findNodeBySchemaPathDetail(source, aug.Argument, true, aug)
-	if node == nil && c.validationMode == ValidationVendorCompatible {
-		_, node, _ = c.findNodeByVendorCompatibleSchemaPath(source, aug.Argument, aug)
-	}
-	return node
-}
-
 // featureExcludedSchemaPathStep reports whether an unresolved absolute schema
 // path fails at a step the enabled feature set excluded, returning that step's
 // local name. Paths that fail at an undeclared name, or under an unresolvable
@@ -3498,13 +3653,21 @@ func (c *Context) featureExcludedSchemaPathStep(source *moduleData, path string,
 	if mod == nil || node != nil || from == nil || segment == "" {
 		return "", false
 	}
-	qname := pathStepQName(segment)
+	return source.featureExcludedChild(from, pathStepQName(segment), fromStmt)
+}
+
+// featureExcludedChild reports whether the path step qname names a child of
+// from that the enabled feature set excluded, returning its local name. It
+// matches the step the way path resolution does: a prefixed step names one
+// module's node, an unprefixed step matches by local name.
+func (m *moduleData) featureExcludedChild(from *schemaNodeData, qname string, fromStmt *yangparse.Statement) (string, bool) {
+	if from == nil {
+		return "", false
+	}
 	name := localName(qname)
-	// Match the step the way path resolution does: a prefixed step names one
-	// module's node, an unprefixed step matches by local name.
 	var want *moduleData
 	if hasPrefix(qname) {
-		if want = source.resolveSourceQNameModuleFrom(qname, fromStmt); want == nil {
+		if want = m.resolveSourceQNameModuleFrom(qname, fromStmt); want == nil {
 			return "", false
 		}
 	}
@@ -5352,6 +5515,7 @@ func (n *schemaNodeData) applyMandatoryProperty(prop *yangparse.Statement) {
 		n.recordSchemaError(fmt.Errorf("invalid mandatory %q at %s", prop.Argument, prop.Location()))
 		return
 	}
+	n.mandatoryProp = prop
 	n.mandatory = value
 }
 
@@ -5827,6 +5991,15 @@ func identityDerivedFromAny(id *identityData, bases []Identity, seen map[*identi
 			return true
 		}
 	}
+	return identityStrictlyDerivedFromAny(id, bases, seen)
+}
+
+// identityStrictlyDerivedFromAny reports whether id is derived, directly or
+// transitively, from one of bases without being one of them itself.
+func identityStrictlyDerivedFromAny(id *identityData, bases []Identity, seen map[*identityData]bool) bool {
+	if id == nil {
+		return false
+	}
 	if seen == nil {
 		seen = make(map[*identityData]bool)
 	}
@@ -5859,6 +6032,9 @@ func (m *moduleData) restrictedEnumBitValues(base []EnumValue, st *yangparse.Sta
 	restrictions := direct(st, keyword)
 	if len(restrictions) == 0 {
 		return nil, nil
+	}
+	if m.yangVersionForStatement(st) != "1.1" {
+		return nil, fmt.Errorf("%s restriction of a derived type requires yang-version 1.1 at %s", keyword, restrictions[0].Location())
 	}
 	baseByName := make(map[string]EnumValue, len(base))
 	for _, value := range base {
@@ -6032,6 +6208,14 @@ func intKind(base BaseType) IntKind {
 }
 
 func restrictionRanges(st *yangparse.Statement, keyword string, base BaseType, fractionDigits uint8) ([]RangeBound, error) {
+	return derivedRestrictionRanges(st, keyword, base, fractionDigits, nil)
+}
+
+// derivedRestrictionRanges parses the keyword restriction under st. A min or
+// max bound stands for the matching bound of parent, the effective restriction
+// of the type being restricted, or for the built-in limit when parent is empty
+// (RFC 7950 sections 9.2.4 and 9.4.4).
+func derivedRestrictionRanges(st *yangparse.Statement, keyword string, base BaseType, fractionDigits uint8, parent []RangeBound) ([]RangeBound, error) {
 	statements := direct(st, keyword)
 	if len(statements) == 0 {
 		return nil, nil
@@ -6043,7 +6227,7 @@ func restrictionRanges(st *yangparse.Statement, keyword string, base BaseType, f
 	if err != nil {
 		return nil, err
 	}
-	out, err := ranges(statements[0].Argument, keyword, base, fractionDigits)
+	out, err := ranges(statements[0].Argument, keyword, base, fractionDigits, parent)
 	if err != nil {
 		return nil, err
 	}
@@ -6078,7 +6262,7 @@ func restrictionMetadata(st *yangparse.Statement) (restrictionMetadataData, erro
 	return out, nil
 }
 
-func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeBound, error) {
+func ranges(expr, keyword string, base BaseType, fractionDigits uint8, parent []RangeBound) ([]RangeBound, error) {
 	expr = yangTrimSpace(expr)
 	if expr == "" {
 		return nil, fmt.Errorf("%s expression is empty", keyword)
@@ -6103,11 +6287,11 @@ func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeB
 		if lo == "" || hi == "" {
 			return nil, fmt.Errorf("%s expression %q has missing bound in segment %q", keyword, expr, part)
 		}
-		lower, err := normalizeBound(lo, keyword, base, fractionDigits)
+		lower, minValue, err := normalizeBound(inheritedBound(lo, parent), keyword, base, fractionDigits)
 		if err != nil {
 			return nil, err
 		}
-		upper, err := normalizeBound(hi, keyword, base, fractionDigits)
+		upper, maxValue, err := normalizeBound(inheritedBound(hi, parent), keyword, base, fractionDigits)
 		if err != nil {
 			return nil, err
 		}
@@ -6124,55 +6308,90 @@ func ranges(expr, keyword string, base BaseType, fractionDigits uint8) ([]RangeB
 			}
 		}
 		out = append(out, RangeBound{
-			min: lower,
-			max: upper,
+			min:      lower,
+			max:      upper,
+			minValue: minValue,
+			maxValue: maxValue,
+			resolved: keyword == "length" || isIntBase(base) || base == BaseTypeDecimal64,
+			length:   keyword == "length",
 		})
 		prevMax = upper
 	}
 	return out, nil
 }
 
-func normalizeBound(s, keyword string, base BaseType, fractionDigits uint8) (string, error) {
+// inheritedBound replaces a min or max keyword with the matching bound of
+// parent, the effective restriction of the type being restricted. Without a
+// parent restriction the keyword keeps its built-in meaning.
+func inheritedBound(s string, parent []RangeBound) string {
+	if len(parent) == 0 {
+		return s
+	}
+	switch s {
+	case "min":
+		return parent[0].min
+	case "max":
+		return parent[len(parent)-1].max
+	}
+	return s
+}
+
+// normalizeBound returns bound s in lexical form and as a Number. Integer range
+// keywords become the built-in limits lexically; length and decimal64 keywords
+// stay lexical and resolve to the built-in limits only numerically.
+func normalizeBound(s, keyword string, base BaseType, fractionDigits uint8) (string, Number, error) {
 	if keyword == "length" {
-		if s == "min" || s == "max" {
-			return s, nil
+		switch s {
+		case "min":
+			return s, FromUint(0), nil
+		case "max":
+			return s, FromUint(^uint64(0)), nil
 		}
 		parsed, err := parseRangeUint(s, 64)
 		if err != nil {
-			return "", fmt.Errorf("invalid length bound %q", s)
+			return "", Number{}, fmt.Errorf("invalid length bound %q", s)
 		}
-		return strconv.FormatUint(parsed, 10), nil
+		return strconv.FormatUint(parsed, 10), FromUint(parsed), nil
 	}
 	if isIntBase(base) {
-		if s == "min" {
-			return intMin(base), nil
-		}
-		if s == "max" {
-			return intMax(base), nil
+		switch s {
+		case "min":
+			s = intMin(base)
+		case "max":
+			s = intMax(base)
 		}
 		if isSignedIntBase(base) {
 			parsed, err := strconv.ParseInt(s, 10, intBitSize(base))
 			if err != nil {
-				return "", fmt.Errorf("invalid range bound %q for %s", s, base.String())
+				return "", Number{}, fmt.Errorf("invalid range bound %q for %s", s, base.String())
 			}
-			return strconv.FormatInt(parsed, 10), nil
+			return strconv.FormatInt(parsed, 10), FromInt(parsed), nil
 		}
 		parsed, err := parseRangeUint(s, intBitSize(base))
 		if err != nil {
-			return "", fmt.Errorf("invalid range bound %q for %s", s, base.String())
+			return "", Number{}, fmt.Errorf("invalid range bound %q for %s", s, base.String())
 		}
-		return strconv.FormatUint(parsed, 10), nil
+		return strconv.FormatUint(parsed, 10), FromUint(parsed), nil
 	}
 	if base == BaseTypeDecimal64 {
-		if s == "min" || s == "max" {
-			return s, nil
+		// decimal64 limits are the int64 limits scaled by fraction-digits.
+		switch s {
+		case "min":
+			return s, Number{Value: AbsMinInt64, FractionDigits: fractionDigits, Negative: true}, nil
+		case "max":
+			return s, Number{Value: MaxInt64, FractionDigits: fractionDigits}, nil
 		}
 		if !validDecimal64Bound(s, fractionDigits) {
-			return "", fmt.Errorf("invalid decimal64 range bound %q", s)
+			return "", Number{}, fmt.Errorf("invalid decimal64 range bound %q", s)
 		}
-		return formatDecimalBound(s, fractionDigits), nil
+		formatted := formatDecimalBound(s, fractionDigits)
+		value, err := ParseDecimal(formatted, fractionDigits)
+		if err != nil {
+			return "", Number{}, fmt.Errorf("invalid decimal64 range bound %q", s)
+		}
+		return formatted, value, nil
 	}
-	return s, nil
+	return s, Number{}, nil
 }
 
 func boundsOrdered(keyword string, base BaseType, lower, upper string) bool {
@@ -6518,6 +6737,9 @@ func (m *moduleData) enumValues(st *yangparse.Statement, keyword, valueKeyword s
 
 func validateEnumBitMetadata(kind string, st *yangparse.Statement) error {
 	name := st.Argument
+	if kind == "enum" && !validEnumName(name) {
+		return fmt.Errorf("invalid enum name %q at %s: it must not be empty or have leading or trailing whitespace", name, st.Location())
+	}
 	if _, err := singletonDefinitionArg(kind, name, st, "description"); err != nil {
 		return err
 	}
@@ -6525,6 +6747,17 @@ func validateEnumBitMetadata(kind string, st *yangparse.Statement) error {
 		return err
 	}
 	return validateDefinitionStatus(kind, name, st)
+}
+
+// validEnumName reports whether name is a valid enum name (RFC 7950 §9.6.4):
+// not zero-length, with no leading or trailing Unicode White_Space character.
+func validEnumName(name string) bool {
+	if name == "" {
+		return false
+	}
+	first, _ := utf8.DecodeRuneInString(name)
+	last, _ := utf8.DecodeLastRuneInString(name)
+	return !unicode.IsSpace(first) && !unicode.IsSpace(last)
 }
 
 func (m *moduleData) extensionInstances(st *yangparse.Statement) []Extension {
