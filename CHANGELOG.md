@@ -88,6 +88,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Data nodes in different cases of a choice, or in a case and outside the
   choice, could share a name (RFC 7950 §6.2.1); they now fail as duplicate
   schema children.
+- Identityref defaults in an import-only module's data nodes, or in grouping
+  bodies checked before use, were rejected for naming an identity of a
+  non-implemented module; libyang does not check them there either.
+- With `RefImplemented`, an identityref default written in an import-only
+  module's grouping or typedef did not implement the identity's module where
+  it was instantiated.
 
 ## [go/v0.4.0] - 2026-07-02
 

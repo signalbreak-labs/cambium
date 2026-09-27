@@ -598,7 +598,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     tokens; string defaults must satisfy effective length
     restrictions; binary defaults must be base64 and satisfy effective decoded
     length restrictions; identityref defaults must resolve to an identity
-    derived from the effective base set, not a base itself; `empty` types
+    derived from the effective base set, not a base itself, and, on a node
+    instantiated in an implemented module (not in an import-only module or an
+    unused grouping body), from an implemented module; `empty` types
     cannot have defaults;
     union defaults must be accepted by at least one effective member type;
     leafref defaults are validated against the resolved target real type when

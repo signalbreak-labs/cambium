@@ -3224,6 +3224,17 @@ func validateBinaryDefaultValue(n *schemaNodeData, value string, resolved Resolv
 	return nil
 }
 
+// inGroupingDefinition reports whether n was built from a grouping body to
+// check the grouping itself (validateGroupingBodyTypes), not from a uses.
+func inGroupingDefinition(n *schemaNodeData) bool {
+	for p := n; p != nil; p = p.parent {
+		if p.parent == nil {
+			return p.stmt != nil && p.stmt.Keyword == "grouping"
+		}
+	}
+	return false
+}
+
 func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolved ResolvedIdentityRef) error {
 	value := def.value
 	source := def.sourceOr(n.module)
@@ -3243,8 +3254,19 @@ func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolv
 	if idModule == nil {
 		idModule = source
 	}
+	// The data nodes of an import-only module are not part of the schema
+	// (RFC 7950 section 5.6.5), and a grouping body is not a data definition
+	// until a uses instantiates it (section 7.13), so the implemented-identity
+	// rule applies only to instantiated nodes of an implemented module, as in
+	// libyang.
+	if n.module != nil && !n.module.implemented || inGroupingDefinition(n) {
+		return nil
+	}
 	if idModule != nil && !idModule.implemented {
-		if source.ctx != nil && source.ctx.refImplemented && source.implemented && source.resolveSourceQNameModuleFrom(value, n.stmt) == idModule {
+		// The node is instantiated in an implemented module, so its default
+		// implements the identity's module even when the grouping or
+		// typedef that wrote it belongs to an import-only module.
+		if source.ctx != nil && source.ctx.refImplemented && source.resolveSourceQNameModuleFrom(value, n.stmt) == idModule {
 			source.ctx.markImplemented(idModule)
 		}
 		if !idModule.implemented {

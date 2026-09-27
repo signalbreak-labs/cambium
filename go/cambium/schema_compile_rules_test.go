@@ -203,6 +203,48 @@ func TestLeafrefPathImplementsModulesItNames(t *testing.T) {
 	}
 }
 
+func TestAmendmentPathImplementsModulesItNamesBelowItsRoot(t *testing.T) {
+	// RFC 7950 §5.6.5: every module whose nodes an implemented module's
+	// augment or deviation path uses is implemented, not only the module
+	// owning the top of the path, together with its augments.
+	for _, tc := range []struct {
+		name, amendment string
+		want            []string
+	}{
+		{"augment", `augment "/b:top/e:box" { leaf added { type string; } }`, []string{"knob", "spare", "added"}},
+		{"deviation", `deviation "/b:top/e:box/e:knob" { deviate not-supported; }`, []string{"spare"}},
+	} {
+		dir := writeYANGModules(t, map[string]string{
+			"ap-app": `module ap-app { yang-version 1.1; namespace "urn:ap-app"; prefix app;
+  import ap-base { prefix b; } import ap-ext { prefix e; }
+  ` + tc.amendment + ` }`,
+			"ap-base": `module ap-base { yang-version 1.1; namespace "urn:ap-base"; prefix b; container top; }`,
+			"ap-ext": `module ap-ext { yang-version 1.1; namespace "urn:ap-ext"; prefix e;
+  import ap-base { prefix b; }
+  augment "/b:top" { container box { leaf knob { type string; } leaf spare { type string; } } } }`,
+		})
+		for _, mode := range bothValidationModes {
+			ctx, err := buildDirContext(t, mode, nil, dir, "ap-app")
+			if err != nil {
+				t.Fatalf("%s mode %d: Build: %v", tc.name, mode, err)
+			}
+			ext, ok := ctx.GetModule("ap-ext", nil)
+			if !ok || !ext.IsImplemented() {
+				t.Fatalf("%s mode %d: ap-ext is not implemented", tc.name, mode)
+			}
+			base, _ := ctx.Schema("ap-base")
+			if !base.IsImplemented() {
+				t.Fatalf("%s mode %d: ap-base is not implemented", tc.name, mode)
+			}
+			assertChildNames(t, base, "/b:top", "box")
+			assertChildNames(t, base, "/b:top/e:box", tc.want...)
+			if warnings := ctx.LoadReport().Warnings; len(warnings) != 0 {
+				t.Fatalf("%s mode %d: warnings = %#v, want none", tc.name, mode, warnings)
+			}
+		}
+	}
+}
+
 // loadDirModules loads names from dir in mode and builds the context. It
 // returns the first LoadModule or Build error.
 func loadDirModules(t *testing.T, mode cambium.ValidationMode, dir string, names ...string) (*cambium.Context, error) {
