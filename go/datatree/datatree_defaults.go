@@ -62,11 +62,12 @@ func applyDefaultsLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, dat
 
 func defaultLeafNode(sn cambium.SchemaNodeRef, def cambium.DefaultValue) *node {
 	ti, _ := sn.LeafType()
-	return &node{
-		name:      sn.Name(),
-		module:    sn.Module().Name(),
-		namespace: sn.Namespace(),
-		kind:      kindLeaf,
-		value:     jsonTokenFromText(ti, def.Value(), sn.Module(), def.SourceModule()),
+	n := newNode(sn)
+	n.kind = kindLeaf
+	source := def.SourceModule()
+	if source.Name() == "" {
+		source = sn.Module()
 	}
+	n.value = canonicalLeafToken(sn, jsonTokenFromText(ti, def.Value(), sn.Module(), schemaScope{module: source}))
+	return n
 }

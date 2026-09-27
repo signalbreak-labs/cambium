@@ -32,7 +32,10 @@ the full XPath function set — use the [libyang backend](data-tree-libyang.md) 
 (obtained from a frozen `Context`) into a `*Tree`. `(*Tree).Serialize(format)`
 encodes it back. Both accept `FormatJSONIETF` (RFC 7951) and `FormatXML`. Output
 order comes from the schema, not the input — members can arrive in any order and
-come out in declaration order, keys first.
+come out in declaration order, keys first. List entries and leaf-list values
+follow `ordered-by`: `ordered-by user` keeps the input order exactly (I1), and
+`ordered-by system` configuration data comes out in the canonical order the
+libyang backend uses (I2) — see [Values and canonical order](#values-and-canonical-order).
 
 ```go
 const src = `module dt {
@@ -91,6 +94,41 @@ A parsed `*Tree` exposes its data as ordered `Node` values:
   container's ordered children, and `Entries()` for a list's entries (each with
   keys first).
 
+## Values and canonical order
+
+Leaf values are held in their canonical form, as libyang stores them, whichever
+format and lexical form they arrive in: decimal64 `45.50` becomes `45.5` (and `0`
+becomes `0.0`), integers lose signs and leading zeros (`"+007"` is `"7"`), bits are
+listed in position order, and an identityref naming one of the leaf's own
+module's identities drops its module qualifier. `LeafValue` and `LeafListValues`
+return these canonical JSON_IETF tokens. A value that is invalid for its type is
+kept exactly as written, so `Validate` reports it. Integer and decimal64 text
+longer than 256 characters is rejected as invalid before any numeric parsing.
+
+Values that name other modules convert at the format boundary:
+
+- **identityref** — in XML, a prefix resolves against the `xmlns` declarations in
+  scope on the element (an unprefixed value against the default namespace), never
+  the schema's import prefixes. On output a foreign identity is written with its
+  module's own prefix, declared on the element: `<type xmlns="urn:a"
+  xmlns:ianaift="urn:…:iana-if-type">ianaift:ethernetCsmacd</type>`.
+- **instance-identifier** — held in canonical JSON_IETF form
+  (`/mod:top/list[key='v']`, module names only where the module changes). XML
+  input prefixes are resolved in scope and output qualifies every node with its
+  module's prefix, declared on the element. A path that does not resolve against
+  the schema is kept as written.
+
+`ordered-by system` lists and leaf-lists are sorted when parsed, so navigation,
+validation, and both output formats see the same canonical order: leaf-list values
+by value, list entries by their key values in `key` order, each compared by type
+the way libyang does (numbers numerically, strings and identity names bytewise,
+enums by assigned value, bits by position, binary by decoded length then bytes, and
+in a union the later member types first). As in libyang, state data and keyless
+lists keep their input order. Derived types that libyang orders or canonicalizes
+through a dedicated plugin (such as the `ietf-inet-types` address types) are
+treated here as their base type, so an IPv6 address, for example, is compared and
+printed as the string it was written as.
+
 ## Validation and defaults
 
 - `(*Tree).Validate() error` checks mandatory nodes, cardinality
@@ -103,7 +141,8 @@ A parsed `*Tree` exposes its data as ordered `Node` values:
 This is the experimental part. `datatree` currently handles containers, leaves,
 leaf-lists, lists, and opaque `anydata`/`anyxml` values in JSON_IETF, with the
 validation above, and it preserves ordering invariants I1/I2/I3/I5 over what it
-supports. It does **not** yet handle:
+supports, including the canonical order of `ordered-by system` data. It does
+**not** yet handle:
 
 - Opaque `anydata`/`anyxml` in XML, or cross-format conversion of opaque content.
 - RPC, action, and notification (operation) data.

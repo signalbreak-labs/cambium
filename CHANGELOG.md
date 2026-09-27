@@ -40,6 +40,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   feature-gated nodes or reorders augments.
 - Schema diffs no longer build a v1 SchemaIR projection, so `DiffContexts`
   scales with unique nodes.
+- `datatree` holds leaf values in canonical form (decimal64 `45.50` → `45.5`,
+  `0` → `0.0`; integers without sign or leading zeros; bits in position
+  order), so `LeafValue`/`LeafListValues` and both output formats return
+  canonical values; a value invalid for its type is kept as written.
+- `datatree` sorts `ordered-by system` configuration lists and leaf-lists at
+  parse time, so `Entries`/`LeafListValues` return canonical order.
+- `datatree` XML identityref values resolve prefixes only against in-scope
+  `xmlns` declarations, not the schema's import prefixes.
 
 ### Fixed
 
@@ -50,6 +58,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- `datatree` emitted `ordered-by system` lists and leaf-lists in input order
+  instead of libyang's canonical order (I2); `ordered-by user` data keeps its
+  exact input order.
+- `datatree` identified list keys by local name, so an augmented child sharing
+  a key's name could be ordered or uniqueness-checked as the key.
+- `datatree` XML output of a foreign identityref lacked its `xmlns` prefix
+  declaration, and instance-identifiers were not converted between XML
+  prefixes and JSON_IETF module names (nor resolved for `require-instance`).
+- `datatree` spent superlinear CPU parsing very long integer or decimal64 text;
+  values over 256 characters are now rejected as invalid before parsing.
+- `datatree` XML output escaped quotes in text and JSON_IETF output from XML
+  input HTML-escaped `<`, `>`, and `&`, unlike libyang.
 
 ## [go/v0.4.0] - 2026-07-02
 
