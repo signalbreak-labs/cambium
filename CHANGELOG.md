@@ -62,6 +62,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Leafrefs into `choice`/`case` data failed with `target not found`.
 - `unknown prefix` diagnostics were classified `unknown` instead of
   `invalid_identifier`.
+- Generated `UserOrderedVec` mutators edited a backing array shared with
+  struct copies, so `Remove`, `InsertBefore`, `MoveBefore` or `InsertLast` on
+  a copy could reorder or overwrite the original (I1). Every mutator now
+  builds a fresh slice (copy-on-write); each mutation is O(n).
+- Codegen dropped a leaf augmented into a list from another module when it
+  shared a key's local name: list keys are now matched by module and name, so
+  the leaf keeps its own field and field-order manifest entry after the keys,
+  and never stands in for the key in sorting or duplicate-key validation.
+  `CambiumMetadata` keys such a leaf, like any child that shares an earlier
+  sibling's local name, as `module:name`, which also fixes the duplicate
+  `case` that made same-named cross-module siblings fail to compile.
+- Generated `bits` values were written in declaration order; they now list set
+  bits in position order (RFC 7950 §9.7.2, matching libyang), including
+  schema defaults. Parsing still accepts any order.
 - `scripts/check-go-default-pure.sh` listed dependencies only with
   `CGO_ENABLED=0`, which hides cgo files, so a dependency with a pure-Go
   fallback passed. It now also lists them with `CGO_ENABLED=1` and fails on any

@@ -57,16 +57,16 @@ func (g *goEmitter) emitMetadataValidation(fields []fieldInfo, out *strings.Buil
 	out.WriteString("\tfor metadataNode := range n.CambiumMetadata {\n")
 	out.WriteString("\t\tswitch metadataNode {\n")
 	for _, f := range targets {
-		fmt.Fprintf(out, "\t\tcase %q:\n", f.wire)
+		fmt.Fprintf(out, "\t\tcase %q:\n", f.metaKey)
 	}
 	out.WriteString("\t\tdefault:\n")
 	out.WriteString("\t\t\treturn cambiumValidationError(cambiumJoinPath(path, metadataNode), \"metadata for unknown data node\")\n")
 	out.WriteString("\t\t}\n")
 	out.WriteString("\t}\n")
 	for _, f := range targets {
-		fmt.Fprintf(out, "\tif len(n.CambiumMetadata[%q]) > 0 {\n", f.wire)
+		fmt.Fprintf(out, "\tif len(n.CambiumMetadata[%q]) > 0 {\n", f.metaKey)
 		fmt.Fprintf(out, "\t\tif !(%s) { return cambiumValidationError(cambiumJoinPath(path, %q), %q) }\n", fieldPresentExpr("n", f), f.wire, "metadata for absent data node")
-		fmt.Fprintf(out, "\t\tfor _, item := range n.CambiumMetadata[%q] {\n", f.wire)
+		fmt.Fprintf(out, "\t\tfor _, item := range n.CambiumMetadata[%q] {\n", f.metaKey)
 		fmt.Fprintf(out, "\t\t\tif err := cambiumValidateMetadataAnnotation(item); err != nil { return cambiumValidationError(cambiumJoinPath(path, %q), err.Error()) }\n", f.wire)
 		out.WriteString("\t\t}\n")
 		out.WriteString("\t}\n")

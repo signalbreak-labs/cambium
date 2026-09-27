@@ -5544,6 +5544,100 @@ func TestGeneratedEnumBitsAutoPositionMatchesLibyang(t *testing.T) {
 	runGeneratedGoTest(t, src, testBody)
 }
 
+// RFC 7950 section 9.7.2: the canonical bits value lists set bits ordered by
+// position, not by declaration order (libyang prints the same order). Input in
+// any order is still accepted.
+func TestGeneratedGoBitsCanonicalPositionOrder(t *testing.T) {
+	const source = `module bits-position-order {
+  yang-version 1.1;
+  namespace "urn:bits-position-order";
+  prefix bpo;
+
+  typedef scrambled {
+    type bits {
+      bit zz { position 5; }
+      bit aa { position 1; }
+      bit mm { position 3; }
+    }
+  }
+
+  container top {
+    leaf flags { type scrambled; }
+    leaf dflt {
+      type scrambled;
+      default "zz aa";
+    }
+    leaf u {
+      type union {
+        type scrambled;
+        type int32;
+      }
+    }
+  }
+}`
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(source); err != nil {
+		t.Fatalf("LoadModuleStr: %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "bits-position-order")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	testBody := "\nconst bitsJSONInput = `{\"bits-position-order:top\":{\"flags\":\"zz mm aa\",\"u\":\"zz aa\"}}`\n" + `
+func TestGeneratedBitsCanonicalPositionOrder(t *testing.T) {
+	flags, err := NewBitsPositionOrderTopFlagsBits([]string{"zz", "mm", "aa"})
+	if err != nil {
+		t.Fatalf("new bits: %v", err)
+	}
+	if got, want := flags.String(), "aa mm zz"; got != want {
+		t.Fatalf("bits String = %q, want %q", got, want)
+	}
+	demo := BitsPositionOrder{Top: BitsPositionOrderTop{Flags: &flags}}
+	wantXML := "<top xmlns=\"urn:bits-position-order\">\n  <flags>aa mm zz</flags>\n</top>\n"
+	if got := demo.ToXML(); got != wantXML {
+		t.Fatalf("XML mismatch:\n got: %q\nwant: %q", got, wantXML)
+	}
+	wantJSON := "{\n  \"bits-position-order:top\": {\n    \"flags\": \"aa mm zz\"\n  }\n}\n"
+	if got := demo.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+
+	parsed, err := FromJSONIETF([]byte(bitsJSONInput))
+	if err != nil {
+		t.Fatalf("FromJSONIETF rejected bits in non-canonical order: %v", err)
+	}
+	wantParsed := "{\n  \"bits-position-order:top\": {\n    \"flags\": \"aa mm zz\",\n    \"u\": \"aa zz\"\n  }\n}\n"
+	if got := parsed.ToJSONIETF(); got != wantParsed {
+		t.Fatalf("parsed bits JSON mismatch:\n got: %q\nwant: %q", got, wantParsed)
+	}
+
+	wantAll := "{\n  \"bits-position-order:top\": {\n    \"flags\": \"aa mm zz\",\n    \"dflt\": \"aa zz\"\n  }\n}\n"
+	if got := demo.ToJSONIETFWithDefaults(WithDefaultsAll); got != wantAll {
+		t.Fatalf("with-defaults all JSON mismatch:\n got: %q\nwant: %q", got, wantAll)
+	}
+	dflt, err := NewBitsPositionOrderTopDfltBits([]string{"aa", "zz"})
+	if err != nil {
+		t.Fatalf("new default bits: %v", err)
+	}
+	trimmed := BitsPositionOrder{Top: BitsPositionOrderTop{Flags: &flags, Dflt: &dflt}}
+	if got := trimmed.ToJSONIETFWithDefaults(WithDefaultsTrim); got != wantJSON {
+		t.Fatalf("with-defaults trim kept a value equal to the default:\n got: %q\nwant: %q", got, wantJSON)
+	}
+}
+`
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
 func TestGeneratedGoEnumerationZeroValueMatchesLibyang(t *testing.T) {
 	t.Parallel()
 	ctx := loadModule(t, filepath.Join(schemaFixtureDir(t, "types-enumeration-zero-value-disabled"), "module"), "types-enumeration-zero-value-disabled")
@@ -5986,6 +6080,103 @@ func TestGeneratedUserOrderedLeafListPreservesOrderMatchesLibyang(t *testing.T) 
 	}
 }
 `, string(wantXML), string(wantJSON))
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
+// A struct copy of a UserOrderedVec must not share mutable storage with the
+// original: an edit through one copy must never reorder or overwrite the
+// other's entries (I1).
+func TestGeneratedGoUserOrderedVecCopiesDoNotShareStorage(t *testing.T) {
+	src := generatedFixtureSource(t, "leaflist-ordered-by-user", "leaflist-ordered-by-user")
+	_, wantJSON := readFixtureGoldenPair(t, "leaflist-ordered-by-user")
+
+	testBody := fmt.Sprintf(`
+func userOrderedValues(v UserOrderedVec[string]) []string {
+	var out []string
+	v.Iter(func(s string) bool {
+		out = append(out, s)
+		return true
+	})
+	return out
+}
+
+func expectUserOrdered(t *testing.T, label string, v UserOrderedVec[string], want ...string) {
+	t.Helper()
+	got := userOrderedValues(v)
+	if len(got) != len(want) {
+		t.Fatalf("%%s = %%q, want %%q", label, got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("%%s = %%q, want %%q", label, got, want)
+		}
+	}
+}
+
+func TestGeneratedUserOrderedVecCopiesDoNotShareStorage(t *testing.T) {
+	input := []string{"c", "a", "b"}
+	adopted := NewUserOrderedVec(input)
+	input[0] = "mutated"
+	expectUserOrdered(t, "NewUserOrderedVec after caller edits its slice", adopted, "c", "a", "b")
+
+	bases := map[string]func() UserOrderedVec[string]{
+		"exact capacity": func() UserOrderedVec[string] { return NewUserOrderedVec([]string{"c", "a", "b"}) },
+		"spare capacity": func() UserOrderedVec[string] {
+			var v UserOrderedVec[string]
+			v.InsertLast("c")
+			v.InsertLast("a")
+			v.InsertLast("b")
+			v.InsertLast("tail")
+			v.Remove(3)
+			return v
+		},
+	}
+	mutators := []struct {
+		name   string
+		mutate func(*UserOrderedVec[string])
+		want   []string
+	}{
+		{"InsertFirst", func(v *UserOrderedVec[string]) { v.InsertFirst("x") }, []string{"x", "c", "a", "b"}},
+		{"InsertLast", func(v *UserOrderedVec[string]) { v.InsertLast("x") }, []string{"c", "a", "b", "x"}},
+		{"InsertBefore", func(v *UserOrderedVec[string]) { v.InsertBefore(1, "x") }, []string{"c", "x", "a", "b"}},
+		{"InsertAfter", func(v *UserOrderedVec[string]) { v.InsertAfter(0, "x") }, []string{"c", "x", "a", "b"}},
+		{"MoveBefore", func(v *UserOrderedVec[string]) { v.MoveBefore(2, 0) }, []string{"b", "c", "a"}},
+		{"MoveAfter", func(v *UserOrderedVec[string]) { v.MoveAfter(0, 2) }, []string{"a", "b", "c"}},
+		{"Remove", func(v *UserOrderedVec[string]) { v.Remove(0) }, []string{"a", "b"}},
+	}
+	for _, baseName := range []string{"exact capacity", "spare capacity"} {
+		for _, m := range mutators {
+			orig := bases[baseName]()
+			cp := orig
+			m.mutate(&cp)
+			expectUserOrdered(t, baseName+" "+m.name+" on copy", cp, m.want...)
+			expectUserOrdered(t, baseName+" original after "+m.name+" on copy", orig, "c", "a", "b")
+
+			orig = bases[baseName]()
+			cp = orig
+			m.mutate(&orig)
+			expectUserOrdered(t, baseName+" copy after "+m.name+" on original", cp, "c", "a", "b")
+		}
+
+		orig := bases[baseName]()
+		left, right := orig, orig
+		left.InsertLast("left")
+		right.InsertLast("right")
+		expectUserOrdered(t, baseName+" sibling copy after both append", left, "c", "a", "b", "left")
+		expectUserOrdered(t, baseName+" other sibling copy after both append", right, "c", "a", "b", "right")
+		expectUserOrdered(t, baseName+" original after sibling appends", orig, "c", "a", "b")
+	}
+
+	demo := LeaflistOrderedByUser{Top: LeaflistOrderedByUserTop{Actions: bases["spare capacity"]()}}
+	edited := demo
+	edited.Top.Actions.Remove(0)
+	edited.Top.Actions.MoveBefore(1, 0)
+	if got, want := demo.ToJSONIETF(), %q; got != want {
+		t.Fatalf("original JSON changed by edits to a copy (I1):\n got: %%q\nwant: %%q", got, want)
+	}
+}
+`, wantJSON)
 
 	runGeneratedGoTest(t, src, testBody)
 }
@@ -9699,6 +9890,250 @@ func TestGeneratedAugmentCrossModuleIdentCollisionMatchesLibyang(t *testing.T) {
 	}
 }
 `, string(wantXML), string(wantJSON))
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
+// A leaf augmented into a list from another module may share a key leaf's
+// local name. It is a distinct schema node: it must keep its own field, stay in
+// effective schema order after the keys (I2/I3), and never stand in for the key.
+func TestGeneratedGoListAugmentedLeafNamedLikeKeyKeepsQualifiedIdentity(t *testing.T) {
+	const base = `module list-key-augment-base {
+  yang-version 1.1;
+  namespace "urn:list-key-augment-base";
+  prefix lkab;
+
+  import ietf-yang-metadata { prefix md; }
+
+  md:annotation note { type string; }
+
+  container top {
+    list ent {
+      key "k2 k1";
+      leaf other { type string; }
+      leaf k1 { type string; }
+      leaf mid { type int64; }
+      leaf k2 { type uint32; }
+    }
+  }
+}`
+	const ext = `module list-key-augment-ext {
+  yang-version 1.1;
+  namespace "urn:list-key-augment-ext";
+  prefix lkae;
+
+  import list-key-augment-base { prefix lkab; }
+
+  augment "/lkab:top/lkab:ent" {
+    leaf k1 { type string; }
+    leaf aug { type string; }
+  }
+}`
+	metadataModule, err := os.ReadFile(filepath.Join(schemaFixtureDir(t, "metadata-annotation-rfc7952"), "module", "ietf-yang-metadata.yang"))
+	if err != nil {
+		t.Fatalf("read ietf-yang-metadata: %v", err)
+	}
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{string(metadataModule), base, ext} {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr: %v", err)
+		}
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "list-key-augment-base")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	for i := 0; i < 3; i++ {
+		again, err := codegen.GenerateGo(ctx, "list-key-augment-base")
+		if err != nil {
+			t.Fatalf("generate again: %v", err)
+		}
+		if again != src {
+			t.Fatalf("codegen output changed between runs (iteration %d)", i)
+		}
+	}
+	if want := `var ListKeyAugmentBaseTopEntEntryFieldOrder = []string{"k2", "k1", "other", "mid", "k1", "aug"}`; !strings.Contains(src, want) {
+		t.Fatalf("generated field-order manifest should keep the augmented same-named leaf after the keys, want %s in:\n%s", want, src)
+	}
+
+	testBody := `
+func TestGeneratedListAugmentedLeafNamedLikeKeyKeepsQualifiedIdentity(t *testing.T) {
+	demo := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "x", K12: ptr("y"), Aug: ptr("z")},
+	}}}
+	wantJSON := "{\n  \"list-key-augment-base:top\": {\n    \"ent\": [\n      {\n        \"k2\": 1,\n        \"k1\": \"x\",\n        \"list-key-augment-ext:k1\": \"y\",\n        \"list-key-augment-ext:aug\": \"z\"\n      }\n    ]\n  }\n}\n"
+	if got := demo.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+	wantXML := "<top xmlns=\"urn:list-key-augment-base\">\n  <ent>\n    <k2>1</k2>\n    <k1>x</k1>\n    <k1 xmlns=\"urn:list-key-augment-ext\">y</k1>\n    <aug xmlns=\"urn:list-key-augment-ext\">z</aug>\n  </ent>\n</top>\n"
+	if got := demo.ToXML(); got != wantXML {
+		t.Fatalf("XML mismatch:\n got: %q\nwant: %q", got, wantXML)
+	}
+	parsed, err := FromJSONIETF([]byte("{\"list-key-augment-base:top\":{\"ent\":[{\"list-key-augment-ext:aug\":\"z\",\"list-key-augment-ext:k1\":\"y\",\"k1\":\"x\",\"k2\":1}]}}"))
+	if err != nil {
+		t.Fatalf("FromJSONIETF rejected the augmented same-named leaf: %v", err)
+	}
+	if got := parsed.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("parsed JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+
+	// Canonical (ordered-by system) entry order sorts by the real keys, not
+	// by the augmented leaf that shares a key's local name.
+	sorted := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "b", K12: ptr("a")},
+		{K2: 1, K1: "a", K12: ptr("b")},
+	}}}
+	wantSorted := "{\n  \"list-key-augment-base:top\": {\n    \"ent\": [\n      {\n        \"k2\": 1,\n        \"k1\": \"a\",\n        \"list-key-augment-ext:k1\": \"b\"\n      },\n      {\n        \"k2\": 1,\n        \"k1\": \"b\",\n        \"list-key-augment-ext:k1\": \"a\"\n      }\n    ]\n  }\n}\n"
+	if got := sorted.ToJSONIETF(); got != wantSorted {
+		t.Fatalf("system-ordered JSON mismatch:\n got: %q\nwant: %q", got, wantSorted)
+	}
+	if err := sorted.Validate(); err != nil {
+		t.Fatalf("Validate distinct keys sharing the augmented leaf value: %v", err)
+	}
+
+	dup := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "x", K12: ptr("a")},
+		{K2: 1, K1: "x", K12: ptr("b")},
+	}}}
+	if err := dup.Validate(); err == nil {
+		t.Fatal("Validate accepted duplicate keys that differ only in the augmented same-named leaf")
+	} else if got, want := err.Error(), "/list-key-augment-base/top/ent: duplicate key violation"; got != want {
+		t.Fatalf("Validate error = %q, want %q", got, want)
+	}
+	sameAug := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{
+		{K2: 1, K1: "x", K12: ptr("same")},
+		{K2: 1, K1: "y", K12: ptr("same")},
+	}}}
+	if err := sameAug.Validate(); err != nil {
+		t.Fatalf("Validate rejected distinct keys that share the augmented leaf value: %v", err)
+	}
+
+	// RFC 7952 metadata stays attached to its own node: the augmented leaf is
+	// keyed by its module-qualified name, the key leaf by its local name.
+	note := func(value string) MetadataAnnotation {
+		return NewMetadataAnnotation("lkab", "urn:list-key-augment-base", "list-key-augment-base:note", value)
+	}
+	annotated := ListKeyAugmentBase{Top: ListKeyAugmentBaseTop{Ent: []ListKeyAugmentBaseTopEntEntry{{
+		K2: 1, K1: "x", K12: ptr("y"),
+		CambiumMetadata: map[string][]MetadataAnnotation{
+			"k1":                      {note("key")},
+			"list-key-augment-ext:k1": {note("aug")},
+		},
+	}}}}
+	if err := annotated.Validate(); err != nil {
+		t.Fatalf("Validate metadata on key and augmented same-named leaf: %v", err)
+	}
+	wantAnnotatedJSON := "{\n  \"list-key-augment-base:top\": {\n    \"ent\": [\n      {\n        \"k2\": 1,\n        \"k1\": \"x\",\n        \"@k1\": {\n          \"list-key-augment-base:note\": \"key\"\n        },\n        \"list-key-augment-ext:k1\": \"y\",\n        \"@list-key-augment-ext:k1\": {\n          \"list-key-augment-base:note\": \"aug\"\n        }\n      }\n    ]\n  }\n}\n"
+	if got := annotated.ToJSONIETF(); got != wantAnnotatedJSON {
+		t.Fatalf("annotated JSON mismatch:\n got: %q\nwant: %q", got, wantAnnotatedJSON)
+	}
+	wantAnnotatedXML := "<top xmlns=\"urn:list-key-augment-base\">\n  <ent>\n    <k2>1</k2>\n    <k1 xmlns:lkab=\"urn:list-key-augment-base\" lkab:note=\"key\">x</k1>\n    <k1 xmlns=\"urn:list-key-augment-ext\" xmlns:lkab=\"urn:list-key-augment-base\" lkab:note=\"aug\">y</k1>\n  </ent>\n</top>\n"
+	if got := annotated.ToXML(); got != wantAnnotatedXML {
+		t.Fatalf("annotated XML mismatch:\n got: %q\nwant: %q", got, wantAnnotatedXML)
+	}
+	reparsed, err := FromJSONIETF([]byte(wantAnnotatedJSON))
+	if err != nil {
+		t.Fatalf("FromJSONIETF annotated JSON: %v", err)
+	}
+	if got := reparsed.ToJSONIETF(); got != wantAnnotatedJSON {
+		t.Fatalf("reparsed annotated JSON mismatch:\n got: %q\nwant: %q", got, wantAnnotatedJSON)
+	}
+}
+`
+
+	runGeneratedGoTest(t, src, testBody)
+}
+
+// Same-named container siblings from different modules each keep their own
+// field and RFC 7952 metadata, and the generated code compiles.
+func TestGeneratedGoContainerAugmentedSameNameSiblingKeepsOwnMetadata(t *testing.T) {
+	const base = `module sibling-augment-base {
+  yang-version 1.1;
+  namespace "urn:sibling-augment-base";
+  prefix sab;
+
+  import ietf-yang-metadata { prefix md; }
+
+  md:annotation note { type string; }
+
+  container top {
+    leaf name { type string; }
+  }
+}`
+	const ext = `module sibling-augment-ext {
+  yang-version 1.1;
+  namespace "urn:sibling-augment-ext";
+  prefix sae;
+
+  import sibling-augment-base { prefix sab; }
+
+  augment "/sab:top" {
+    leaf name { type string; }
+  }
+}`
+	metadataModule, err := os.ReadFile(filepath.Join(schemaFixtureDir(t, "metadata-annotation-rfc7952"), "module", "ietf-yang-metadata.yang"))
+	if err != nil {
+		t.Fatalf("read ietf-yang-metadata: %v", err)
+	}
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{string(metadataModule), base, ext} {
+		if err := builder.LoadModuleStr(source); err != nil {
+			t.Fatalf("LoadModuleStr: %v", err)
+		}
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "sibling-augment-base")
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	testBody := `
+func TestGeneratedContainerAugmentedSameNameSiblingKeepsOwnMetadata(t *testing.T) {
+	note := func(value string) MetadataAnnotation {
+		return NewMetadataAnnotation("sab", "urn:sibling-augment-base", "sibling-augment-base:note", value)
+	}
+	demo := SiblingAugmentBase{Top: SiblingAugmentBaseTop{
+		Name: ptr("base"), Name2: ptr("ext"),
+		CambiumMetadata: map[string][]MetadataAnnotation{
+			"name":                     {note("b")},
+			"sibling-augment-ext:name": {note("e")},
+		},
+	}}
+	if err := demo.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	wantJSON := "{\n  \"sibling-augment-base:top\": {\n    \"name\": \"base\",\n    \"@name\": {\n      \"sibling-augment-base:note\": \"b\"\n    },\n    \"sibling-augment-ext:name\": \"ext\",\n    \"@sibling-augment-ext:name\": {\n      \"sibling-augment-base:note\": \"e\"\n    }\n  }\n}\n"
+	if got := demo.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+	wantXML := "<top xmlns=\"urn:sibling-augment-base\">\n  <name xmlns:sab=\"urn:sibling-augment-base\" sab:note=\"b\">base</name>\n  <name xmlns=\"urn:sibling-augment-ext\" xmlns:sab=\"urn:sibling-augment-base\" sab:note=\"e\">ext</name>\n</top>\n"
+	if got := demo.ToXML(); got != wantXML {
+		t.Fatalf("XML mismatch:\n got: %q\nwant: %q", got, wantXML)
+	}
+	parsed, err := FromJSONIETF([]byte(wantJSON))
+	if err != nil {
+		t.Fatalf("FromJSONIETF: %v", err)
+	}
+	if got := parsed.ToJSONIETF(); got != wantJSON {
+		t.Fatalf("parsed JSON mismatch:\n got: %q\nwant: %q", got, wantJSON)
+	}
+}
+`
 
 	runGeneratedGoTest(t, src, testBody)
 }

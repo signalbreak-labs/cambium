@@ -75,6 +75,9 @@ For a module, `GenerateGo` produces:
 - **RFC 7952 metadata.** A struct whose leaf or leaf-list children can carry
   instance metadata gets a `CambiumMetadata map[string][]MetadataAnnotation` field,
   keyed by child wire name, that the serializers emit and the deserializer reads.
+  A child augmented from another module that shares an earlier sibling's local
+  name is keyed by its module-qualified name (`module:name`), so each node keeps
+  its own annotations.
 
 Every generated data struct satisfies a generated `CambiumStruct` interface:
 
@@ -99,14 +102,23 @@ normative I1–I6 text.
   `FieldOrder` manifest lists list-key leaves first, in `key`-statement order, then
   the remaining children in effective schema declaration order. The serializers
   walk that manifest, so the emitted order is fixed at generation time and cannot
-  drift with Go field rearrangement or map iteration.
+  drift with Go field rearrangement or map iteration. Keys are matched by module
+  and name, so a leaf augmented into a list from another module that shares a
+  key's local name is still its own field, placed after the keys.
 - **`ordered-by user` is a positional-only type (I1).** A node marked
   `ordered-by user` is generated as a `UserOrderedVec[T]`, whose only mutators are
   positional — `InsertFirst`, `InsertLast`, `InsertBefore`, `InsertAfter`,
   `MoveBefore`, `MoveAfter`, `Remove` — and whose readers are `Len`, `IsEmpty`,
   `Get`, and `Iter`. There is no API that assigns an absolute sequence to a
   system-ordered node, so treating a system-ordered node as if it were
-  user-ordered is a **compile error**, not a runtime check.
+  user-ordered is a **compile error**, not a runtime check. A `UserOrderedVec` has
+  value semantics: every mutator writes a fresh backing slice, so editing a copy
+  (for example, a copied parent struct) never reorders the original. Each
+  mutation copies the vector, so build a long one in one step with
+  `NewUserOrderedVec`.
+- **Canonical `bits` values.** A bits value is emitted with its set bits in
+  position order (RFC 7950 §9.7.2), whatever order they were declared or given
+  in; parsing accepts any order.
 - **RPC/action/notification I/O in schema order (I4).** Generated I/O structs
   carry their children in effective schema order through the same field-order
   manifest.
