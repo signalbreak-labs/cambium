@@ -23,7 +23,9 @@ lands rather than adding another dated file.
   The native handles cover the
   [downstream schema consumer](../guides/downstream-schema-consumers.md)
   contract: explicit feature, deviation, and validation policies, completeness
-  reporting, ordered config-only traversal, and qualified identity.
+  reporting, ordered config-only traversal, and qualified identity. `Build`
+  rejects leafref cycles, and range/length bounds are available as resolved
+  numbers through the Go API and both JSON exports.
 - **libyang backend tier** (`libyangbackend`, `internal/libyang`) — the complete
   RFC-7950 data engine over a vendored, statically linked libyang: parse, full
   semantic validation, serialize, diff, merge, and LYB. The backend-tier `gnmi`
@@ -79,12 +81,11 @@ lands rather than adding another dated file.
 ## Not built yet
 
 - **Richer SchemaIR JSON metadata.** Both export versions carry a narrow
-  per-node contract (base type name, expression strings); typedef chains,
-  restrictions, enum/bit values, cardinality, and extensions are available only
-  through the Go handles. Widening the JSON is an additive change under the
-  ADR 0002 policy. Related schema gaps: `Build` accepts leafref cycles (the
-  chain helper reports them), length bounds stay lexical, and `must`/`when`
-  carry no source location.
+  per-node contract (base type name, range/length bounds, expression strings);
+  typedef chains, patterns, enum/bit values, cardinality, and extensions are
+  available only through the Go handles. Widening the JSON is an additive
+  change under the ADR 0002 policy. Related schema gap: `must`/`when` carry no
+  source location.
 - **Codegen value gaps.** Mandatory leaves outside a `choice` are value fields,
   so `Validate` cannot detect one left unset in Go (fixing it means pointer
   fields, a breaking change); an identityref with several bases accepts

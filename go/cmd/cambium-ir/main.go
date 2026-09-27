@@ -179,7 +179,17 @@ type exportNode struct {
 }
 
 type exportType struct {
-	Base string `json:"base"`
+	Base   string        `json:"base"`
+	Range  []exportBound `json:"range,omitempty"`
+	Length []exportBound `json:"length,omitempty"`
+}
+
+// exportBound is one range or length segment with min and max resolved to
+// numbers, encoded as canonical decimal strings so 64-bit and decimal64 values
+// keep full precision.
+type exportBound struct {
+	Min string `json:"min"`
+	Max string `json:"max"`
 }
 
 type exportProvenance struct {
@@ -362,9 +372,7 @@ func exportSchemaIRTable(table cambium.SchemaIRTable) exportTable {
 			Source:                 exportLocation(node.Source),
 			Provenance:             exportNodeProvenance(node.Provenance),
 		}
-		if node.Type != nil {
-			exported.Type = &exportType{Base: node.Type.Base().String()}
-		}
+		exported.Type = exportTypeInfo(node.Type)
 		out.Nodes = append(out.Nodes, exported)
 	}
 	return out
@@ -403,8 +411,44 @@ func exportSchemaIRNode(node cambium.SchemaIRNode) exportNode {
 		Source:                 exportLocation(node.Source),
 		Provenance:             exportNodeProvenance(node.Provenance),
 	}
-	if node.Type != nil {
-		out.Type = &exportType{Base: node.Type.Base().String()}
+	out.Type = exportTypeInfo(node.Type)
+	return out
+}
+
+// exportTypeInfo exports the base type name and the type's effective range or
+// length restriction with resolved numeric bounds.
+func exportTypeInfo(info *cambium.TypeInfo) *exportType {
+	if info == nil {
+		return nil
+	}
+	out := &exportType{Base: info.Base().String()}
+	switch resolved := info.Resolved().(type) {
+	case cambium.ResolvedInt:
+		out.Range = exportBounds(resolved.Range)
+	case cambium.ResolvedDecimal64:
+		out.Range = exportBounds(resolved.Range)
+	case cambium.ResolvedString:
+		out.Length = exportBounds(resolved.Length)
+	case cambium.ResolvedBinary:
+		out.Length = exportBounds(resolved.Length)
+	}
+	return out
+}
+
+func exportBounds(bounds []cambium.RangeBound) []exportBound {
+	if len(bounds) == 0 {
+		return nil
+	}
+	out := make([]exportBound, 0, len(bounds))
+	for _, bound := range bounds {
+		exported := exportBound{Min: bound.Min(), Max: bound.Max()}
+		if value, ok := bound.MinNumber(); ok {
+			exported.Min = value.String()
+		}
+		if value, ok := bound.MaxNumber(); ok {
+			exported.Max = value.String()
+		}
+		out = append(out, exported)
 	}
 	return out
 }

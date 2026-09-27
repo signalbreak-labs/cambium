@@ -89,8 +89,9 @@ historically loaded with goyang but contain known source defects, call
 Compatibility mode is explicit and warning-producing: duplicate or out-of-order
 revisions, direct submodule entrypoints resolved to their parent module, skipped
 feature-disabled augment targets, mandatory config augments, config false
-mandatory typedef defaults, and unambiguous local-name path fallbacks are
-reported in `ctx.LoadReport().Warnings` rather than silently discarded.
+mandatory typedef defaults, unambiguous local-name path fallbacks, and leafref
+cycles are reported in `ctx.LoadReport().Warnings` rather than silently
+discarded.
 
 `ContextFlags` controls loading behavior; the zero value is the common case. See
 godoc for the individual fields.
@@ -285,7 +286,10 @@ you two levels of detail:
 `ResolvedType` is a sum-type interface; type-switch on the concrete variant to
 read type-specific detail (for example, `ResolvedString.Length`/`Patterns`,
 `ResolvedInt.Kind`/`Range`, `ResolvedDecimal64.FractionDigits()`,
-`ResolvedEnumeration.Values()`). The full set of variants is in godoc.
+`ResolvedEnumeration.Values()`). The full set of variants is in godoc. Each
+`RangeBound` in `Range`/`Length` gives its bounds lexically (`Min()`/`Max()`)
+and numerically (`MinNumber()`/`MaxNumber()`, plus `MinLength()`/`MaxLength()`
+for lengths), with `min`/`max` resolved against the type being restricted.
 
 ## A worked example
 
