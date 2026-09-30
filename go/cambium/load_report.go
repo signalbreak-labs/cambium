@@ -8,6 +8,9 @@ import "fmt"
 // LoadReport describes what participated in a built schema context. It is for
 // observability and downstream tooling; it does not change validation behavior.
 type LoadReport struct {
+	// FeaturePolicy distinguishes declaration retention from evaluated feature
+	// selection. EnabledFeatures and DisabledFeatures describe the latter.
+	FeaturePolicy      FeaturePolicy
 	RequestedModules   []ModuleLoadInfo
 	TransitiveImports  []ModuleLoadInfo
 	IncludedSubmodules []SubmoduleLoadInfo
@@ -19,6 +22,8 @@ type LoadReport struct {
 	SourceFiles        []string
 	// DeviationPolicy is the policy the context was built with.
 	DeviationPolicy DeviationPolicy
+	// RefinementPolicy is the uses/refine policy the context was built with.
+	RefinementPolicy RefinementPolicy
 	// IgnoredDeviations lists, in load order, the deviations that
 	// DeviationPolicy kept from changing the effective schema.
 	IgnoredDeviations []Deviation
@@ -61,7 +66,9 @@ func (c *Context) LoadReport() LoadReport {
 	rebuildErr := c.rebuildIfDirty()
 
 	var report LoadReport
+	report.FeaturePolicy = c.featurePolicy
 	report.DeviationPolicy = c.deviationPolicy
+	report.RefinementPolicy = c.refinementPolicy
 	report.Warnings = append(report.Warnings, c.loadWarnings...)
 	if rebuildErr != nil {
 		diag := DiagnosticFromError(wrap("load report: schema rebuild", rebuildErr))

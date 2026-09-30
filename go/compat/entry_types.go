@@ -644,6 +644,9 @@ func typeForInfo(info cambium.TypeInfo) *YangType {
 	case cambium.ResolvedDecimal64:
 		typ.FractionDigits = int(resolved.FractionDigits().Value())
 		typ.Range = rangeFromBounds(resolved.Range, rangeBoundRange, cambium.BaseTypeDecimal64, typ.FractionDigits)
+		if typ.Range == nil {
+			typ.Range = decimalDefaultRange(typ.FractionDigits)
+		}
 	case cambium.ResolvedString:
 		typ.Length = rangeFromBounds(resolved.Length, rangeBoundLength, cambium.BaseTypeString, 0)
 		for _, pattern := range resolved.Patterns {

@@ -985,10 +985,21 @@ func (w WhenConstraint) Description() (string, bool) { return optional(w.descrip
 func (w WhenConstraint) Reference() (string, bool) { return optional(w.reference) }
 
 // UniqueConstraint is one unique statement on a list.
-type UniqueConstraint struct{ leafs []SchemaNodeRef }
+type UniqueConstraint struct {
+	expression string
+	leafs      []SchemaNodeRef
+}
+
+// Expression returns the effective unique statement's lexical argument.
+func (u UniqueConstraint) Expression() string { return u.expression }
 
 // Leafs returns the leaf references composing the unique constraint, in order.
 func (u UniqueConstraint) Leafs() []SchemaNodeRef { return append([]SchemaNodeRef(nil), u.leafs...) }
+
+type uniqueSpec struct {
+	expression string
+	names      []string
+}
 
 // TargetPath returns the schema-node path the deviation targets.
 func (d Deviation) TargetPath() string { return d.targetPath }
@@ -1017,13 +1028,17 @@ func (d Deviation) IfFeatures() []string {
 }
 
 // Applied reports whether the deviation changed the effective schema. It is
-// false only for a not-supported deviation kept by
-// DeviationPolicy.IgnoreNotSupported.
+// false for deviations suppressed by DeviationPolicy.
 func (d Deviation) Applied() bool { return !d.ignored }
 
 // SourceLocation returns the location of the deviate statement, or of the
 // deviated property statement when the deviate targets one.
 func (d Deviation) SourceLocation() SourceLocation { return sourceLocation(d.source) }
+
+// Statement returns the read-only source property statement, including nested
+// type restrictions, or the deviate statement for a no-property operation.
+// A zero Deviation returns an invalid Statement.
+func (d Deviation) Statement() Statement { return Statement{stmt: d.source} }
 
 // Import is a value type for module import metadata.
 type Import struct {
@@ -1176,6 +1191,7 @@ type schemaNodeData struct {
 	mandatory           bool
 	mandatoryProp       *yangparse.Statement
 	presence            bool
+	presenceText        string
 	orderedBy           OrderedBy
 	defaults            []DefaultValue
 	units               string
@@ -1192,7 +1208,7 @@ type schemaNodeData struct {
 	musts               []MustConstraint
 	whens               []WhenConstraint
 	uniques             []UniqueConstraint
-	uniqueNames         [][]string
+	uniqueSpecs         []uniqueSpec
 	choiceDesc          bool
 	groupOrigin         string
 	devs                []Deviation
@@ -2302,7 +2318,7 @@ func (m *moduleData) buildNodeSeen(st *yangparse.Statement, parent *schemaNodeDa
 				n.recordSchemaError(fmt.Errorf("list %q unique statement is empty at %s", n.name, u.Location()))
 				continue
 			}
-			n.uniqueNames = append(n.uniqueNames, names)
+			n.uniqueSpecs = append(n.uniqueSpecs, uniqueSpec{expression: u.Argument, names: names})
 		}
 	}
 	if key := n.singletonProperty(st, "key"); key != nil {
@@ -2484,6 +2500,10 @@ func (m *moduleData) expandUsesSeen(uses *yangparse.Statement, parent *schemaNod
 	for _, refine := range direct(uses, "refine") {
 		if err := validateDescendantSchemaNodeIDStatement("refine", refine, m.yangVersionForStatement(refine) == "1.1"); err != nil {
 			m.recordSchemaError(err)
+			continue
+		}
+		if m.ctx.refinementPolicy.IgnoreAll {
+			m.recordSchemaError(validateIgnoredRefinement(refine))
 			continue
 		}
 		path := strings.Split(refine.Argument, "/")
@@ -2833,6 +2853,7 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 		if n == nil || m.schemaErr != nil {
 			return
 		}
+		hasExplicitDefault := slices.ContainsFunc(n.defaults, func(d DefaultValue) bool { return d.origin != DefaultOriginTypedef })
 		if len(n.defaults) > 0 && n.kind != SchemaNodeKindLeaf && n.kind != SchemaNodeKindLeafList && n.kind != SchemaNodeKindChoice {
 			keyword := "schema node"
 			if n.stmt != nil {
@@ -2842,24 +2863,26 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 			return
 		}
 		if n.kind == SchemaNodeKindLeaf {
+			if n.listKey {
+				// RFC 7950 section 7.8.2: key values are always supplied;
+				// their mandatory and default statements have no effect.
+				n.mandatory = false
+			}
 			switch {
 			case len(n.defaults) > 1:
 				n.recordSchemaError(fmt.Errorf("leaf %q has multiple default statements", n.name))
 				return
-			case n.mandatory && len(n.defaults) > 0:
+			case n.mandatory && hasExplicitDefault:
 				if m.ctx != nil && m.ctx.validationMode == ValidationVendorCompatible && n.config == ConfigRo {
 					n.recordVendorCompatibleWarning(n.stmt, nil, "mandatory leaf %q cannot have a default; allowed for config false leaf in vendor-compatible mode", n.name)
 				} else {
 					n.recordSchemaError(fmt.Errorf("mandatory leaf %q cannot have a default", n.name))
 					return
 				}
-			case n.listKey && len(n.defaults) > 0:
-				n.recordSchemaError(fmt.Errorf("key leaf %q cannot have a default", n.name))
-				return
 			}
 		}
 		if n.kind == SchemaNodeKindLeafList {
-			if n.minElements != nil && *n.minElements > 0 && len(n.defaults) > 0 {
+			if n.minElements != nil && *n.minElements > 0 && hasExplicitDefault {
 				n.recordSchemaError(fmt.Errorf("leaf-list %q with min-elements cannot have defaults", n.name))
 				return
 			}
@@ -2871,7 +2894,7 @@ func (m *moduleData) validateDefaultRulesFrom(root *schemaNodeData) {
 				}
 				seen[def.value] = true
 			}
-			if len(n.defaults) > 0 && m.yangVersionForStatement(n.stmt) != "1.1" {
+			if hasExplicitDefault && m.yangVersionForStatement(n.stmt) != "1.1" {
 				n.recordSchemaError(fmt.Errorf("leaf-list %q default statements require yang-version 1.1", n.name))
 				return
 			}
@@ -3087,6 +3110,9 @@ func (m *moduleData) validateDefaultValues() error {
 		if err := validateDefaultValuesForNode(n); err != nil {
 			return err
 		}
+		// Validate declaration values before dropping inapplicable defaults,
+		// including inherited values narrowed by a leaf's type restriction.
+		n.defaults = slices.DeleteFunc(n.defaults, n.defaultInapplicable)
 		for _, child := range n.children {
 			if err := walk(child); err != nil {
 				return err
@@ -3095,6 +3121,23 @@ func (m *moduleData) validateDefaultValues() error {
 		return nil
 	}
 	return walk(m.root)
+}
+
+func (n *schemaNodeData) defaultInapplicable(d DefaultValue) bool {
+	if n.listKey {
+		return true
+	}
+	if d.origin != DefaultOriginTypedef {
+		return false
+	}
+	switch n.kind {
+	case SchemaNodeKindLeaf:
+		return n.mandatory
+	case SchemaNodeKindLeafList:
+		return n.minElements != nil && *n.minElements > 0 || n.sourceModule.yangVersionForStatement(n.stmt) != "1.1"
+	default:
+		return false
+	}
 }
 
 func validateDefaultValueForType(n *schemaNodeData, def DefaultValue) error {
@@ -4477,6 +4520,15 @@ func (n SchemaNodeRef) IsMandatory() bool { return n.node != nil && n.node.manda
 // IsPresenceContainer reports whether the node is a presence container.
 func (n SchemaNodeRef) IsPresenceContainer() bool { return n.node != nil && n.node.presence }
 
+// Presence returns the effective presence statement's argument and whether the
+// container has one. The argument may be empty; uses refinements are reflected.
+func (n SchemaNodeRef) Presence() (string, bool) {
+	if n.node == nil {
+		return "", false
+	}
+	return n.node.presenceText, n.node.presence
+}
+
 // OrderedBy returns the node's ordered-by value, defaulting to OrderedBySystem.
 func (n SchemaNodeRef) OrderedBy() OrderedBy {
 	if n.node == nil {
@@ -5160,8 +5212,9 @@ func (n *schemaNodeData) resolveUniqueConstraints() {
 		return
 	}
 	n.uniques = nil
-	seenConstraints := make(map[string]bool, len(n.uniqueNames))
-	for _, names := range n.uniqueNames {
+	seenConstraints := make(map[string]bool, len(n.uniqueSpecs))
+	for _, spec := range n.uniqueSpecs {
+		names := spec.names
 		var leafs []SchemaNodeRef
 		seen := make(map[string]bool, len(names))
 		for _, name := range names {
@@ -5187,7 +5240,7 @@ func (n *schemaNodeData) resolveUniqueConstraints() {
 			return
 		}
 		seenConstraints[key] = true
-		n.uniques = append(n.uniques, UniqueConstraint{leafs: leafs})
+		n.uniques = append(n.uniques, UniqueConstraint{expression: spec.expression, leafs: leafs})
 	}
 }
 
@@ -5601,6 +5654,7 @@ func (n *schemaNodeData) applyPresenceProperty(prop *yangparse.Statement) {
 		return
 	}
 	n.presence = true
+	n.presenceText = prop.Argument
 }
 
 func (n *schemaNodeData) applyOrderedByProperty(prop *yangparse.Statement) {
@@ -6195,6 +6249,7 @@ func validateDerivedRangeSubset(st *yangparse.Statement, keyword string, base Ba
 }
 
 func rangesWithin(baseRanges, derived []RangeBound, keyword string, base BaseType) bool {
+	baseRanges = coalesceAdjacentBounds(baseRanges)
 	for _, child := range derived {
 		within := false
 		for _, parent := range baseRanges {
@@ -6210,6 +6265,26 @@ func rangesWithin(baseRanges, derived []RangeBound, keyword string, base BaseTyp
 		}
 	}
 	return true
+}
+
+// Adjacent integer/length bounds, or decimal bounds one scaled quantum apart,
+// cover a continuous value space. Keep the published lexical bounds untouched;
+// only subset validation needs this coalesced view of the parent restriction.
+func coalesceAdjacentBounds(bounds []RangeBound) []RangeBound {
+	if len(bounds) < 2 {
+		return bounds
+	}
+	out := make([]RangeBound, 0, len(bounds))
+	out = append(out, bounds[0])
+	for _, next := range bounds[1:] {
+		last := &out[len(out)-1]
+		if last.resolved && next.resolved && last.maxValue.Less(next.minValue) && last.maxValue.addQuantum(1).Equal(next.minValue) {
+			last.max, last.maxValue = next.max, next.maxValue
+		} else {
+			out = append(out, next)
+		}
+	}
+	return out
 }
 
 func builtinBase(name string) BaseType {
@@ -7153,8 +7228,12 @@ func childArg(st *yangparse.Statement, keyword string) string {
 // featureIncluded reports whether st should be included in the pure-Go schema
 // IR for this module's enabled feature set. Features are disabled by default;
 // multiple if-feature statements on the same target are ANDed together.
+// RetainAll bypasses filtering, but not the preceding expression validation.
 func (m *moduleData) featureIncluded(st *yangparse.Statement) bool {
 	if st == nil {
+		return true
+	}
+	if m.ctx != nil && m.ctx.featurePolicy.RetainAll {
 		return true
 	}
 	for _, iff := range direct(st, "if-feature") {

@@ -86,14 +86,28 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 
   Module loading and enumeration:
   - Go exposes `NewContextBuilder(ContextFlags)` with `SearchPath`,
-    `UnsetSearchPath`, `SearchPaths`, `SetFeatures`, `SetValidationMode`,
+    `UnsetSearchPath`, `SearchPaths`, `RegisterSourcePaths`, `SetFeatures`, `SetFeaturePolicy`, `SetValidationMode`,
+    `SetDeviationPolicy`, `SetRefinementPolicy`,
     `LoadModule(name, revision, features)`, `LoadModuleFromPath`,
     `LoadModuleStr`, and `Build`. `Build` returns a frozen `Context`;
     post-build search-path, feature, validation-mode, or module-loading
-    mutation returns `CAMBIUM_E0001`. The legacy mutable `NewContext` path
+    mutation or a second `Build` returns `CAMBIUM_E0001`, including through a
+    builder copied before the first `Build`. `Context.IsFrozen()` reports a
+    live frozen context; nil, mutable, and closed contexts return false.
+    The legacy mutable `NewContext` path
     remains for the migration ramp. Public methods on a nil Go `*Context` do
     not panic; mutating methods and schema lookups return `CAMBIUM_E0001`, and
     snapshot lookups return empty results.
+  - `ContextBuilder.RegisterSourcePaths(paths ...string)` catalogs declared
+    module/submodule names and newest declared revisions before any module
+    loads, independently of filenames. Registration parses source identity;
+    it does not load, implement, or semantically compile unused sources.
+    Dependency lookup selects registered sources before ordinary search paths;
+    an unpinned import selects the newest registered revision even after an
+    older pinned import has loaded. Revision pins remain exact. A registration
+    batch is atomic; the same physical path is idempotent, and different files
+    with one kind/name/revision identity are rejected. Source files must remain
+    unchanged until `Build`. `LoadReport` lists only sources actually loaded.
   - YANG source accepted by `LoadModuleStr` / `LoadModuleFromPath` must be
     valid UTF-8 and use only legal RFC 7950 source characters: tab, carriage
     return, line feed, ordinary Unicode scalar values, and no other C0 control
@@ -158,8 +172,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     direct module/submodule `revision` dates, out-of-order top-level
     revisions, direct submodule entrypoints that can be resolved to their
     parent module, augment and deviation targets excluded by the enabled
-    feature set, cross-module mandatory config augments, config false mandatory leaves that
-    inherit typedef defaults, unambiguous local-name schema-path fallbacks
+    feature set, cross-module mandatory config augments, config false mandatory leaves with
+    explicit defaults, unambiguous local-name schema-path fallbacks
     for vendor deviation/leafref paths, leafref cycles, import and include cycles (RFC 7950
     §7.1.5, §7.1.6), a module and submodule with different `yang-version`s or a
     YANG 1.0 module importing a YANG 1.1 module by revision (§12), and
@@ -174,7 +188,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - An augment may target a node that another augment creates; augment
     targets resolve independently of declaration and module-load order.
     An augment or deviation whose target does not resolve fails loading in
-    every mode unless the path stops at a node the enabled feature set
+    every mode unless the deviation is disabled by `DeviationPolicy.IgnoreAll`
+    or the path stops at a node the enabled feature set
     excluded: one whose own `if-feature`, `refine`-added `if-feature`,
     enclosing `uses`, or declaring `augment` is disabled. The step must name that node's module, so a wrong
     or unresolvable prefix is not an exclusion. Strict mode rejects that case too, naming the excluded node
@@ -188,11 +203,22 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     deviation. `IgnoreNotSupported` keeps nodes targeted by `deviate
     not-supported` while still applying add/replace/delete; the decision is made
     while deviations are collected, before any static reference is validated.
-    Omitting a deviation module is the way to apply none of its effects. Every
-    `Deviation` reports `Applied()` (false only for an ignored not-supported)
-    and `SourceLocation()` (the `deviate` or deviated property statement);
+    `IgnoreAll` takes precedence and suppresses add/replace/delete/not-supported
+    effects throughout the loaded dependency closure. Ignored deviations do not
+    promote their target modules to implemented status. Their targets need not
+    exist; source syntax, property cardinality, and source-scoped type
+    restrictions remain validated without checking target applicability. Every
+    `Deviation` reports `Applied()` (false for any ignored operation),
+    `SourceLocation()`, and `Statement()` (the property statement, including
+    nested restrictions, or `deviate` for an operation without properties);
     `LoadReport.DeviationPolicy` and `LoadReport.IgnoredDeviations` record the
     policy and what it kept.
+  - `ContextBuilder.SetRefinementPolicy(RefinementPolicy{IgnoreAll: true})`
+    explicitly suppresses all `uses`/`refine` effects, including refine-added
+    feature conditions, while preserving the grouping's original declarations
+    and constraints. The zero policy applies normal RFC refinements. Ignored
+    targets need not exist, but declaration syntax and shape remain validated.
+    `LoadReport.RefinementPolicy` records the selection.
   - `ContextBuilder.SetMaxSchemaNodes(limit)` bounds the schema nodes `Build`
     instantiates: each node counts once per instantiation (per `uses` of its
     grouping, per augment, and once more for the standalone check of each
@@ -205,6 +231,20 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     effectively disabled, reported in `DisabledFeatures`, and produces a
     `LoadReport` warning. `SetFeatures` takes explicit feature names; there is
     no wildcard.
+  - `ContextBuilder.SetFeaturePolicy(FeaturePolicy{RetainAll: true})` retains
+    every declaration that `if-feature` would otherwise filter, including
+    complementary expressions such as `f` and `not f`. It covers roots,
+    transitive imports, and included submodules without enumerating feature
+    names. This is a schema analysis / generation view, not a realizable
+    device feature profile. The zero policy preserves normal feature
+    evaluation. Source expressions remain available through `IfFeatures()`;
+    invalid expressions, unknown references, dependency cycles, conditional
+    keys, and conditional enum/bit defaults still fail validation. Other
+    schema validation and deviation policies still apply. `FeatureValue`
+    and `LoadReport.EnabledFeatures` / `DisabledFeatures` retain their
+    evaluated-selection semantics; `LoadReport.FeaturePolicy` identifies
+    declaration retention explicitly. Changing the policy after `Build`
+    fails with `CAMBIUM_E0001`.
   - A namespace cannot be reused by different module names in one context;
     namespace collisions fail loading with `CAMBIUM_E0001`.
   - Conflicting duplicate loads of the same module name plus revision fail with
@@ -215,7 +255,7 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     searches `.` before configured search paths. `ContextFlags.AllImplemented`
     marks implicitly imported modules as implemented so `Modules()` includes
     them; without that flag, imported modules that an implemented module's
-    leafref paths, augments, or deviations name are still promoted to
+    leafref paths, augments, or non-ignored deviations name are still promoted to
     implemented status. Only implemented modules contribute augments and
     deviations (RFC 7950 §5.6.5): an import-only module's own augments and
     deviations are not applied, so a deviation module must be loaded
@@ -543,7 +583,28 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     slice when they add, remove, or wrap entries; they must not rely on
     `Entry.Dir` map iteration for result order.
     `Entry.GetWhenXPath()` exposes the first effective `when` expression as a
-    goyang-style convenience over Cambium's `Whens()` metadata. `Entry.Print(w)`
+    goyang-style convenience over Cambium's `Whens()` metadata.
+    `compat.FromContext(ctx)` projects every loaded requested module and import
+    once from the live frozen native context, in requested-then-import load
+    order. It shares a native-node-identity index across the returned trees and
+    rejects sibling local-name collisions, including after choice/case
+    flattening, with an error and no roots. `Entry.NativeSchemaNode()` and
+    `Entry.NativeModule()` expose the original native handles and a presence
+    boolean: nil and AST-only entries have neither, module roots have only a
+    module, and native implicit cases keep their node handle. The context must
+    remain alive while its read-only projections are used. Nil, mutable, and
+    closed contexts return an error without rebuilding or projecting sources.
+    `Entry.ResolveLeafref()` resolves one native hop to an existing entry in
+    that shared projection, preserving cross-module and augment context and
+    native resolution errors. Repeated calls follow chains. Entries built with
+    `FromModule` or AST helpers lack that index and return an explicit error
+    requiring `FromContext`; `FromModule` retains unchecked name projection.
+    Native projections populate effective `Extra` presence/unique/when values
+    as `*Value`, and must constraints as `*Must` with expression, description,
+    reference, error-message, and error-app-tag metadata. Identityref base
+    `Identity.Values` includes the transitive derived closure in lexical local
+    name order. Schema child order and extension metadata remain unchanged.
+    `Entry.Print(w)`
     renders children through `Entry.Children()` in effective declaration order,
     never by sorting or ranging over `Entry.Dir`. `TriState.String()` and
     `EntryKind.String()` keep goyang-compatible spellings for existing logging
@@ -555,7 +616,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     name-value maps, identityref `IdentityBase` plus full `IdentityBases`, and
     union member `Type`. `YangType.Default`/`HasDefault` are populated from
     type-level typedef defaults, matching goyang; explicit schema node defaults
-    remain on `Entry.Default`/`Entry.DefaultValues()`. `TypeInfo.TypedefChain()`
+    remain on `Entry.Default`/`Entry.DefaultValues()`. Native `DefaultValues()`
+    respects effective absence, including inapplicable key/type defaults;
+    AST-only entries retain their type-default fallback. `TypeInfo.TypedefChain()`
     exposes typedef-derived names from the outer referenced typedef to the
     innermost typedef before the final built-in base, and compat
     `YangType.Base` projects that intermediate chain in goyang-compatible
@@ -576,6 +639,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     projection semantics. The behavioral differential keeps
     Cambium-only improvements such as declaration-order `Children()` traversal
     and richer units metadata outside the exact-match comparison.
+    Native decimal64 projections include the intrinsic scaled int64 range when
+    unrestricted, at the declared fraction digits, without floating-point
+    conversion. Native `Range` and `Length` projections coalesce adjacent spans
+    at their representable quantum, including inherited and union-member
+    restrictions, while preserving true gaps.
   - `SchemaNodeRef.IfFeatures() []string` returns direct source `if-feature`
     expression strings plus applied `uses`, `augment`, and `refine`
     `if-feature` expression strings in declaration/effective order for the node
@@ -584,11 +652,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     shorthand child `if-feature` expressions that controlled case materialization.
   - Active `uses`/`refine` paths that cannot be resolved fail schema/context
     construction with `CAMBIUM_E0001`; unmatched refinements are not silently
-    ignored. A `refine` whose path stops at a grouping node the enabled
+    ignored unless `RefinementPolicy.IgnoreAll` is selected. A `refine` whose path stops at a grouping node the enabled
     feature set excluded has nothing to refine and is accepted.
 
   Defaults and leafref metadata:
-  - `SchemaNodeRef.DefaultValues()` returns all default values in declaration
+  - `SchemaNodeRef.DefaultValues()` returns all effective default values in declaration
     order; leaf-list nodes may carry more than one. `SchemaNodeRef.DefaultValue()`
     remains a convenience that returns the first value, if any.
     `SchemaNodeRef.TypeDefaultValue()` returns the inherited typedef default
@@ -602,9 +670,13 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     defaults are valid only on leaf, leaf-list, and choice nodes; leaves may not
     have multiple defaults, leaf-list default values may not be duplicated
     (integer defaults compare by value, whatever their notation),
-    leaf-list defaults require `yang-version 1.1`, leaf-lists with
-    `min-elements` greater than zero may not have defaults, mandatory leaves may
-    not have defaults, list key leaves may not have defaults, choice defaults must name an existing case, mandatory choices may
+    explicit leaf-list defaults require `yang-version 1.1`, leaf-lists with
+    `min-elements` greater than zero and mandatory non-key leaves may not have
+    explicit defaults. Inherited typedef defaults are inapplicable to those
+    nodes; YANG 1.0 leaf-lists never inherit type defaults. List key leaves
+    ignore defaults and mandatory statements (RFC 7950 §7.8.2). Default
+    declarations still undergo value/type validation before inapplicable
+    defaults are removed from the effective schema. Choice defaults must name an existing case, mandatory choices may
     not have defaults, the default case of the effective schema (after
     `refine`, augments, and deviations) may not directly contain a mandatory
     node as RFC 7950 §3 defines it, whatever its config, and typedef definitions may not carry multiple default
@@ -678,6 +750,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     name in declaration order, if present.
 
   Constraint introspection:
+  - `SchemaNodeRef.Presence()` returns the effective presence argument and a
+    presence boolean, including uses refinements. An empty argument remains
+    distinguishable from an absent presence statement.
   - `MustConstraint` exposes `Expression() string`, plus optional
     `ErrorMessage()`, `ErrorAppTag()`, `Description()`, and `Reference()`.
   - `WhenConstraint` exposes `Expression() string`, plus optional
@@ -695,7 +770,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     data, choice, and case nodes. Direct known non-extension children of `when`
     are limited to `description` and `reference`.
   - `UniqueConstraint` is one `unique` specification on a list node; `Leafs()`
-    returns the participating leaf nodes in unique-statement order.
+    returns the participating leaf nodes in unique-statement order, and
+    `Expression()` retains the effective statement's lexical argument,
+    including constraints added, replaced, or removed by deviations.
   - `SchemaNodeRef.UniqueConstraints()` returns a list's unique specifications in
     declaration order; non-list nodes return nil.
   - `key` and `unique` statements are valid only on list nodes; empty or
@@ -740,6 +817,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 	    stand for the bounds of the type being restricted (RFC 7950 sections
 	    9.2.4 and 9.4.4). decimal64 bounds must lie within the decimal64 value
 	    space for the type's `fraction-digits`.
+	    A derived span may cross adjacent parent spans when every representable
+	    value is covered (integer/length step 1, decimal64 step determined by
+	    `fraction-digits`). True gaps remain invalid. Native lexical bounds retain
+	    their declared segmentation and metadata.
 	    `range`/`length` metadata children (`error-message`, `error-app-tag`,
 	    `description`, `reference`) are singleton statements. Direct known
 	    non-extension children of `range` and `length` are limited to those

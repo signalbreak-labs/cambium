@@ -6098,7 +6098,7 @@ func TestInvalidDefaultStatementsReturnContextRuleCode(t *testing.T) {
 			message: `default "999" is not valid for uint8 leaf "ref"`,
 		},
 		{
-			name: "key leaf default",
+			name: "invalid key leaf default value",
 			source: `module cambium-key-leaf-default {
     namespace "urn:cambium:key-leaf-default";
     prefix ckld;
@@ -6106,12 +6106,12 @@ func TestInvalidDefaultStatementsReturnContextRuleCode(t *testing.T) {
     list item {
         key "id";
         leaf id {
-            type string;
-            default "a";
+            type uint8;
+            default 999;
         }
     }
 }`,
-			message: `key leaf "id" cannot have a default`,
+			message: `default "999" is not valid for uint8 leaf "id"`,
 		},
 		{
 			name: "leaf-list duplicate defaults",

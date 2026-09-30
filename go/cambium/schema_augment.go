@@ -86,6 +86,9 @@ func (c *Context) implementAmendmentTargets() {
 				if (st.Keyword != "augment" && st.Keyword != "deviation") || !m.featureIncluded(st) {
 					continue
 				}
+				if st.Keyword == "deviation" && c.deviationPolicy.IgnoreAll {
+					continue
+				}
 				for _, step := range strings.Split(strings.TrimPrefix(st.Argument, "/"), "/") {
 					if !hasPrefix(step) {
 						continue
@@ -402,7 +405,8 @@ func (m *moduleData) collectDeviations() {
 			continue
 		}
 		targetMod, target := m.ctx.findNodeBySourceSchemaPathFrom(m, dev.Argument, dev)
-		if targetMod == nil || target == nil {
+		ignoreAll := m.ctx.deviationPolicy.IgnoreAll
+		if !ignoreAll && (targetMod == nil || target == nil) {
 			excluded, ok := m.ctx.featureExcludedSchemaPathStep(m, dev.Argument, dev)
 			if !ok {
 				m.recordSchemaError(fmt.Errorf("deviation %q target not found at %s", dev.Argument, dev.Location()))
@@ -417,10 +421,12 @@ func (m *moduleData) collectDeviations() {
 			m.recordSchemaError(fmt.Errorf("deviation %q target not found at %s: target node %q is excluded by feature policy", dev.Argument, dev.Location(), excluded))
 			continue
 		}
-		if m.implemented {
+		if !ignoreAll && m.implemented {
 			m.ctx.markImplemented(targetMod)
 		}
-		appendUnique(&targetMod.deviatedBy, m.name)
+		if targetMod != nil {
+			appendUnique(&targetMod.deviatedBy, m.name)
+		}
 		desc, err := singletonDefinitionArg("deviation", dev.Argument, dev, "description")
 		if err != nil {
 			m.recordSchemaError(err)
@@ -441,6 +447,12 @@ func (m *moduleData) collectDeviations() {
 				m.recordSchemaError(fmt.Errorf("unsupported deviation type %q at %s", d.Argument, d.Location()))
 				continue
 			}
+			if ignoreAll {
+				if err := m.validateIgnoredDeviate(d); err != nil {
+					m.recordSchemaError(err)
+					continue
+				}
+			}
 			props := nonExtensionSubStatements(d)
 			if len(props) == 0 {
 				if len(d.SubStatements()) != 0 && d.Argument != "not-supported" {
@@ -449,11 +461,13 @@ func (m *moduleData) collectDeviations() {
 				one := Deviation{targetPath: dev.Argument, sourceModule: m.name, devType: d.Argument, description: desc, reference: ref, ifFeatures: ifFeatureArgs(dev), source: d}
 				// Policy is decided here, before any static reference is
 				// validated, so an ignored removal never breaks the schema.
-				if d.Argument == "not-supported" && m.ctx.deviationPolicy.IgnoreNotSupported {
+				if ignoreAll || d.Argument == "not-supported" && m.ctx.deviationPolicy.IgnoreNotSupported {
 					one.ignored = true
 				}
 				m.deviations = append(m.deviations, one)
-				target.devs = append(target.devs, one)
+				if target != nil {
+					target.devs = append(target.devs, one)
+				}
 				if !one.ignored {
 					m.applyDeviation(targetMod, target, d.Argument, nil)
 				}
@@ -470,13 +484,69 @@ func (m *moduleData) collectDeviations() {
 					reference:    ref,
 					ifFeatures:   ifFeatureArgs(dev),
 					source:       prop,
+					ignored:      ignoreAll,
 				}
 				m.deviations = append(m.deviations, one)
-				target.devs = append(target.devs, one)
-				m.applyDeviation(targetMod, target, d.Argument, prop)
+				if target != nil {
+					target.devs = append(target.devs, one)
+				}
+				if !one.ignored {
+					m.applyDeviation(targetMod, target, d.Argument, prop)
+				}
 			}
 		}
 	}
+}
+
+func (m *moduleData) validateIgnoredDeviate(deviate *yangparse.Statement) error {
+	for _, keyword := range []string{"type", "units", "config", "mandatory", "min-elements", "max-elements"} {
+		if _, err := singletonChild(deviate, keyword); err != nil {
+			return err
+		}
+	}
+	if deviate.Argument == "replace" || m.yangVersionForStatement(deviate) != "1.1" {
+		if _, err := singletonChild(deviate, "default"); err != nil {
+			return err
+		}
+	}
+	for _, prop := range nonExtensionSubStatements(deviate) {
+		if prop.Keyword == "type" {
+			// Type declarations can be checked in their source scope without
+			// resolving or modifying the ignored deviation's target node.
+			if _, err := m.parseType(prop); err != nil {
+				return err
+			}
+		} else if err := validateIgnoredAmendmentProperty(prop); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Ignored properties still have to be valid declarations. Target-dependent
+// checks (including type/default applicability) belong to applying an amendment.
+func validateIgnoredAmendmentProperty(prop *yangparse.Statement) error {
+	switch prop.Keyword {
+	case "must":
+		_, err := mustFromValidated(prop)
+		return err
+	case "config", "mandatory":
+		if _, ok := parseYangBool(prop); !ok {
+			return fmt.Errorf("invalid %s %q at %s", prop.Keyword, prop.Argument, prop.Location())
+		}
+	case "unique":
+		if names, ok := parseYANGIdentifierListFields(prop.Argument); !ok || len(names) == 0 {
+			return fmt.Errorf("invalid unique %q at %s", prop.Argument, prop.Location())
+		}
+	case "min-elements", "max-elements":
+		if prop.Keyword == "max-elements" && prop.Argument == "unbounded" {
+			return nil
+		}
+		if value, ok := parseUint32(prop.Argument); !ok || prop.Keyword == "max-elements" && value == 0 {
+			return fmt.Errorf("invalid %s %q at %s", prop.Keyword, prop.Argument, prop.Location())
+		}
+	}
+	return nil
 }
 
 func validDeviationType(value string) bool {
@@ -623,7 +693,7 @@ func (m *moduleData) replaceDeviationProperty(target *schemaNodeData, prop *yang
 		}
 		target.musts = []MustConstraint{constraint.withSourceModule(m)}
 	case "unique":
-		if target.kind == SchemaNodeKindList && len(target.uniqueNames) == 0 {
+		if target.kind == SchemaNodeKindList && len(target.uniqueSpecs) == 0 {
 			target.recordSchemaError(fmt.Errorf("deviate replace unique for %q has no existing unique at %s", target.name, prop.Location()))
 			return
 		}
@@ -665,16 +735,16 @@ func deleteDeviationProperty(target *schemaNodeData, prop *yangparse.Statement) 
 			return
 		}
 		want := strings.Join(names, "\x00")
-		before := len(target.uniqueNames)
-		out := target.uniqueNames[:0]
-		for _, names := range target.uniqueNames {
-			if strings.Join(names, "\x00") != want {
-				out = append(out, names)
+		before := len(target.uniqueSpecs)
+		out := target.uniqueSpecs[:0]
+		for _, spec := range target.uniqueSpecs {
+			if strings.Join(spec.names, "\x00") != want {
+				out = append(out, spec)
 			}
 		}
-		target.uniqueNames = out
+		target.uniqueSpecs = out
 		target.resolveUniqueConstraints()
-		if len(target.uniqueNames) == before {
+		if len(target.uniqueSpecs) == before {
 			target.recordSchemaError(fmt.Errorf("deviate delete unique %q for %q does not exist at %s", prop.Argument, target.name, prop.Location()))
 		}
 	case "min-elements":
@@ -756,8 +826,8 @@ func (m Module) Deviations() []Deviation {
 }
 
 // DeviationProvenance returns the deviations targeting this node, in apply
-// order. A not-supported deviation kept by DeviationPolicy.IgnoreNotSupported
-// is listed with Applied() == false.
+// order. Deviations suppressed by DeviationPolicy are listed with Applied()
+// == false when their targets exist in the effective schema.
 func (n SchemaNodeRef) DeviationProvenance() []Deviation {
 	if n.node == nil {
 		return nil
@@ -782,9 +852,9 @@ func (n *schemaNodeData) applyDeviationUniqueProperty(prop *yangparse.Statement,
 		return
 	}
 	if replace {
-		n.uniqueNames = [][]string{names}
+		n.uniqueSpecs = []uniqueSpec{{expression: prop.Argument, names: names}}
 	} else {
-		n.uniqueNames = append(n.uniqueNames, names)
+		n.uniqueSpecs = append(n.uniqueSpecs, uniqueSpec{expression: prop.Argument, names: names})
 	}
 	n.resolveUniqueConstraints()
 }

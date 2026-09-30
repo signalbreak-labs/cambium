@@ -943,11 +943,11 @@ func TestVendorYANGVendorCompatibleConfigFalseMandatoryTypedefDefault(t *testing
 		t.Fatalf("Schema: %v", err)
 	}
 	leaf := schemaNodeAt(t, mod, "/ids:state/denied-operations")
-	if got, ok := leaf.DefaultValue(); !ok || got != "0" {
-		t.Fatalf("DefaultValue = (%q,%v), want 0,true", got, ok)
+	if got, ok := leaf.DefaultValue(); ok {
+		t.Fatalf("DefaultValue = (%q,%v), mandatory leaf has no inherited default", got, ok)
 	}
-	if !diagnosticContains(ctx.LoadReport().Warnings, "inherited-default-state", "mandatory leaf") {
-		t.Fatalf("warnings = %#v, want mandatory default warning", ctx.LoadReport().Warnings)
+	if diagnosticContains(ctx.LoadReport().Warnings, "inherited-default-state", "mandatory leaf") {
+		t.Fatalf("warnings = %#v, valid inherited declaration needs no warning", ctx.LoadReport().Warnings)
 	}
 }
 

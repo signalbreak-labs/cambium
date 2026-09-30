@@ -187,6 +187,83 @@ Two bridge helpers exist for common goyang-shaped call sites:
   for code that previously did `FindNode(root.Node, path)` followed by
   `ToEntry(found)`.
 
+## Projecting a native context
+
+If loading already uses a native `ContextBuilder`, `compat.FromContext(ctx)`
+provides a read-only staging surface for remaining goyang-style consumers. It
+projects the effective schema from that built context without loading sources
+again. The result includes requested modules followed by transitive imports,
+each group in load order, including imports that are not implemented. Every
+loaded module is projected once. Nil, mutable, and closed contexts return an
+error; `Context.IsFrozen()` exposes that lifecycle check.
+
+When explicit source filenames differ from declared module names, register the
+whole source set before loading roots:
+
+```go
+if err := builder.RegisterSourcePaths(sourcePaths...); err != nil {
+    return err
+}
+for _, path := range rootPaths {
+    if err := builder.LoadModuleFromPath(path); err != nil {
+        return err
+    }
+}
+```
+
+Registration does not implement unused sources. Dependencies select registered
+names/revisions first, then normal search paths; unpinned imports select the
+newest registered revision. Register before any loads and leave sources unchanged
+until `Build`. Registration batches are atomic and repeated paths are harmless.
+
+```go
+roots, err := compat.FromContext(ctx)
+if err != nil {
+    return err
+}
+for _, root := range roots {
+    module, _ := root.NativeModule()
+    fmt.Println(module.Name())
+    for _, entry := range root.Children() {
+        node, _ := entry.NativeSchemaNode()
+        fmt.Println(node.QualifiedPath())
+    }
+}
+```
+
+`Entry.NativeSchemaNode()` returns the original native handle, preserving
+defining, source, and instantiating module ownership. Module roots have a native
+module but no schema-node handle. Nil and AST-only entries return `false` from
+both native accessors; native implicit cases still have a schema-node handle.
+Keep the native context alive while using its projections.
+
+`Entry.ResolveLeafref()` resolves one hop through Cambium's native resolver and
+returns the existing target entry from the shared projection. Repeated calls
+follow chains across modules and augmented subtrees. Native structured resolution
+errors are preserved. `FromModule` has no shared context index, so its entries
+return an error directing callers to `FromContext`.
+
+Native projections populate `Extra["presence"]` and `Extra["unique"]` with
+`*Value` entries, `Extra["must"]` with `*Must` entries including description,
+reference, error message, and application tag, and `Extra["when"]` with effective
+expression values. `GetWhenXPath()` returns the first effective condition.
+These values reflect grouping expansion, refinements, augments, and deviations.
+For a node's own source `when` rather than effective inherited conditions, inspect
+its native `Statement().SubStatements()` for a `when` child and read `Argument()`.
+Implicit cases have no own source statement. This excludes conditions inherited
+from choices, cases, uses, and augments without reparsing source files.
+Identityref bases expose transitive `Identity.Values` sorted by local `Name`,
+matching goyang; enum and bit `Names()` retain their lexical ordering.
+Decimal64 ranges include exact intrinsic scaled int64 bounds when unrestricted.
+Projected range and length spans merge only when consecutive representable
+values touch, including inherited restrictions and union members.
+
+`FromContext` returns an error and no roots for sibling local-name collisions,
+including collisions exposed by flattening choice/case nodes. Use native
+qualified lookup for these schemas. `FromModule` retains its existing unchecked
+projection behavior. In every successful projection, traverse `Children()` for
+effective schema order and treat `Dir` as a lookup cache.
+
 ## The loader: side-by-side
 
 The `Modules` loader mirrors goyang's: construct it, add search paths, read or
@@ -389,20 +466,41 @@ a symbol there before relying on it.
 - **Features.** goyang keeps every `if-feature`-guarded declaration. compat
   projects Cambium's effective schema with no features enabled, the native
   default, so a leaf guarded by `if-feature opt` is absent and one guarded by
-  `if-feature "not opt"` is present. No compat option selects features, and no
-  other option changes feature visibility. Enabling every feature would not
+  `if-feature "not opt"` is present. No compat option selects features.
+  Enabling every feature would not
   recover goyang's view either, because `not` expressions then exclude
   declarations. To choose features, load through the native `ContextBuilder`
   (`SetFeatures` takes explicit names; there is no wildcard) and project with
-  `FromModule`. For raw declaration discovery, walk `ParseStatements` output;
-  that is source text, not a compiled schema.
+  `FromModule`. For goyang-style declaration visibility, call
+  `builder.SetFeaturePolicy(cambium.FeaturePolicy{RetainAll: true})` before
+  `Build`, then use native schema handles or project with `FromModule`.
+  This retains both positive and negated feature branches throughout the
+  resolved import/include closure, while preserving expression metadata and
+  validation. It does not claim that a device supports every feature:
+  `FeatureValue` and the enabled/disabled feature lists still report evaluated
+  selections, and `LoadReport.FeaturePolicy` records the retention policy.
+  Other validation and deviation behavior remains in effect. For raw
+  declaration discovery, walk `ParseStatements` output; that is source text,
+  not a compiled schema.
 - **Deviations.** `DeviateOptions.IgnoreDeviateNotSupported` maps to
   `cambium.DeviationPolicy{IgnoreNotSupported: true}`: the deviation module
   loads, add/replace/delete effects apply, and nodes targeted by `deviate
   not-supported` stay, before any reference is validated. With the option
   false, the removal applies and a reference to the removed node fails
   `Process()`. Neither value changes augment order or feature visibility.
-  To apply none of a module's deviations, do not load that module.
+  Native loading can suppress every deviation effect, including effects from
+  imported amendment modules, with `builder.SetDeviationPolicy(cambium.DeviationPolicy{IgnoreAll: true})`.
+  It takes precedence over `IgnoreNotSupported`, preserves static-reference
+  targets, and prevents ignored deviations from implementing their target
+  modules. Declarations remain checked for syntax, cardinality, and source type
+  validity; ignored target paths need not resolve. `Deviation.Applied()` and
+  `LoadReport.IgnoredDeviations` identify skipped effects; `Deviation.Statement()`
+  preserves nested property metadata such as a replacement type's range.
+- **Refinements.** Native compilation applies RFC `uses`/`refine` effects by
+  default. Migration code that needs original grouping declarations can select
+  `builder.SetRefinementPolicy(cambium.RefinementPolicy{IgnoreAll: true})` before
+  `Build`. This also suppresses refine-added feature conditions. It retains
+  declaration-shape validation and is recorded in `LoadReport.RefinementPolicy`.
 - **Validation.** `Process()` uses Cambium's strict loader (vendor-compatible
   when `IgnoreSubmoduleCircularDependencies` is set; see below). Schemas goyang
   accepted, such as an augment with a mistyped target or a pattern using a

@@ -9,11 +9,13 @@
 package compat
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"math"
 	"math/big"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -752,9 +754,12 @@ type Entry struct {
 	modules         *Modules
 	ordered         []*Entry
 	schemaNode      cambium.SchemaNodeRef
+	nativeEntries   map[cambium.SchemaNodeRef]*Entry
 }
 
 // FromModule projects a Cambium module handle into an Entry tree.
+// It has no shared context index; use FromContext for ResolveLeafref support
+// and validation that sibling local names fit Entry.Dir without collisions.
 func FromModule(module cambium.Module) *Entry { return entryFromCambiumModule(module) }
 
 func hasYangTagOption(options []string, want string) bool {
@@ -1927,13 +1932,17 @@ func (e *Entry) SingleDefaultValue() (string, bool) {
 	return "", false
 }
 
-// DefaultValues returns all default values.
+// DefaultValues returns all effective default values. Native projections trust
+// the compiled defaults; AST-only entries may inherit their type's default.
 func (e *Entry) DefaultValues() []string {
 	if e == nil {
 		return nil
 	}
 	if len(e.Default) > 0 {
 		return append([]string(nil), e.Default...)
+	}
+	if _, ok := e.NativeSchemaNode(); ok {
+		return nil
 	}
 	if e.Type == nil || !e.Type.HasDefault {
 		return nil
@@ -2189,6 +2198,7 @@ func projectNode(node cambium.SchemaNodeRef, parent *Entry) *Entry {
 			entry.Key = strings.Join(keys, " ")
 		}
 	}
+	projectNativeExtras(entry, node)
 	if node.IsRPC() || node.IsAction() {
 		entry.RPC = &RPCEntry{}
 	}
@@ -2354,11 +2364,12 @@ func identityFromCambium(id cambium.Identity, seen map[string]*Identity) *Identi
 			out.Base = append(out.Base, &Value{Name: identityPrefixedName(base)})
 		}
 	}
-	for _, derived := range id.Derived() {
+	for _, derived := range id.DerivedClosure() {
 		if child := identityFromCambium(derived, seen); child != nil {
 			out.Values = append(out.Values, child)
 		}
 	}
+	slices.SortStableFunc(out.Values, func(a, b *Identity) int { return cmp.Compare(a.Name, b.Name) })
 	return out
 }
 
@@ -2399,7 +2410,7 @@ func rangeFromBounds(bounds []cambium.RangeBound, kind rangeBoundKind, base camb
 			Max: numberFromString(bound.Max(), kind, base, fractionDigits),
 		})
 	}
-	return out
+	return coalesceStatementRange(out)
 }
 
 func numberFromString(raw string, kind rangeBoundKind, base cambium.BaseType, fractionDigits int) Number {

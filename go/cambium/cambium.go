@@ -125,13 +125,25 @@ const (
 )
 
 // DeviationPolicy selects how loaded deviation modules change the effective
-// schema. The zero value applies every deviation. Not loading a deviation module
-// at all is the way to apply none of its effects; IgnoreNotSupported loads the
-// module and applies its add/replace/delete effects while keeping nodes that
-// "deviate not-supported" would remove. The policy is applied while deviations
-// are collected, before any static schema reference is validated.
+// schema. The zero value applies every deviation. IgnoreAll retains declaration
+// metadata while suppressing all effects; it takes precedence over
+// IgnoreNotSupported, which suppresses only removals. The policy is applied
+// before any static schema reference is validated.
 type DeviationPolicy struct {
 	IgnoreNotSupported bool
+	IgnoreAll          bool
+}
+
+// FeaturePolicy controls whether if-feature conditions filter declarations from
+// the pure-Go schema. The zero value evaluates conditions against SetFeatures.
+type FeaturePolicy struct {
+	// RetainAll preserves every feature-gated declaration, including mutually
+	// exclusive conditions, for schema analysis and generation. Conditions and
+	// references are still validated and their metadata is retained. This does
+	// not select a realizable device feature set: FeatureValue and the enabled /
+	// disabled feature lists in LoadReport still report evaluated SetFeatures
+	// selections. All other schema validation and deviation policies still apply.
+	RetainAll bool
 }
 
 func validValidationMode(mode ValidationMode) bool {
@@ -161,7 +173,8 @@ func (b *ContextBuilder) ensureMutable() error {
 	if b.built {
 		return wrap("context builder", fmt.Errorf("context builder has already built a context"))
 	}
-	return nil
+	// Copies share the context, which is the authority on lifecycle state.
+	return b.ctx.ensureMutable("context builder")
 }
 
 // SearchPath appends a directory to the builder's module search path.
@@ -195,6 +208,24 @@ func (b *ContextBuilder) SetFeatures(module string, features []string) error {
 		return err
 	}
 	return b.ctx.SetFeatures(module, features)
+}
+
+// SetFeaturePolicy controls declaration retention for every loaded module and
+// submodule, including transitive dependencies. It must be called before Build.
+func (b *ContextBuilder) SetFeaturePolicy(policy FeaturePolicy) error {
+	if err := b.ensureMutable(); err != nil {
+		return err
+	}
+	// Builder values can be copied before Build; the shared context remains
+	// the authority on whether mutation is allowed after another copy builds.
+	if err := b.ctx.ensureMutable("set feature policy"); err != nil {
+		return err
+	}
+	if b.ctx.featurePolicy != policy {
+		b.ctx.featurePolicy = policy
+		b.ctx.dirty = true
+	}
+	return nil
 }
 
 // SetValidationMode selects strict RFC validation or explicit vendor-compatible
@@ -289,22 +320,25 @@ func (b *ContextBuilder) Build() (*Context, error) {
 // stops loading modules; mutators, dirty rebuilds, and Close must not race with
 // other operations.
 type Context struct {
-	searchPaths     []string
-	modules         map[string]*moduleData
-	modulesByKey    map[string]*moduleData
-	modulesByNS     map[string]*moduleData
-	modulesByNSKey  map[string]*moduleData
-	loadOrder       []*moduleData
-	enabledFeatures map[string]map[string]struct{}
-	allImplemented  bool
-	refImplemented  bool
-	searchCwd       bool
-	validationMode  ValidationMode
-	deviationPolicy DeviationPolicy
-	loadWarnings    []Diagnostic
-	dirty           bool
-	frozen          bool
-	closed          bool
+	searchPaths      []string
+	sourceCatalog    map[sourceIdentity]string
+	modules          map[string]*moduleData
+	modulesByKey     map[string]*moduleData
+	modulesByNS      map[string]*moduleData
+	modulesByNSKey   map[string]*moduleData
+	loadOrder        []*moduleData
+	enabledFeatures  map[string]map[string]struct{}
+	allImplemented   bool
+	refImplemented   bool
+	searchCwd        bool
+	validationMode   ValidationMode
+	deviationPolicy  DeviationPolicy
+	refinementPolicy RefinementPolicy
+	featurePolicy    FeaturePolicy
+	loadWarnings     []Diagnostic
+	dirty            bool
+	frozen           bool
+	closed           bool
 	// importing holds the modules whose imports, and including the
 	// submodules whose includes, are being loaded, outermost first; an
 	// import or include of an entry closes a cycle.
@@ -371,6 +405,7 @@ func (c *Context) Close() {
 	}
 	c.closed = true
 	c.searchPaths = nil
+	c.sourceCatalog = nil
 	c.modules = nil
 	c.modulesByKey = nil
 	c.modulesByNS = nil
@@ -380,6 +415,10 @@ func (c *Context) Close() {
 	c.loadWarnings = nil
 	c.dirty = false
 }
+
+// IsFrozen reports whether c is a live, read-only context returned by Build.
+// Nil, mutable, and closed contexts return false.
+func (c *Context) IsFrozen() bool { return c != nil && c.frozen && !c.closed }
 
 func (c *Context) snapshot() contextSnapshot {
 	snap := contextSnapshot{
@@ -623,6 +662,13 @@ func (c *Context) loadModuleByName(name string, revision *string, implemented, r
 }
 
 func (c *Context) findModulePathRevision(name, revision string) (string, error) {
+	return c.findSourcePathRevision("module", name, revision)
+}
+
+func (c *Context) findSourcePathRevision(kind, name, revision string) (string, error) {
+	if _, path := c.registeredSource(kind, name, revision); path != "" {
+		return path, nil
+	}
 	for _, dir := range c.moduleSearchDirs() {
 		path, ok, err := findModuleInSearchDir(dir, name, revision, c.validationMode)
 		if err != nil {
@@ -1549,7 +1595,7 @@ func (c *Context) loadIncludes(mod *moduleData) error {
 		if err != nil {
 			return err
 		}
-		path, err := c.findModulePathRevision(inc.Argument, revision)
+		path, err := c.findSourcePathRevision("submodule", inc.Argument, revision)
 		if err != nil {
 			return err
 		}
@@ -1572,7 +1618,7 @@ func (c *Context) loadSubmoduleIncludes(parent *moduleData, stmt *yangparse.Stat
 				return err
 			}
 		}
-		path, err := c.findModulePathRevision(inc.Argument, revision)
+		path, err := c.findSourcePathRevision("submodule", inc.Argument, revision)
 		if err != nil {
 			return err
 		}
@@ -1755,8 +1801,14 @@ func (c *Context) loadImports(mod *moduleData) error {
 			})
 			targetName := impStmt.Argument
 			target := c.modulesByKey[moduleKey(targetName, targetRevision)]
-			if target == nil && targetRevision == "" {
-				target = c.modules[targetName]
+			if targetRevision == "" {
+				if identity, path := c.registeredSource("module", targetName, ""); path != "" {
+					// An earlier pinned import must not override the catalog's
+					// deterministic choice for an unpinned dependency.
+					target = c.modulesByKey[moduleKey(targetName, identity.revision)]
+				} else if target == nil {
+					target = c.modules[targetName]
+				}
 			}
 			if target == nil || target.stmt == nil || targetRevision != "" && target.revision != targetRevision {
 				path, err := c.findModulePathRevision(targetName, targetRevision)
