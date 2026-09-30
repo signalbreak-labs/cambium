@@ -2092,6 +2092,7 @@ func (c *Context) rebuild() (amending int, err error) {
 	if err := c.validateLeafrefCycles(); err != nil {
 		return amending, err
 	}
+	c.resolveLeafrefRealtypes()
 	for _, mod := range c.loadOrder {
 		if err := mod.validateDefaultValues(); err != nil {
 			return amending, err

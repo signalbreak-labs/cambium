@@ -541,6 +541,8 @@ func (r ResolvedLeafRef) Target() (SchemaNodeRef, bool) {
 }
 
 // Realtype returns a copy of the resolved underlying type and whether it is known.
+// Cycles retained by the loading policy have no Realtype at the cycle's back-edge;
+// their Target handles remain available for cycle diagnostics.
 func (r ResolvedLeafRef) Realtype() (*TypeInfo, bool) {
 	if r.realtype == nil {
 		return nil, false

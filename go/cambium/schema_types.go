@@ -667,10 +667,10 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	if target == nil || target.typeInfo == nil {
 		return
 	}
-	ref := SchemaNodeRef{node: target}
-	lr.target = &ref
-	rt := cloneTypeInfo(*target.typeInfo)
-	lr.realtype = &rt
+	lr.target = new(SchemaNodeRef{node: target})
+	// Underlying types are copied after every target has resolved, so a
+	// forward reference cannot capture an unresolved intermediate leafref.
+	lr.realtype = nil
 }
 
 // findLeafrefDataPath resolves a leafref path over the data tree, where ".."
