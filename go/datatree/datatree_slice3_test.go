@@ -115,7 +115,7 @@ func TestIdentityRefDerivation(t *testing.T) {
 	}{
 		{`"der1"`, true},      // direct derived
 		{`"der2"`, true},      // transitively derived
-		{`"base-id"`, true},   // the base itself
+		{`"base-id"`, false},  // the base itself is not derived from itself
 		{`"other"`, false},    // unrelated identity
 		{`"nonexist"`, false}, // unknown
 	}

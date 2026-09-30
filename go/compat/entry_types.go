@@ -644,6 +644,9 @@ func typeForInfo(info cambium.TypeInfo) *YangType {
 	case cambium.ResolvedDecimal64:
 		typ.FractionDigits = int(resolved.FractionDigits().Value())
 		typ.Range = rangeFromBounds(resolved.Range, rangeBoundRange, cambium.BaseTypeDecimal64, typ.FractionDigits)
+		if typ.Range == nil {
+			typ.Range = decimalDefaultRange(typ.FractionDigits)
+		}
 	case cambium.ResolvedString:
 		typ.Length = rangeFromBounds(resolved.Length, rangeBoundLength, cambium.BaseTypeString, 0)
 		for _, pattern := range resolved.Patterns {
@@ -655,6 +658,8 @@ func typeForInfo(info cambium.TypeInfo) *YangType {
 		typ.Enum = enumTypeFromValues(NewEnumType(), resolved.Values())
 	case cambium.ResolvedBits:
 		typ.Bit = enumTypeFromValues(NewBitfield(), resolved.Values())
+	case cambium.ResolvedInstanceIdentifier:
+		typ.OptionalInstance = !resolved.RequireInstance
 	case cambium.ResolvedIdentityRef:
 		for _, base := range resolved.Bases() {
 			typ.IdentityBases = append(typ.IdentityBases, identityFromCambium(base, make(map[string]*Identity)))
@@ -663,15 +668,11 @@ func typeForInfo(info cambium.TypeInfo) *YangType {
 			typ.IdentityBase = typ.IdentityBases[0]
 		}
 	case cambium.ResolvedLeafRef:
-		typ.Name = "leafref"
-		typ.Kind = Yleafref
 		if path, ok := resolved.Path(); ok {
 			typ.Path = path
 		}
 		typ.OptionalInstance = !resolved.RequireInstance()
 	case cambium.ResolvedUnion:
-		typ.Name = "union"
-		typ.Kind = Yunion
 		for _, member := range resolved.Members() {
 			typ.Type = append(typ.Type, typeForInfo(member))
 		}

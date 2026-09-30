@@ -113,10 +113,11 @@ func TestWhenBitIsSetFunction(t *testing.T) {
 func TestWhenDerivedFromFunctions(t *testing.T) {
 	mod := loadModSrc(t, `module mwd {
         namespace "urn:mwd"; prefix mwd;
-        identity base;
+        identity root;
+        identity base { base root; }
         identity child { base base; }
         container top {
-            leaf kind { type identityref { base base; } }
+            leaf kind { type identityref { base root; } }
             leaf strict { when "derived-from(../kind, 'mwd:base')"; type string; }
             leaf self { when "derived-from-or-self(../kind, 'mwd:base')"; type string; }
         }

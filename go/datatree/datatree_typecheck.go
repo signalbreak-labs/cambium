@@ -101,7 +101,7 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModul
 			*out = append(*out, fmt.Sprintf("%s: binary must be a base64 JSON string", path))
 			return
 		}
-		decoded, err := base64.StdEncoding.DecodeString(s)
+		decoded, err := decodeBinaryValue(s)
 		if err != nil {
 			*out = append(*out, fmt.Sprintf("%s: invalid base64: %v", path, err))
 			return
@@ -151,6 +151,27 @@ func jsonStringValue(raw json.RawMessage) (string, bool) {
 	return s, true
 }
 
+// Reject arbitrary CR/LF while preserving the documented data-parser
+// compatibility for PEM newlines every 64 base64 characters.
+func decodeBinaryValue(value string) ([]byte, error) {
+	if len(value) > 64 && value[64] == '\n' {
+		var canonical strings.Builder
+		for len(value) > 64 {
+			if value[64] != '\n' {
+				return nil, base64.CorruptInputError(64)
+			}
+			canonical.WriteString(value[:64])
+			value = value[65:]
+		}
+		canonical.WriteString(value)
+		value = canonical.String()
+	}
+	if index := strings.IndexAny(value, "\r\n"); index >= 0 {
+		return nil, base64.CorruptInputError(index)
+	}
+	return base64.StdEncoding.DecodeString(value)
+}
+
 func isJSONBool(raw json.RawMessage) bool {
 	var b bool
 	return json.Unmarshal(raw, &b) == nil
@@ -182,37 +203,30 @@ func rawDisplay(raw json.RawMessage) string {
 	return string(raw)
 }
 
-// validateIdentityRef checks that value names an identity that is one of the
-// required bases or transitively derived from one. A "module:name" value is
-// matched against qualified names, a bare value against same-module bare names.
+// validateIdentityRef requires strict derivation from every base (RFC 7950
+// section 9.10.2). Bare values name identities in the leaf's defining module.
 func validateIdentityRef(r cambium.ResolvedIdentityRef, value, path, leafModule string, out *[]string) {
-	qualified := make(map[string]bool)
-	bare := make(map[string]bool)
-	seen := make(map[string]bool)
-	for _, base := range r.Bases() {
-		collectIdentity(base, leafModule, qualified, bare, seen)
+	qualified := value
+	if !strings.Contains(value, ":") {
+		qualified = leafModule + ":" + value
 	}
-	valid := bare[value]
-	if strings.Contains(value, ":") {
-		valid = qualified[value]
+	bases := r.Bases()
+	valid := len(bases) > 0
+	for _, base := range bases {
+		matched := false
+		for _, derived := range base.DerivedClosure() {
+			if derived.Module().Name()+":"+derived.Name() == qualified {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			valid = false
+			break
+		}
 	}
 	if !valid {
 		*out = append(*out, fmt.Sprintf("%s: %q is not an identity derived from the required base identity", path, value))
-	}
-}
-
-func collectIdentity(id cambium.Identity, leafModule string, qualified, bare, seen map[string]bool) {
-	qn := id.Module().Name() + ":" + id.Name()
-	if seen[qn] {
-		return
-	}
-	seen[qn] = true
-	qualified[qn] = true
-	if id.Module().Name() == leafModule {
-		bare[id.Name()] = true
-	}
-	for _, derived := range id.Derived() {
-		collectIdentity(derived, leafModule, qualified, bare, seen)
 	}
 }
 
@@ -349,7 +363,10 @@ func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out
 		defined[v.Name()] = true
 	}
 	seen := make(map[string]bool)
-	for _, bit := range strings.Fields(s) {
+	for bit := range strings.SplitSeq(s, " ") {
+		if bit == "" {
+			continue
+		}
 		if !defined[bit] {
 			*out = append(*out, fmt.Sprintf("%s: %q is not a defined bit", path, bit))
 			continue

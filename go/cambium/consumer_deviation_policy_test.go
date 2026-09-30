@@ -5,12 +5,177 @@ package cambium_test
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
 )
+
+func TestDeviationPolicyIgnoreAllPreservesSchemaAndReportsEveryOperation(t *testing.T) {
+	const source = `module unchanged {
+  yang-version 1.1; namespace "urn:unchanged"; prefix u;
+  leaf target { type string; }
+  leaf reference { type leafref { path "/u:target"; } }
+  leaf value { type string; default original; units widgets; }
+  deviation "/u:target" { deviate not-supported; }
+  deviation "/u:value" { deviate add { must "true()"; } }
+  deviation "/u:value" { deviate replace { default replacement; } }
+  deviation "/u:value" { deviate delete { units widgets; } }
+  deviation "/u:absent" { deviate replace { type uint32; } }
+}`
+	for _, ignoreNotSupported := range []bool{false, true} {
+		policy := cambium.DeviationPolicy{IgnoreAll: true, IgnoreNotSupported: ignoreNotSupported}
+		ctx, err := buildPolicyContext(t, policy, source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mod, _ := ctx.Schema("unchanged")
+		value := schemaNodeAt(t, mod, "/u:value")
+		if got, ok := value.DefaultValue(); !ok || got != "original" {
+			t.Errorf("ignored replacement changed default: %q, %v", got, ok)
+		}
+		if got, ok := value.Units(); !ok || got != "widgets" || len(value.Musts()) != 0 {
+			t.Errorf("ignored add/delete changed constraints: units %q, %v; musts %v", got, ok, value.Musts())
+		}
+		if _, err := cambium.ResolveLeafref(schemaNodeAt(t, mod, "/u:reference")); err != nil {
+			t.Fatalf("static references were validated against removed target: %v", err)
+		}
+		if got := len(value.DeviationProvenance()); got != 3 {
+			t.Errorf("value provenance count = %d, want 3", got)
+		}
+		report := ctx.LoadReport()
+		if report.DeviationPolicy != policy || len(report.IgnoredDeviations) != 5 || len(report.DeviationModules) != 1 || len(report.Warnings) != 0 {
+			t.Errorf("ignored deviation report = %+v", report)
+		}
+		for _, dev := range mod.Deviations() {
+			if dev.Applied() || dev.SourceLocation().Line == 0 {
+				t.Errorf("ignored deviation lost unapplied/source metadata: %+v", dev)
+			}
+		}
+	}
+}
+
+func TestDeviationPolicyIgnoreAllStillValidatesDeclarationShape(t *testing.T) {
+	for _, declaration := range []string{
+		`deviation "/v:absent";`,
+		`deviation "relative" { deviate not-supported; }`,
+		`deviation "/v:absent" { deviate invalid; }`,
+		`deviation "/v:absent" { description one; description two; deviate not-supported; }`,
+		`deviation "/v:absent" { deviate not-supported { default invalid; } }`,
+		`deviation "/v:absent" { deviate add { config invalid; } }`,
+		`deviation "/v:absent" { deviate add { config true; config false; } }`,
+		`deviation "/v:absent" { deviate add { units first; units second; } }`,
+		`deviation "/v:absent" { deviate replace { type string; type uint32; } }`,
+		`deviation "/v:absent" { deviate replace { type decimal64; } }`,
+		`deviation "/v:absent" { deviate replace { type uint32 { range garbage; } } }`,
+		`deviation "/v:absent" { deviate add { must "true()" { error-message one; error-message two; } } }`,
+	} {
+		source := fmt.Sprintf(`module valid { yang-version 1.1; namespace "urn:valid"; prefix v; %s }`, declaration)
+		if _, err := buildPolicyContext(t, cambium.DeviationPolicy{IgnoreAll: true}, source); err == nil {
+			t.Errorf("IgnoreAll accepted malformed declaration %s", declaration)
+		}
+	}
+}
+
+func TestDeviationPolicyIgnoreAllDoesNotImplementTargets(t *testing.T) {
+	dir := t.TempDir()
+	target := catalogSource(t, dir, "target-alias.yang", `module target { yang-version 1.1; namespace "urn:target"; prefix t; container top; }`)
+	library := catalogSource(t, dir, "library-alias.yang", `module library {
+  yang-version 1.1; namespace "urn:library"; prefix l;
+  import target { prefix t; }
+  container ignored-target;
+  augment "/t:top" { leaf activated { type string; } }
+}`)
+	deviator := catalogSource(t, dir, "deviator-alias.yang", `module deviator {
+  yang-version 1.1; namespace "urn:deviator"; prefix d;
+  import library { prefix l; }
+  deviation "/l:ignored-target" { deviate not-supported; }
+}`)
+	b := catalogBuilder(t)
+	if err := b.SetDeviationPolicy(cambium.DeviationPolicy{IgnoreAll: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.RegisterSourcePaths(target, library, deviator); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"target", "deviator"} {
+		if err := b.LoadModule(name, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(ctx.Close)
+	lib, _ := ctx.Schema("library")
+	if lib.IsImplemented() {
+		t.Error("ignored deviation promoted import-only target module")
+	}
+	mod, _ := ctx.Schema("target")
+	if _, ok := schemaNodeAt(t, mod, "/t:top").Children().Lookup("activated"); ok {
+		t.Error("ignored deviation indirectly activated imported module's augment")
+	}
+}
+
+func TestDeviationPolicyCopiedBuilderCannotMutateFrozenContext(t *testing.T) {
+	b, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyOfBuilder := *b
+	ctx, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(ctx.Close)
+	if err := copyOfBuilder.SetDeviationPolicy(cambium.DeviationPolicy{IgnoreNotSupported: true}); err == nil {
+		t.Fatal("copied builder changed deviation policy after Build")
+	}
+	if ctx.LoadReport().DeviationPolicy != (cambium.DeviationPolicy{}) {
+		t.Fatal("frozen context deviation policy changed")
+	}
+}
+
+func TestDeviationStatementRetainsNestedTypeRestrictions(t *testing.T) {
+	const source = `module restrictions {
+  yang-version 1.1; namespace "urn:restrictions"; prefix r;
+  leaf value { type uint32; }
+  leaf removed { type string; }
+  deviation "/r:value" { deviate replace { type uint32 { range "1 .. 3"; } } }
+  deviation "/r:removed" { deviate not-supported; }
+}`
+	for _, ignore := range []bool{false, true} {
+		ctx, err := buildPolicyContext(t, cambium.DeviationPolicy{IgnoreAll: ignore}, source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		mod, _ := ctx.Schema("restrictions")
+		devs := mod.Deviations()
+		if len(devs) != 2 {
+			t.Fatalf("deviations = %d, want 2", len(devs))
+		}
+		stmt := devs[0].Statement()
+		argument, _ := stmt.Argument()
+		children := stmt.SubStatements()
+		if stmt.Keyword() != "type" || argument != "uint32" || len(children) != 1 || children[0].Keyword() != "range" {
+			t.Fatalf("deviation type statement lost structure: %v", stmt)
+		}
+		if value, _ := children[0].Argument(); value != "1 .. 3" {
+			t.Errorf("deviation type range = %q", value)
+		}
+		stmt = devs[1].Statement()
+		argument, _ = stmt.Argument()
+		if stmt.Keyword() != "deviate" || argument != "not-supported" {
+			t.Errorf("no-property source statement = %s %q", stmt.Keyword(), argument)
+		}
+	}
+	if (cambium.Deviation{}).Statement().IsValid() {
+		t.Error("zero deviation has a source statement")
+	}
+}
 
 // buildPolicyContext builds a cwd-independent context from in-memory sources
 // with an explicit deviation policy. It returns the Build error unchanged.

@@ -125,13 +125,25 @@ const (
 )
 
 // DeviationPolicy selects how loaded deviation modules change the effective
-// schema. The zero value applies every deviation. Not loading a deviation module
-// at all is the way to apply none of its effects; IgnoreNotSupported loads the
-// module and applies its add/replace/delete effects while keeping nodes that
-// "deviate not-supported" would remove. The policy is applied while deviations
-// are collected, before any static schema reference is validated.
+// schema. The zero value applies every deviation. IgnoreAll retains declaration
+// metadata while suppressing all effects; it takes precedence over
+// IgnoreNotSupported, which suppresses only removals. The policy is applied
+// before any static schema reference is validated.
 type DeviationPolicy struct {
 	IgnoreNotSupported bool
+	IgnoreAll          bool
+}
+
+// FeaturePolicy controls whether if-feature conditions filter declarations from
+// the pure-Go schema. The zero value evaluates conditions against SetFeatures.
+type FeaturePolicy struct {
+	// RetainAll preserves every feature-gated declaration, including mutually
+	// exclusive conditions, for schema analysis and generation. Conditions and
+	// references are still validated and their metadata is retained. This does
+	// not select a realizable device feature set: FeatureValue and the enabled /
+	// disabled feature lists in LoadReport still report evaluated SetFeatures
+	// selections. All other schema validation and deviation policies still apply.
+	RetainAll bool
 }
 
 func validValidationMode(mode ValidationMode) bool {
@@ -161,7 +173,8 @@ func (b *ContextBuilder) ensureMutable() error {
 	if b.built {
 		return wrap("context builder", fmt.Errorf("context builder has already built a context"))
 	}
-	return nil
+	// Copies share the context, which is the authority on lifecycle state.
+	return b.ctx.ensureMutable("context builder")
 }
 
 // SearchPath appends a directory to the builder's module search path.
@@ -195,6 +208,24 @@ func (b *ContextBuilder) SetFeatures(module string, features []string) error {
 		return err
 	}
 	return b.ctx.SetFeatures(module, features)
+}
+
+// SetFeaturePolicy controls declaration retention for every loaded module and
+// submodule, including transitive dependencies. It must be called before Build.
+func (b *ContextBuilder) SetFeaturePolicy(policy FeaturePolicy) error {
+	if err := b.ensureMutable(); err != nil {
+		return err
+	}
+	// Builder values can be copied before Build; the shared context remains
+	// the authority on whether mutation is allowed after another copy builds.
+	if err := b.ctx.ensureMutable("set feature policy"); err != nil {
+		return err
+	}
+	if b.ctx.featurePolicy != policy {
+		b.ctx.featurePolicy = policy
+		b.ctx.dirty = true
+	}
+	return nil
 }
 
 // SetValidationMode selects strict RFC validation or explicit vendor-compatible
@@ -289,22 +320,25 @@ func (b *ContextBuilder) Build() (*Context, error) {
 // stops loading modules; mutators, dirty rebuilds, and Close must not race with
 // other operations.
 type Context struct {
-	searchPaths     []string
-	modules         map[string]*moduleData
-	modulesByKey    map[string]*moduleData
-	modulesByNS     map[string]*moduleData
-	modulesByNSKey  map[string]*moduleData
-	loadOrder       []*moduleData
-	enabledFeatures map[string]map[string]struct{}
-	allImplemented  bool
-	refImplemented  bool
-	searchCwd       bool
-	validationMode  ValidationMode
-	deviationPolicy DeviationPolicy
-	loadWarnings    []Diagnostic
-	dirty           bool
-	frozen          bool
-	closed          bool
+	searchPaths      []string
+	sourceCatalog    map[sourceIdentity]string
+	modules          map[string]*moduleData
+	modulesByKey     map[string]*moduleData
+	modulesByNS      map[string]*moduleData
+	modulesByNSKey   map[string]*moduleData
+	loadOrder        []*moduleData
+	enabledFeatures  map[string]map[string]struct{}
+	allImplemented   bool
+	refImplemented   bool
+	searchCwd        bool
+	validationMode   ValidationMode
+	deviationPolicy  DeviationPolicy
+	refinementPolicy RefinementPolicy
+	featurePolicy    FeaturePolicy
+	loadWarnings     []Diagnostic
+	dirty            bool
+	frozen           bool
+	closed           bool
 	// importing holds the modules whose imports, and including the
 	// submodules whose includes, are being loaded, outermost first; an
 	// import or include of an entry closes a cycle.
@@ -371,6 +405,7 @@ func (c *Context) Close() {
 	}
 	c.closed = true
 	c.searchPaths = nil
+	c.sourceCatalog = nil
 	c.modules = nil
 	c.modulesByKey = nil
 	c.modulesByNS = nil
@@ -380,6 +415,10 @@ func (c *Context) Close() {
 	c.loadWarnings = nil
 	c.dirty = false
 }
+
+// IsFrozen reports whether c is a live, read-only context returned by Build.
+// Nil, mutable, and closed contexts return false.
+func (c *Context) IsFrozen() bool { return c != nil && c.frozen && !c.closed }
 
 func (c *Context) snapshot() contextSnapshot {
 	snap := contextSnapshot{
@@ -623,6 +662,13 @@ func (c *Context) loadModuleByName(name string, revision *string, implemented, r
 }
 
 func (c *Context) findModulePathRevision(name, revision string) (string, error) {
+	return c.findSourcePathRevision("module", name, revision)
+}
+
+func (c *Context) findSourcePathRevision(kind, name, revision string) (string, error) {
+	if _, path := c.registeredSource(kind, name, revision); path != "" {
+		return path, nil
+	}
 	for _, dir := range c.moduleSearchDirs() {
 		path, ok, err := findModuleInSearchDir(dir, name, revision, c.validationMode)
 		if err != nil {
@@ -1475,10 +1521,10 @@ func (c *Context) loadDirectSubmoduleSource(path string, stmt *yangparse.Stateme
 	return c.loadModulePath(parentPath, implemented, requested)
 }
 
-func (c *Context) loadSubmodule(path string, stmt, inc *yangparse.Statement, parent *moduleData) (*moduleData, error) {
+func (c *Context) loadSubmodule(path string, stmt, inc *yangparse.Statement, parent *moduleData, resolved map[string]*submoduleData) error {
 	info, warnings, err := validateSubmoduleSource(path, stmt, parent, c.validationMode)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	c.addLoadWarnings(warnings)
 	if parent == nil {
@@ -1496,7 +1542,13 @@ func (c *Context) loadSubmodule(path string, stmt, inc *yangparse.Statement, par
 		c.loadOrder = append(c.loadOrder, parent)
 	}
 	for _, sub := range parent.submodules {
-		if sub.stmt != nil && sub.stmt.Argument == stmt.Argument && moduleRevision(sub.stmt) == info.revision {
+		if sub.stmt != nil && sub.stmt.Argument == stmt.Argument {
+			if moduleRevision(sub.stmt) != info.revision {
+				return conflictingIncludeRevision(parent, inc, sub, info.revision)
+			}
+			if !equivalentModuleSource(sub.file, path) {
+				return fmt.Errorf("conflicting sources for submodule %q revision %q: %s and %s", info.name, info.revision, sub.file, path)
+			}
 			if i := slices.Index(c.including, sub.stmt); i >= 0 {
 				chain := make([]string, 0, len(c.including)-i+1)
 				for _, including := range c.including[i:] {
@@ -1504,28 +1556,28 @@ func (c *Context) loadSubmodule(path string, stmt, inc *yangparse.Statement, par
 				}
 				chain = append(chain, sub.stmt.Argument)
 				if err := parent.sourceRuleViolation(inc, nil, "include cycle %s at %s", strings.Join(chain, " -> "), locationText(inc)); err != nil {
-					return nil, err
+					return err
 				}
 			}
-			return parent, nil
+			return nil
 		}
 	}
 	// RFC 7950 §12: a module and the submodules it includes share one YANG
 	// version.
 	if moduleVersion, submoduleVersion := sourceRootYangVersion(parent.stmt), sourceRootYangVersion(stmt); parent.stmt != nil && moduleVersion != submoduleVersion {
 		if err := parent.sourceRuleViolation(inc, nil, "YANG version %s module %q must not include YANG version %s submodule %q at %s", moduleVersion, parent.name, submoduleVersion, stmt.Argument, locationText(inc)); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	parent.submodules = append(parent.submodules, &submoduleData{file: path, stmt: stmt})
 	c.including = append(c.including, stmt)
-	err = c.loadSubmoduleIncludes(parent, stmt)
+	err = c.loadSubmoduleIncludes(parent, stmt, resolved)
 	c.including = c.including[:len(c.including)-1]
 	if err != nil {
-		return nil, err
+		return err
 	}
 	c.dirty = true
-	return parent, nil
+	return nil
 }
 
 // sourceRuleViolation reports a source rule violation in m that leaves a
@@ -1544,72 +1596,70 @@ func (c *Context) loadIncludes(mod *moduleData) error {
 	if err := validateDuplicateIncludes("module "+strconv.Quote(mod.name), includes); err != nil {
 		return err
 	}
+	// Resolve every direct include before descending. A nested unpinned include
+	// must reuse its parent's selection even when the parent's explicit pin
+	// appears later in source order (RFC 7950 sections 5.1 and 7.1.6).
+	resolved := make(map[string]*submoduleData, len(includes))
 	for _, inc := range includes {
 		revision, err := validateIncludeStatement(inc, mod.yangVersionForStatement(inc) == "1.1")
 		if err != nil {
 			return err
 		}
-		path, err := c.findModulePathRevision(inc.Argument, revision)
+		sub, err := c.resolveIncludedSubmodule(mod, inc, revision)
 		if err != nil {
 			return err
 		}
-		if err := c.loadIncludedSubmodulePath(path, inc, mod); err != nil {
+		resolved[inc.Argument] = sub
+	}
+	// The map binds identities only; loading and expansion keep source order.
+	for _, inc := range includes {
+		sub := resolved[inc.Argument]
+		if err := c.loadSubmodule(sub.file, sub.stmt, inc, mod, resolved); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Context) loadSubmoduleIncludes(parent *moduleData, stmt *yangparse.Statement) error {
+func (c *Context) loadSubmoduleIncludes(parent *moduleData, stmt *yangparse.Statement, resolved map[string]*submoduleData) error {
 	parentYang11 := parent != nil && parent.yangVersionForStatement(parent.stmt) == "1.1"
 	for _, inc := range direct(stmt, "include") {
 		revision, err := validateIncludeStatement(inc, childArg(stmt, "yang-version") == "1.1")
 		if err != nil {
 			return err
 		}
-		if parentYang11 {
-			if err := validateParentYang11NestedInclude(parent, stmt, inc, revision); err != nil {
+		if parentYang11 && !parentDirectlyIncludesSubmoduleName(parent, inc.Argument) {
+			return fmt.Errorf("YANG 1.1 submodule %q includes %q but parent module %q does not include it at %s", stmt.Argument, inc.Argument, parent.name, inc.Location())
+		}
+		sub := resolved[inc.Argument]
+		if sub == nil || revision != "" {
+			candidate, err := c.resolveIncludedSubmodule(parent, inc, revision)
+			if err != nil {
 				return err
 			}
+			if sub == nil {
+				// YANG 1.0 permits includes that are only reachable through
+				// another submodule; bind those on their first encounter.
+				sub = candidate
+				resolved[inc.Argument] = sub
+			} else if moduleRevision(sub.stmt) != moduleRevision(candidate.stmt) {
+				if parentYang11 {
+					return fmt.Errorf("YANG 1.1 submodule %q includes %q revision %q but parent module %q does not include the same revision at %s", stmt.Argument, inc.Argument, revision, parent.name, inc.Location())
+				}
+				return conflictingIncludeRevision(parent, inc, sub, moduleRevision(candidate.stmt))
+			} else if !equivalentModuleSource(sub.file, candidate.file) {
+				return fmt.Errorf("conflicting sources for submodule %q revision %q: %s and %s", inc.Argument, moduleRevision(sub.stmt), sub.file, candidate.file)
+			}
 		}
-		path, err := c.findModulePathRevision(inc.Argument, revision)
-		if err != nil {
-			return err
-		}
-		if err := c.loadIncludedSubmodulePath(path, inc, parent); err != nil {
+		if err := c.loadSubmodule(sub.file, sub.stmt, inc, parent, resolved); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateParentYang11NestedInclude(parent *moduleData, submodule, inc *yangparse.Statement, revision string) error {
-	if parentDirectlyIncludesSubmoduleRevision(parent, inc.Argument, revision) {
-		return nil
-	}
-	if revision != "" && parentDirectlyIncludesSubmoduleName(parent, inc.Argument) {
-		return fmt.Errorf("YANG 1.1 submodule %q includes %q revision %q but parent module %q does not include the same revision at %s", submodule.Argument, inc.Argument, revision, parent.name, inc.Location())
-	}
-	return fmt.Errorf("YANG 1.1 submodule %q includes %q but parent module %q does not include it at %s", submodule.Argument, inc.Argument, parent.name, inc.Location())
-}
-
-func parentDirectlyIncludesSubmoduleRevision(parent *moduleData, name, revision string) bool {
-	if parent == nil || parent.stmt == nil {
-		return false
-	}
-	for _, inc := range direct(parent.stmt, "include") {
-		if inc.Argument != name {
-			continue
-		}
-		parentRevision, err := statementRevisionDate(inc)
-		if err != nil {
-			continue
-		}
-		if revision == "" || parentRevision == revision {
-			return true
-		}
-	}
-	return false
+func conflictingIncludeRevision(parent *moduleData, inc *yangparse.Statement, selected *submoduleData, revision string) error {
+	return fmt.Errorf("submodule %q revision %q conflicts with revision %q already selected by parent module %q at %s", inc.Argument, revision, moduleRevision(selected.stmt), parent.name, inc.Location())
 }
 
 func parentDirectlyIncludesSubmoduleName(parent *moduleData, name string) bool {
@@ -1662,28 +1712,37 @@ func validateIncludeStatement(inc *yangparse.Statement, allowXMLPrefix bool) (st
 	return revision, nil
 }
 
-func (c *Context) loadIncludedSubmodulePath(path string, inc *yangparse.Statement, parent *moduleData) error {
+func (c *Context) resolveIncludedSubmodule(parent *moduleData, inc *yangparse.Statement, revision string) (*submoduleData, error) {
+	path, err := c.findSourcePathRevision("submodule", inc.Argument, revision)
+	if err != nil {
+		return nil, err
+	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	raw, err := yangparse.ReadFile(abs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	stmts, err := yangparse.Parse(raw, abs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(stmts) != 1 {
-		return fmt.Errorf("%s: expected one submodule statement, got %d", abs, len(stmts))
+		return nil, fmt.Errorf("%s: expected one submodule statement, got %d", abs, len(stmts))
 	}
 	stmt := stmts[0]
 	if stmt.Keyword != "submodule" {
-		return fmt.Errorf("%s: included file top-level statement is %q, want submodule", abs, stmt.Keyword)
+		return nil, fmt.Errorf("%s: included file top-level statement is %q, want submodule", abs, stmt.Keyword)
 	}
-	_, err = c.loadSubmodule(abs, stmt, inc, parent)
-	return err
+	if stmt.Argument != inc.Argument {
+		return nil, fmt.Errorf("%s: included submodule is %q, want %q", abs, stmt.Argument, inc.Argument)
+	}
+	if _, _, err := validateSubmoduleSource(abs, stmt, parent, c.validationMode); err != nil {
+		return nil, err
+	}
+	return &submoduleData{file: abs, stmt: stmt}, nil
 }
 
 func (c *Context) loadImports(mod *moduleData) error {
@@ -1755,8 +1814,14 @@ func (c *Context) loadImports(mod *moduleData) error {
 			})
 			targetName := impStmt.Argument
 			target := c.modulesByKey[moduleKey(targetName, targetRevision)]
-			if target == nil && targetRevision == "" {
-				target = c.modules[targetName]
+			if targetRevision == "" {
+				if identity, path := c.registeredSource("module", targetName, ""); path != "" {
+					// An earlier pinned import must not override the catalog's
+					// deterministic choice for an unpinned dependency.
+					target = c.modulesByKey[moduleKey(targetName, identity.revision)]
+				} else if target == nil {
+					target = c.modules[targetName]
+				}
 			}
 			if target == nil || target.stmt == nil || targetRevision != "" && target.revision != targetRevision {
 				path, err := c.findModulePathRevision(targetName, targetRevision)
@@ -2027,6 +2092,7 @@ func (c *Context) rebuild() (amending int, err error) {
 	if err := c.validateLeafrefCycles(); err != nil {
 		return amending, err
 	}
+	c.resolveLeafrefRealtypes()
 	for _, mod := range c.loadOrder {
 		if err := mod.validateDefaultValues(); err != nil {
 			return amending, err

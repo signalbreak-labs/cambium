@@ -7508,8 +7508,8 @@ func TestGeneratedGoIdentityrefDuplicateLocalNamesSortVariants(t *testing.T) {
 		"z-ident.yang": `module z-ident {
     namespace "urn:z-ident";
     prefix z;
-    identity base;
-    identity thing { base base; }
+    import a-ident { prefix a; }
+    identity thing { base a:base; }
 }`,
 		"a-ident.yang": `module a-ident {
     namespace "urn:a-ident";
@@ -7525,7 +7525,6 @@ func TestGeneratedGoIdentityrefDuplicateLocalNamesSortVariants(t *testing.T) {
     import a-ident { prefix a; }
     leaf kind {
         type identityref {
-            base z:base;
             base a:base;
         }
     }

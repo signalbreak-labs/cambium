@@ -22,6 +22,22 @@ type Pattern struct {
 
 // Regex returns the raw YANG/XML Schema regular expression text.
 func (p Pattern) Regex() string { return p.regex }
+
+// GoRegexp returns an equivalent, full-string Go regular expression, or an error
+// if the pattern cannot be represented by Cambium's native regexp bridge.
+// It does not apply invert-match; callers must apply IsInverted separately.
+// Translation failure does not make the source pattern invalid YANG.
+func (p Pattern) GoRegexp() (string, error) {
+	if unsupported := xsdregex.UnsupportedNativeSyntax(p.regex); unsupported != "" {
+		return "", fmt.Errorf("pattern %q: %s", p.regex, unsupported)
+	}
+	expression := "^(?:" + xsdregex.NativePattern(p.regex) + ")$"
+	if _, err := regexp.Compile(expression); err != nil {
+		return "", fmt.Errorf("pattern %q cannot be compiled as a Go regexp: %w", p.regex, err)
+	}
+	return expression, nil
+}
+
 func (m *moduleData) patternModifierRequiresYang11(st *yangparse.Statement) bool {
 	if st == nil || st.Keyword != "modifier" || st.Argument != "invert-match" {
 		return false

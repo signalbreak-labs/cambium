@@ -212,7 +212,7 @@ func formatDecimal64(num int64, fractionDigits int) string {
 }
 
 // canonicalBits returns a bits value with its bit names in ascending position
-// order separated by single spaces (RFC 7950 §9.7.2), or false when it names
+// order separated by single spaces (RFC 7950 §9.7.3), or false when it names
 // an undefined or duplicate bit.
 func canonicalBits(raw json.RawMessage, values []cambium.EnumValue) (string, bool) {
 	s, ok := jsonStringValue(raw)
@@ -223,10 +223,12 @@ func canonicalBits(raw json.RawMessage, values []cambium.EnumValue) (string, boo
 		name string
 		pos  uint64
 	}
-	names := strings.Fields(s)
-	bits := make([]bit, 0, len(names))
-	seen := make(map[string]bool, len(names))
-	for _, name := range names {
+	var bits []bit
+	seen := make(map[string]bool)
+	for name := range strings.SplitSeq(s, " ") {
+		if name == "" {
+			continue
+		}
 		pos, ok := bitPosition(values, name)
 		if !ok || seen[name] {
 			return "", false

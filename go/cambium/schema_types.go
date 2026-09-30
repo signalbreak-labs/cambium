@@ -667,10 +667,10 @@ func resolveLeafRefWithSeen(n *schemaNodeData, source *moduleData, lr *ResolvedL
 	if target == nil || target.typeInfo == nil {
 		return
 	}
-	ref := SchemaNodeRef{node: target}
-	lr.target = &ref
-	rt := cloneTypeInfo(*target.typeInfo)
-	lr.realtype = &rt
+	lr.target = new(SchemaNodeRef{node: target})
+	// Underlying types are copied after every target has resolved, so a
+	// forward reference cannot capture an unresolved intermediate leafref.
+	lr.realtype = nil
 }
 
 // findLeafrefDataPath resolves a leafref path over the data tree, where ".."
@@ -1005,7 +1005,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedEnumeration:
-		values, err := m.restrictedEnumBitValues(v.Values(), st, "enum", "value")
+		values, err := m.restrictedEnumBitValues(v.def.values, st, "enum", "value")
 		if err != nil {
 			return nil, err
 		}
@@ -1014,7 +1014,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedBits:
-		values, err := m.restrictedEnumBitValues(v.Values(), st, "bit", "position")
+		values, err := m.restrictedEnumBitValues(v.def.values, st, "bit", "position")
 		if err != nil {
 			return nil, err
 		}
