@@ -126,7 +126,7 @@ func findEntryBySourceStatement(root *Entry, stmt *Statement, name string) *Entr
 	return nil
 }
 
-func entryFromCambiumModule(module cambium.Module) *Entry {
+func entryFromCambiumModule(module cambium.Module, excluded map[string]bool) *Entry {
 	root := &Entry{
 		Name:       module.Name(),
 		Kind:       DirectoryEntry,
@@ -149,7 +149,7 @@ func entryFromCambiumModule(module cambium.Module) *Entry {
 		}
 	}
 	for child := range module.Children().Iter() {
-		root.add(projectNode(child, root))
+		root.add(projectNode(child, root, excluded))
 	}
 	return root
 }
@@ -162,7 +162,7 @@ func entryFromCompatModule(module *Module) *Entry {
 		return entry
 	}
 	if schema, ok := moduleSchema(module); ok && schema.Name() != "" {
-		entry := entryFromCambiumModule(schema)
+		entry := entryFromCambiumModule(schema, nil)
 		setModuleEntry(module, entry)
 		return entry
 	}

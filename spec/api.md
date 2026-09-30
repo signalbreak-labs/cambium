@@ -597,9 +597,26 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     module, and native implicit cases keep their node handle. The context must
     remain alive while its read-only projections are used. Nil, mutable, and
     closed contexts return an error without rebuilding or projecting sources.
+    `compat.FromContextWithOptions(ctx, ContextProjectionOptions)` adds optional
+    `ExcludedModules []string`. The zero value has the same behavior as
+    `FromContext`. Exclusions match exact module names (not prefixes, namespaces,
+    or source filenames); duplicates and names absent from the context have no
+    effect. Excluded module roots and nodes whose effective native
+    `Module().Name()` is excluded are omitted before child lookup caches,
+    collision checking, and the shared index are built. Omitting a node omits
+    its entire subtree, including descendants owned by included modules.
+    Source-module ownership does not decide exclusion: an excluded module's
+    grouping instantiated in an included module remains. Retained entries keep
+    their effective order, metadata, and native handles. Native contexts remain
+    complete and unchanged for type/identity/grouping resolution and validation;
+    projection exclusions neither reload sources nor relax native schema errors.
+    Collisions between included nodes still return an error and no roots.
     `Entry.ResolveLeafref()` resolves one native hop to an existing entry in
     that shared projection, preserving cross-module and augment context and
-    native resolution errors. Repeated calls follow chains. Entries built with
+    native resolution errors. A native target outside the selected projection
+    returns an error identifying its qualified path, including targets beneath
+    an excluded ancestor. Native leafref types retain their complete target and
+    real-type metadata. Repeated calls follow chains. Entries built with
     `FromModule` or AST helpers lack that index and return an explicit error
     requiring `FromContext`; `FromModule` retains unchecked name projection.
     Native projections populate effective `Extra` presence/unique/when values

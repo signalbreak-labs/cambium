@@ -760,7 +760,7 @@ type Entry struct {
 // FromModule projects a Cambium module handle into an Entry tree.
 // It has no shared context index; use FromContext for ResolveLeafref support
 // and validation that sibling local names fit Entry.Dir without collisions.
-func FromModule(module cambium.Module) *Entry { return entryFromCambiumModule(module) }
+func FromModule(module cambium.Module) *Entry { return entryFromCambiumModule(module, nil) }
 
 func hasYangTagOption(options []string, want string) bool {
 	for _, option := range options {
@@ -2159,7 +2159,10 @@ func localPart(part string) string {
 	return local
 }
 
-func projectNode(node cambium.SchemaNodeRef, parent *Entry) *Entry {
+func projectNode(node cambium.SchemaNodeRef, parent *Entry, excluded map[string]bool) *Entry {
+	if excluded[node.Module().Name()] {
+		return nil
+	}
 	kind := kindForNode(node)
 	config := triStateForConfig(node.Config())
 	if config == TSTrue && parent != nil && parent.inOutputSubtree() {
@@ -2203,7 +2206,10 @@ func projectNode(node cambium.SchemaNodeRef, parent *Entry) *Entry {
 		entry.RPC = &RPCEntry{}
 	}
 	for child := range node.Children().Iter() {
-		childEntry := projectNode(child, entry)
+		childEntry := projectNode(child, entry, excluded)
+		if childEntry == nil {
+			continue
+		}
 		entry.add(childEntry)
 		switch child.Kind() {
 		case cambium.SchemaNodeKindInput:
