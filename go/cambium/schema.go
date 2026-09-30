@@ -321,6 +321,7 @@ type EnumValue struct {
 	status      Status
 	ifFeatures  []string
 	conditional bool
+	disabled    bool
 }
 
 // Name returns the enum or bit name.
@@ -351,13 +352,25 @@ func (e EnumValue) Reference() (string, bool) {
 type EnumDef struct{ values []EnumValue }
 
 // Values returns the enum values in declaration order.
-func (d EnumDef) Values() []EnumValue { return append([]EnumValue(nil), d.values...) }
+func (d EnumDef) Values() []EnumValue { return effectiveEnumValues(d.values) }
 
 // BitsDef is the definition of a bits type.
 type BitsDef struct{ values []EnumValue }
 
 // Values returns the bit values in declaration order.
-func (d BitsDef) Values() []EnumValue { return append([]EnumValue(nil), d.values...) }
+func (d BitsDef) Values() []EnumValue { return effectiveEnumValues(d.values) }
+
+// Keep disabled declarations internally so derived types can validate names and
+// assigned values without restoring values excluded by a parent's features.
+func effectiveEnumValues(values []EnumValue) []EnumValue {
+	var out []EnumValue
+	for _, value := range values {
+		if !value.disabled {
+			out = append(out, value)
+		}
+	}
+	return out
+}
 
 // ErrorMessage returns the custom error-message and whether one was present.
 func (p Pattern) ErrorMessage() (string, bool) { return optional(p.errorMessage) }
@@ -3328,9 +3341,9 @@ func validateIdentityRefDefaultValue(n *schemaNodeData, def DefaultValue, resolv
 		return fmt.Errorf("default %q is not valid for identityref %s %q", value, nodeStatementKeyword(n), n.name)
 	}
 	id := source.identityForQNameFrom(value, n.stmt)
-	// RFC 7950 §9.10.2: a value is an identity derived from the base; the
-	// base itself is not a value.
-	if id == nil || !identityStrictlyDerivedFromAny(id, resolved.Bases(), nil) {
+	// RFC 7950 §9.10.2: a value must be derived from every required base;
+	// a base itself is not one of its own derived identities.
+	if id == nil || !identityStrictlyDerivedFromAll(id, resolved.Bases()) {
 		return fmt.Errorf("default %q is not valid for identityref %s %q", value, nodeStatementKeyword(n), n.name)
 	}
 	idModule := id.module
@@ -6121,6 +6134,18 @@ func identityDerivedFromAny(id *identityData, bases []Identity, seen map[*identi
 	return identityStrictlyDerivedFromAny(id, bases, seen)
 }
 
+func identityStrictlyDerivedFromAll(id *identityData, bases []Identity) bool {
+	if len(bases) == 0 {
+		return false
+	}
+	for _, base := range bases {
+		if !identityStrictlyDerivedFromAny(id, []Identity{base}, nil) {
+			return false
+		}
+	}
+	return true
+}
+
 // identityStrictlyDerivedFromAny reports whether id is derived, directly or
 // transitively, from one of bases without being one of them itself.
 func identityStrictlyDerivedFromAny(id *identityData, bases []Identity, seen map[*identityData]bool) bool {
@@ -6170,9 +6195,6 @@ func (m *moduleData) restrictedEnumBitValues(base []EnumValue, st *yangparse.Sta
 	var out []EnumValue
 	seenNames := make(map[string]*yangparse.Statement, len(restrictions))
 	for _, restriction := range restrictions {
-		if !m.featureIncluded(restriction) {
-			continue
-		}
 		if err := validateEnumBitMetadata(keyword, restriction); err != nil {
 			return nil, err
 		}
@@ -6187,6 +6209,7 @@ func (m *moduleData) restrictedEnumBitValues(base []EnumValue, st *yangparse.Sta
 		if err := validateRestrictedEnumBitValue(baseValue, restriction, keyword, valueKeyword); err != nil {
 			return nil, err
 		}
+		baseValue.disabled = baseValue.disabled || !m.featureIncluded(restriction)
 		if ifFeatures := ifFeatureArgs(restriction); len(ifFeatures) > 0 {
 			baseValue.ifFeatures = ifFeatures
 			baseValue.conditional = true
@@ -6865,20 +6888,21 @@ func (m *moduleData) enumValues(st *yangparse.Statement, keyword, valueKeyword s
 			return nil, fmt.Errorf("duplicate %s %s %d at %s; previous definition at %s", keyword, valueKeyword, val, ev.Location(), prev.Location())
 		}
 		seenValues[val] = ev
-		// Keep auto-assignment counters moving for gated values so the
-		// positions of later ungated values match the schema declaration order.
-		if m.featureIncluded(ev) {
-			out = append(out, EnumValue{
-				name:        ev.Argument,
-				value:       val,
-				description: childArg(ev, "description"),
-				reference:   childArg(ev, "reference"),
-				status:      statusFromStatement(ev),
-				ifFeatures:  ifFeatureArgs(ev),
-				conditional: len(direct(ev, "if-feature")) > 0,
-			})
+		// Automatic values follow the highest prior assignment, including
+		// gated values. The first explicit enum value may be negative.
+		if len(out) == 0 || val >= next {
+			next = val + 1
 		}
-		next = val + 1
+		out = append(out, EnumValue{
+			name:        ev.Argument,
+			value:       val,
+			description: childArg(ev, "description"),
+			reference:   childArg(ev, "reference"),
+			status:      statusFromStatement(ev),
+			ifFeatures:  ifFeatureArgs(ev),
+			conditional: len(direct(ev, "if-feature")) > 0,
+			disabled:    !m.featureIncluded(ev),
+		})
 	}
 	return out, nil
 }

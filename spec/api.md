@@ -150,8 +150,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     submodule can reference definitions in the parent module and all submodules
     included by the parent module without a direct sibling `include`. A YANG
     1.1 submodule `include` is valid only when the parent module also directly
-    includes that nested submodule, and a nested `revision-date` pin requires
-    the parent include to pin the same revision.
+    includes that nested submodule. Parent and nested selectors must resolve
+    to the same submodule source revision; either selector may be pinned or
+    unpinned. An unpinned nested include reuses the parent's resolved selection.
+    Include bindings are local to each parent module revision, and conflicting
+    selections fail loading in both validation modes.
   - Scalar statements with no standard substatements, including `namespace`,
     `prefix`, `contact`, `organization`, `description`, `reference`, `default`,
     `status`, `units`, and related metadata/value statements, reject known
@@ -612,7 +615,8 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     manufactured typedefs for built-in YANG types. `YangType` exposes
     goyang-compatible `TypeKind` constants and common read fields such as
     `Base`, `Root`, `Default`, `HasDefault`, `Units`, `FractionDigits`,
-    `Length`, `Range`, `Pattern`, `Path`, `OptionalInstance`, enum/bit
+    `Length`, `Range`, `Pattern`, `Path`, `OptionalInstance` (the inverse of
+    effective `require-instance` for leafrefs and instance-identifiers), enum/bit
     name-value maps, identityref `IdentityBase` plus full `IdentityBases`, and
     union member `Type`. `YangType.Default`/`HasDefault` are populated from
     type-level typedef defaults, matching goyang; explicit schema node defaults
@@ -622,7 +626,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     exposes typedef-derived names from the outer referenced typedef to the
     innermost typedef before the final built-in base, and compat
     `YangType.Base` projects that intermediate chain in goyang-compatible
-    parser type shape. `YangType.Root` reflects the final built-in base known
+    parser type shape. `YangType.Name` preserves the outer referenced typedef,
+    including union and leafref aliases and nested union members; `Kind`
+    retains the resolved built-in type. `YangType.Root` reflects the final built-in base known
     through `TypeInfo`. `YangType.Equal` provides goyang-style name-insensitive type
     comparison over projected metadata and ignores `Base`/`Root`, matching
     goyang's current comparison behavior. `Number`/`YangRange` expose goyang-style constructors,
@@ -693,16 +699,22 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     `fraction-digits` and range restriction; enumeration defaults must name an
     effective enum value not marked with `if-feature`; bits defaults must name
     effective bit values not marked with `if-feature`, without duplicate
-    tokens; string defaults must satisfy effective length
+    tokens. Feature filtering may leave a derived enumeration or bits type with
+    no effective members; this never restores values excluded by its restriction.
+    Disabled declarations still undergo subset and assigned value/position
+    validation. An empty bits value remains valid with no effective members.
+    String defaults must satisfy effective length
     restrictions; binary defaults must be base64 and satisfy effective decoded
     length restrictions; identityref defaults must resolve to an identity
-    derived from the effective base set, not a base itself, and, on a node
+    strictly derived from every identity in the effective base set, and, on a node
     instantiated in an implemented module (not in an import-only module or an
     unused grouping body), from an implemented module; `empty` types
     cannot have defaults;
     union defaults must be accepted by at least one effective member type;
     leafref defaults are validated against the resolved target real type when
     resolvable.
+    Generated validators and pure-Go data-tree validators likewise require an
+    identityref value to be strictly derived from every required base identity.
   - `ResolvedLeafRef.Path()` returns the raw leafref path string, for example
     `/module-name/container/leaf`.
   - `ResolvedLeafRef.Target()` returns the resolved target schema node, if the
@@ -845,7 +857,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 	    `modifier`.
 	    `Pattern` exposes `Regex()`, optional `ErrorMessage()`,
 	    `ErrorAppTag()`, `Description()`, and `Reference()`, plus
-	    `IsInverted()`.
+	    `IsInverted()`. The Go API also exposes `GoRegexp() (string, error)`:
+	    it translates a supported XSD pattern to a full-string Go regular
+	    expression and verifies that it compiles. Unsupported native syntax
+	    returns an empty expression and an error, without changing schema-load
+	    validity or raw `Regex()` text. The returned expression does not apply
+	    `invert-match`; consumers apply `IsInverted()` separately.
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices
     must not mutate the schema IR observed by later handle reads.
@@ -995,7 +1012,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   - Enumeration `value` and bits `position` substatements, when present, must be
     singletons on their `enum` or `bit`; `value` is valid only under `enum`,
     `position` is valid only under `bit`, and duplicates fail schema/context
-    construction with `CAMBIUM_E0001`. Enum and bit `description`, `reference`,
+    construction with `CAMBIUM_E0001`. An omitted value/position is zero for
+    the first declaration, otherwise one greater than the highest preceding
+    assignment, including feature-disabled declarations. Once that maximum
+    reaches the type's limit, subsequent values/positions must be explicit;
+    a lower explicit assignment does not reset the automatic counter.
+    Enum and bit `description`, `reference`,
     and `status` metadata are singleton statements; `status` must be `current`,
     `deprecated`, or `obsolete`. Direct known non-extension children of `enum`
     and `bit` are limited to their value/position statement, `if-feature`, and

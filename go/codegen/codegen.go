@@ -1870,10 +1870,21 @@ func collectIdentityrefMembers(bases []cambium.Identity) []identityrefMember {
 			namespace: mod.Namespace(),
 		})
 	}
-	// RFC 7950 section 9.10.2: valid values are identities derived from the
-	// base; the base identity itself is not one.
-	for _, base := range bases {
-		for _, derived := range base.Derived() {
+	// RFC 7950 section 9.10.2 requires strict derivation from every base.
+	// Traverse candidates in the first base's declaration order; the map only
+	// counts membership in the remaining transitive closures.
+	var candidates []cambium.Identity
+	matches := make(map[cambium.Identity]int)
+	for i, base := range bases {
+		for _, derived := range base.DerivedClosure() {
+			if i == 0 {
+				candidates = append(candidates, derived)
+			}
+			matches[derived]++
+		}
+	}
+	for _, derived := range candidates {
+		if matches[derived] == len(bases) {
 			add(derived)
 		}
 	}

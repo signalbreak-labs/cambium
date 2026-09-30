@@ -14572,7 +14572,9 @@ func TestYang11NestedSubmoduleIncludeRevisionMustMatchParent(t *testing.T) {
     prefix cysnr;
 
     include cambium-yang11-submodule-nested-revision-a;
-    include cambium-yang11-submodule-nested-revision-b;
+    include cambium-yang11-submodule-nested-revision-b {
+        revision-date 2025-01-01;
+    }
 }
 `
 	writeModuleFile(t, filepath.Join(dir, moduleName+".yang"), []byte(module))
@@ -14611,6 +14613,8 @@ func TestYang11NestedSubmoduleIncludeRevisionMustMatchParent(t *testing.T) {
 }
 `
 	writeModuleFile(t, filepath.Join(dir, "cambium-yang11-submodule-nested-revision-b@2024-01-01.yang"), []byte(partB))
+	newPartB := strings.Replace(partB, "revision 2024-01-01", "revision 2025-01-01", 1)
+	writeModuleFile(t, filepath.Join(dir, "cambium-yang11-submodule-nested-revision-b@2025-01-01.yang"), []byte(newPartB))
 
 	ctx, err := cambium.NewContext()
 	if err != nil {
@@ -14622,7 +14626,7 @@ func TestYang11NestedSubmoduleIncludeRevisionMustMatchParent(t *testing.T) {
 	}
 	err = ctx.LoadModule(moduleName)
 	if err == nil {
-		t.Fatal("LoadModule accepted YANG 1.1 nested submodule include revision not pinned by parent")
+		t.Fatal("LoadModule accepted YANG 1.1 nested submodule include conflicting with parent revision")
 	}
 	var ce *cambium.Error
 	if !errors.As(err, &ce) || ce.RuleCode() != cambium.RuleCodeContext {

@@ -1005,7 +1005,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedEnumeration:
-		values, err := m.restrictedEnumBitValues(v.Values(), st, "enum", "value")
+		values, err := m.restrictedEnumBitValues(v.def.values, st, "enum", "value")
 		if err != nil {
 			return nil, err
 		}
@@ -1014,7 +1014,7 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 		}
 		return v, nil
 	case ResolvedBits:
-		values, err := m.restrictedEnumBitValues(v.Values(), st, "bit", "position")
+		values, err := m.restrictedEnumBitValues(v.def.values, st, "bit", "position")
 		if err != nil {
 			return nil, err
 		}

@@ -6,7 +6,6 @@ package datatree
 import (
 	"bytes"
 	"cmp"
-	"encoding/base64"
 	"encoding/json"
 	"slices"
 	"strconv"
@@ -258,7 +257,7 @@ func valueOrderKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) 
 		if !ok {
 			return invalid
 		}
-		data, err := base64.StdEncoding.DecodeString(s)
+		data, err := decodeBinaryValue(s)
 		if err != nil {
 			return invalid
 		}
@@ -333,7 +332,10 @@ func bitsOrderBitmap(raw json.RawMessage, values []cambium.EnumValue) ([]uint64,
 	}
 	byteOf := make(map[uint64]uint64)
 	seen := make(map[string]bool)
-	for _, name := range strings.Fields(s) {
+	for name := range strings.SplitSeq(s, " ") {
+		if name == "" {
+			continue
+		}
 		pos, ok := bitPosition(values, name)
 		if !ok || seen[name] {
 			return nil, false
