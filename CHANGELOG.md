@@ -3,6 +3,90 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning for the Go module release line.
 
+## [go/v0.6.0] - 2026-09-30
+
+### Added
+
+- `ContextBuilder.RegisterSourcePaths`, which catalogs declared
+  module/submodule names and newest declared revisions before any module
+  loads, independently of filenames. Dependency lookup prefers registered
+  sources; an unpinned import selects the newest registered revision even
+  after an older pinned import loaded. A registration batch is atomic,
+  re-registering one path is idempotent, and two files with one identity
+  are rejected.
+- `ContextBuilder.SetFeaturePolicy` with `FeaturePolicy{RetainAll: true}`,
+  which retains every `if-feature`-gated declaration (roots, transitive
+  imports, included submodules) for schema analysis and generation.
+  Conditions are still validated; `FeatureValue` and
+  `LoadReport.EnabledFeatures`/`DisabledFeatures` keep evaluated-selection
+  semantics, and `LoadReport.FeaturePolicy` records the retention.
+- `ContextBuilder.SetRefinementPolicy` with
+  `RefinementPolicy{IgnoreAll: true}`, which suppresses all `uses`/`refine`
+  effects while preserving the grouping's declarations;
+  `LoadReport.RefinementPolicy` records the selection.
+- `DeviationPolicy.IgnoreAll`, which suppresses every deviation effect in
+  the loaded closure and takes precedence over `IgnoreNotSupported`.
+  Ignored deviations neither promote target modules to implemented status
+  nor require their targets to exist; declaration shape stays validated.
+  `Deviation.Statement()` exposes the property statement, or the `deviate`
+  itself for an operation without properties.
+- `Context.IsFrozen()`, and a `CAMBIUM_E0001` failure for a second `Build`,
+  including through a builder copied before the first `Build`.
+- `SchemaNodeRef.Presence()` (effective argument plus presence boolean,
+  refine-aware), `UniqueConstraint.Expression()` (lexical argument,
+  deviation-aware), and `Pattern.GoRegexp()` (supported XSD patterns
+  translated to compiling full-string Go regexps; unsupported syntax
+  errors without affecting load validity).
+- `compat.FromContext`, which projects every loaded module from the live
+  frozen native context with a shared native-node-identity index,
+  rejecting sibling local-name collisions.
+  `Entry.NativeSchemaNode()`/`NativeModule()` expose the native handles,
+  and `Entry.ResolveLeafref()` follows one native hop per call, so
+  repeated calls follow chains. Native projections carry effective
+  presence/`unique`/`when` as `*Value`, `must` as `*Must`, transitive
+  identityref derived closures, outer-typedef `YangType.Name`,
+  effective-absence-aware `DefaultValues()`, and `OptionalInstance` as the
+  inverse of effective `require-instance`.
+
+### Changed
+
+- Parent and nested submodule `include` selectors must resolve to the same
+  source revision (either may be pinned); an unpinned nested include
+  reuses the parent's selection, bindings are local to each parent
+  revision, and conflicts fail in both validation modes.
+- Default applicability follows effective use: explicit leaf-list defaults
+  require YANG 1.1; leaf-lists with `min-elements` above zero and
+  mandatory non-key leaves may not have explicit defaults and never
+  inherit typedef defaults; YANG 1.0 leaf-lists never inherit type
+  defaults; list key leaves ignore defaults and `mandatory` (RFC 7950
+  §7.8.2). Declarations are still value/type-validated before
+  inapplicable defaults are dropped, and `DefaultValues()` returns
+  effective defaults.
+- Identityref values must be strictly derived from every required base
+  identity, in schema defaults, generated validators, and `datatree`
+  checks.
+- `datatree` and codegen leafref snapshots preserve forward chains and
+  ordered union constraints; invalid forward-chain defaults are rejected,
+  and snapshots are bounded for retained cycles.
+- A derived `range`/`length` span may cross adjacent parent spans when
+  every representable value is covered (integer/length step 1, decimal64
+  step from `fraction-digits`); true gaps stay invalid. Native lexical
+  bounds keep their declared segmentation, while `compat` `Range`/`Length`
+  coalesce adjacent spans at the representable quantum, and native
+  decimal64 projections include the intrinsic scaled-int64 range at the
+  declared fraction digits.
+- Automatic enum `value`/bits `position` assignment counts
+  feature-disabled declarations: the first declaration is zero, otherwise
+  one past the highest preceding assignment, and once the maximum reaches
+  the type limit the rest must be explicit; a lower explicit assignment
+  never resets the counter.
+- Feature filtering may leave a derived enumeration or bits type with no
+  effective members without restoring restricted values; disabled
+  declarations still undergo subset and value/position validation, and an
+  empty bits value stays valid.
+- Vendor-compatible mode's mandatory-leaf relaxation now covers
+  `config false` leaves with explicit defaults.
+
 ## [go/v0.5.0] - 2026-09-28
 
 ### Added
