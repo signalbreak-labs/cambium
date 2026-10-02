@@ -3,6 +3,39 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning for the Go module release line.
 
+## [go/v0.7.0] - 2026-10-02
+
+### Added
+
+- `compat.FromContextWithOptions` with `ContextProjectionOptions`, whose
+  `ExcludedModules` omits module roots and nodes whose effective native
+  `Module().Name()` matches exactly, before child lookup caches, sibling
+  collision checks, and the shared leafref index are built. Omitting a node
+  omits its whole subtree; a grouping from an excluded module instantiated
+  in an included one remains. The zero value behaves like `FromContext`,
+  the native context stays complete for types and validation, and
+  `Entry.ResolveLeafref()` reports an omitted target with an
+  outside-projection error naming its qualified path.
+
+### Changed
+
+- RPCs and actions expose implicit `input` and `output` schema nodes when
+  those optional statements are absent, so augments can supply their first
+  parameters. Implicit input precedes output, explicit IO keeps source
+  order, and implicit IO has no backing `Statement()` and counts against
+  the schema budget.
+- Augments targeting a choice, including local augments within `uses`,
+  materialize an implicit case for each shorthand data child (RFC 7950
+  §7.9.2, §7.17). The case and its data child share a name and module;
+  structural paths include both, while `DataChildren(true)` skips the case
+  and preserves augmented data order.
+
+### Fixed
+
+- Extension instances on nodes instantiated from an imported grouping
+  resolve their prefixes in the grouping's declaring module rather than
+  the instantiating module (RFC 7950 §7.12).
+
 ## [go/v0.6.0] - 2026-09-30
 
 ### Added
