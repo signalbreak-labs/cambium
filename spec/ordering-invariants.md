@@ -62,6 +62,8 @@ These rules are engine-neutral and are the oracle for pure-Go schema IR tests:
    created by another augment: augment targets resolve independently of the
    order augments are declared in and modules are loaded, so module-load order
    only decides the relative placement of contributions to one target.
+   For choice targets, shorthand children occupy those positions through
+   implicit case nodes. Flattening the cases preserves data-child order.
 4. Deviations modify or remove target nodes without reordering unaffected
    siblings. A deviated replacement node occupies the original target position.
 5. Backend/data-tier implementations MAY expose libyang's compiled order for

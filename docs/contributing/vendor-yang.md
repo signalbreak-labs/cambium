@@ -100,6 +100,47 @@ vendor-inspired; the bytes are Cambium's own:
   groupings, composite protocol keys, cross-module augment, `uses` plus `refine`,
   defaults, mandatory leaves, and augmented choice/case projection.
 
+## Samsung corpus audit (2026-10-02)
+
+A local audit covered 2,437 YANG file paths (325 unique file contents) in 31
+release bundles across four Samsung common-core provider projects. The models
+remained local; the regression tests use small synthetic modules.
+
+The audit compared parsed statements, arguments, and child order with the
+vendored goyang reference, then built every bundle and its compatibility
+projection using the consumer's vendor-validation, feature-retention,
+refinement, and deviation policies. All files parsed with matching ASTs, and
+all bundles compiled and projected without omitted content. Structural and
+flattened payload views were compared separately so implicit cases and
+operation IO were not mistaken for payload changes.
+
+The remaining payload differences were accounted for: effective units,
+normalized key whitespace, list-key mandatory/default semantics, inherited IO
+namespaces, and valid nested `uses` augment content omitted by the reference.
+No payload nodes were missing and no value-constraint differences remained
+unexplained. The only load warnings concerned a duplicate vendor revision date
+already tolerated by vendor-compatible validation.
+
+Three compiler defects were reproduced before fixing them:
+
+| Construct | Regression coverage |
+|---|---|
+| Extensions in imported groupings must resolve in the declaration's import scope | [`grouping_extensions_test.go`](../../go/cambium/grouping_extensions_test.go) covers missing consumer imports, different aliases, alias shadowing, and transitive grouping expansion. |
+| Augments can add the first parameters to an RPC or action | [`schema_operation_test.go`](../../go/cambium/schema_operation_test.go) covers implicit IO, explicit order, resource limits, and choice ancestry. |
+| Choice augments require implicit cases for shorthand children | [`schema_choice_augment_test.go`](../../go/cambium/schema_choice_augment_test.go) covers module and local `uses` augments, all shorthand kinds, metadata, qualified structural paths, and flattened order. |
+
+The choice behavior follows [RFC 7950 sections 7.9.2 and
+7.17](https://www.rfc-editor.org/rfc/rfc7950.html#section-7.17). TerraYANG has
+matching consumer regressions for all three shapes. Its provider tests also
+exposed a separate sample-generation issue with patterned strings and repeated
+list keys; those fixes belong to TerraYANG rather than the schema compiler.
+
+For future consumer upgrades, run the synthetic regressions against both the
+previous dependency and the proposed dependency, compile the available release
+bundles, then regenerate, build, and test each provider from its normal config.
+Generated-provider tests with a mock NETCONF server do not establish live-device
+compatibility.
+
 ## High-risk patterns to keep mining
 
 These are the construct families where order or projection most often breaks;

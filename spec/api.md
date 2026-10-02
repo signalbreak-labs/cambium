@@ -362,6 +362,11 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   statements are absent, allowing augments to add their first parameters.
   Implicit input precedes output; explicitly declared children retain their
   source order. Implicit IO has no backing `Statement()`.
+  Augments targeting a choice materialize an implicit case for each shorthand
+  child, including local augments within `uses`. The case and its data child
+  share a name and module; only the data child has a backing `Statement()`.
+  Structural paths include both nodes, while `DataChildren(true)` skips the
+  case and preserves the augmented data order.
 
   Module metadata:
   - `Module.Organization()`, `Module.Contact()`, `Module.Description()`, and
