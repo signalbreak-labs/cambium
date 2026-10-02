@@ -137,6 +137,9 @@ before any non-key child.
 Schema IR tier MUST expose RPC/action input and output children, action nodes,
 and notification children in effective schema declaration order. Backend/data-tier
 serialization MUST emit request/response/notification payloads in that order.
+Missing optional RPC/action input and output statements yield implicit schema
+nodes so augments can supply parameters. An implicit input precedes output and
+an implicit output follows input; explicit IO keeps its source order.
 
 ### I5 - JSON arrays carry order; JSON object order is deterministic
 

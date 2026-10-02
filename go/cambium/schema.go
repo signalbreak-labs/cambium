@@ -2306,7 +2306,9 @@ func (m *moduleData) buildNodeSeen(st *yangparse.Statement, parent *schemaNodeDa
 	n.applyOrderedByProperty(n.singletonProperty(st, "ordered-by"))
 	n.applyCardinalityStatements(st, true)
 	n.defaults = defaultValuesFor(m, st)
-	n.extensions = owner.extensionInstances(st)
+	// Extension prefixes belong to the declaration's scope, even when uses
+	// instantiates the node in another module (RFC 7950 section 7.12).
+	n.extensions = m.extensionInstances(st)
 	n.musts = n.mustsFrom(m, st)
 	if when := n.singletonProperty(st, "when"); when != nil {
 		if !n.whenPropertyAllowed(when) {
@@ -2352,6 +2354,7 @@ func (m *moduleData) buildNodeSeen(st *yangparse.Statement, parent *schemaNodeDa
 		}
 	}
 	n.children = m.buildChildrenSeen(st, n, owner, n.choiceDesc, groupOrigin, groupingStack)
+	n.addImplicitOperationIO()
 	if n.kind == SchemaNodeKindList {
 		n.resolveListKeys()
 	}

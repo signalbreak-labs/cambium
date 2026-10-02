@@ -358,6 +358,10 @@ Backend/data-tier fixtures where both sides have a comparable backend.
   Go additionally exposes `Module.Children()` for the synthetic module-root
   ordered child sequence, including data nodes, RPCs, actions, notifications,
   and top-level `uses` expansions in effective declaration order.
+  RPCs and actions expose implicit input/output nodes when those optional
+  statements are absent, allowing augments to add their first parameters.
+  Implicit input precedes output; explicitly declared children retain their
+  source order. Implicit IO has no backing `Statement()`.
 
   Module metadata:
   - `Module.Organization()`, `Module.Contact()`, `Module.Description()`, and
