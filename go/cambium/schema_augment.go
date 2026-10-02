@@ -24,11 +24,48 @@ func (m *moduleData) applyUsesAugment(aug *yangparse.Statement, roots []*schemaN
 	if target == nil {
 		return false
 	}
-	children := m.buildChildrenSeen(aug, target, owner, target.choiceDesc, groupOrigin, groupingStack)
+	children := m.buildAugmentChildren(aug, target, owner, groupingStack, groupOrigin)
 	prependIfFeatures(children, ifFeatureArgs(aug))
 	m.applyAugmentWhen(aug, children)
 	target.children = append(target.children, children...)
 	return true
+}
+
+func (m *moduleData) buildAugmentChildren(aug *yangparse.Statement, target *schemaNodeData, owner *moduleData, groupingStack map[*yangparse.Statement]bool, groupOrigin string) []*schemaNodeData {
+	children := m.buildChildrenSeen(aug, target, owner, target.choiceDesc, groupOrigin, groupingStack)
+	if target.kind != SchemaNodeKindChoice {
+		return children
+	}
+	// An augment targeting a choice uses the same shorthand cases as a
+	// choice declaration (RFC 7950 sections 7.9.2 and 7.17). The data node
+	// keeps its source metadata; the synthetic case has no statement.
+	for i, child := range children {
+		if child.kind == SchemaNodeKindCase {
+			continue
+		}
+		if !m.admitSchemaNode(child.stmt) {
+			return children
+		}
+		implicit := &schemaNodeData{
+			name:                child.name,
+			kind:                SchemaNodeKindCase,
+			module:              child.module,
+			sourceModule:        child.sourceModule,
+			instantiatingModule: child.instantiatingModule,
+			parent:              target,
+			children:            []*schemaNodeData{child},
+			ifFeatures:          slices.Clone(child.ifFeatures),
+			ownIfFeatures:       slices.Clone(child.ownIfFeatures),
+			status:              StatusCurrent,
+			config:              target.config,
+			orderedBy:           OrderedBySystem,
+			choiceDesc:          true,
+			groupOrigin:         child.groupOrigin,
+		}
+		child.parent = implicit
+		children[i] = implicit
+	}
+	return children
 }
 
 func applyRefine(source *moduleData, n *schemaNodeData, refine *yangparse.Statement) {
@@ -241,7 +278,7 @@ func (m *moduleData) applyAugment(aug *yangparse.Statement, targetMod *moduleDat
 	if m.implemented {
 		m.ctx.markImplemented(targetMod)
 	}
-	children := m.buildChildren(aug, target, m, false, "")
+	children := m.buildAugmentChildren(aug, target, m, nil, "")
 	if targetMod != m {
 		if mandatory := firstMandatoryConfigNode(children); mandatory != nil {
 			if m.yangVersionForStatement(aug) != "1.1" {
