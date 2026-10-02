@@ -9,6 +9,18 @@ import (
 	"github.com/signalbreak-labs/cambium/go/cambium"
 )
 
+// ContextProjectionOptions controls the read-only compatibility projection of
+// a native context. Its zero value projects every loaded module.
+type ContextProjectionOptions struct {
+	// ExcludedModules omits module roots and schema nodes whose effective native
+	// Module().Name() matches an entry. Names match exactly; duplicates and names
+	// absent from the context have no effect. Omitting a node omits its entire
+	// subtree, including descendants owned by other modules. Grouping nodes
+	// instantiated in an included module remain even when their source module
+	// is excluded. The native context and its types and validation are unchanged.
+	ExcludedModules []string
+}
+
 // FromContext projects a live frozen native context without loading or
 // recompiling sources. Nil, mutable, and closed contexts return an error.
 // Requested modules come first, then transitive imports,
@@ -17,10 +29,23 @@ import (
 // ResolveLeafref. A sibling local-name collision, including after flattening
 // choice/case nodes, returns an error and no roots because name-only lookups
 // cannot represent both nodes. Keep the context alive while using its read-only
-// projections or native handles.
+// projections or native handles. Use FromContextWithOptions to omit explicitly
+// excluded modules before collision checking.
 func FromContext(ctx *cambium.Context) ([]*Entry, error) {
+	return FromContextWithOptions(ctx, ContextProjectionOptions{})
+}
+
+// FromContextWithOptions projects a live frozen native context with explicit
+// module exclusions applied before sibling collision checks and shared index
+// construction. Other behavior is the same as FromContext. Leafrefs to omitted
+// targets return an outside-projection error from Entry.ResolveLeafref.
+func FromContextWithOptions(ctx *cambium.Context, options ContextProjectionOptions) ([]*Entry, error) {
 	if !ctx.IsFrozen() {
 		return nil, fmt.Errorf("compat: FromContext requires a live frozen native context from ContextBuilder.Build")
+	}
+	excluded := make(map[string]bool, len(options.ExcludedModules))
+	for _, name := range options.ExcludedModules {
+		excluded[name] = true
 	}
 	report := ctx.LoadReport()
 	seen := make(map[cambium.Module]bool)
@@ -28,11 +53,11 @@ func FromContext(ctx *cambium.Context) ([]*Entry, error) {
 	var roots []*Entry
 	for _, modules := range [][]cambium.ModuleLoadInfo{report.RequestedModules, report.TransitiveImports} {
 		for _, info := range modules {
-			if seen[info.Module] {
+			if seen[info.Module] || excluded[info.Module.Name()] {
 				continue
 			}
 			seen[info.Module] = true
-			root := FromModule(info.Module)
+			root := entryFromCambiumModule(info.Module, excluded)
 			if err := indexNativeProjection(root, index); err != nil {
 				return nil, err
 			}
@@ -102,8 +127,10 @@ func (e *Entry) NativeModule() (cambium.Module, bool) {
 }
 
 // ResolveLeafref resolves one native leafref hop to the existing Entry in the
-// same FromContext projection. Repeated calls follow chains across modules and
-// augments without reparsing paths. Native resolution errors are preserved.
+// same FromContext or FromContextWithOptions projection. Repeated calls follow
+// chains across modules and augments without reparsing paths. Native resolution
+// errors are preserved. Targets omitted by projection options return an error
+// identifying the target's qualified path outside the projection.
 // Entries from FromModule or AST projections lack the shared context index and
 // return an unsupported-context error.
 func (e *Entry) ResolveLeafref() (*Entry, error) {

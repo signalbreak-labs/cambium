@@ -260,9 +260,42 @@ values touch, including inherited restrictions and union members.
 
 `FromContext` returns an error and no roots for sibling local-name collisions,
 including collisions exposed by flattening choice/case nodes. Use native
-qualified lookup for these schemas. `FromModule` retains its existing unchecked
-projection behavior. In every successful projection, traverse `Children()` for
-effective schema order and treat `Dir` as a lookup cache.
+qualified lookup when every module must remain in the projection. If a consumer
+explicitly excludes modules, apply those exclusions during projection:
+
+```go
+roots, err := compat.FromContextWithOptions(ctx, compat.ContextProjectionOptions{
+    ExcludedModules: []string{"optional-extension"},
+})
+if err != nil {
+    return err
+}
+```
+
+Exclusions match exact module names, not prefixes, namespaces, or source
+filenames. Duplicates and names absent from the context have no effect. The zero
+options value behaves exactly like `FromContext`. Filtering omits excluded
+module roots and nodes whose effective native `Module().Name()` is excluded
+before building child lookup caches, checking collisions, or indexing leafref
+targets. Collisions between retained nodes still return an error and no roots.
+Retained entries keep their order, metadata, and native handles.
+
+Omitting a node omits its entire subtree, including descendants contributed by
+included modules. The effective module decides filtering, not `SourceModule()`:
+a grouping defined in an excluded module and instantiated in an included module
+remains. Imported typedefs and identities also remain available. The native
+context stays complete for schema and data validation; this option changes only
+the compatibility projection and cannot suppress native schema errors.
+
+`Entry.ResolveLeafref()` still returns an existing entry when the target is
+retained. If the native target was omitted, including by an ancestor exclusion,
+it returns an outside-projection error naming the target's qualified path.
+Native leafref handles keep their full target and real-type information, and
+native resolution errors remain intact.
+
+`FromModule` retains its existing unchecked projection behavior. In every
+successful projection, traverse `Children()` for effective schema order and
+treat `Dir` as a lookup cache.
 
 ## The loader: side-by-side
 
