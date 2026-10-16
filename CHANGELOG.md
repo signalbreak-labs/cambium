@@ -3,6 +3,33 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning for the Go module release line.
 
+## [go/v0.7.1] - 2026-10-16
+
+### Added
+
+- `ParseStatementsWithOptions` and `ReadStatementsWithOptions` with
+  `StatementParseOptions`, exposing strict vs vendor-compatible parsing
+  for raw statement inspection. The zero value is strict, the existing
+  `ParseStatements`/`ReadStatements` entry points stay strict, and
+  vendor-compatible relaxations are returned as diagnostics in source
+  order.
+
+### Fixed
+
+- Vendor modules that write XSD regex escapes such as `\*` and `\d`
+  directly in double-quoted `pattern` arguments now load in
+  `ValidationVendorCompatible` mode: the backslash is preserved verbatim
+  as a regex escape (the goyang behavior consumers historically relied
+  on), with one `LoadReport` warning per occurrence, and no schema
+  content is dropped (RFC 7950 §6.1.3 defines only `\n`, `\t`, `\"`,
+  and `\\` there). Strict mode still rejects them, and unknown escapes
+  in any other argument remain errors in every mode. The relaxation
+  applies on every load path that re-parses sources (source
+  registration, search-path revision probes, submodule `include`
+  resolution, and `compat` parsing when
+  `IgnoreSubmoduleCircularDependencies` selects vendor-compatible
+  loading); submodule warnings are reported on attachment, exactly once.
+
 ## [go/v0.7.0] - 2026-10-02
 
 ### Added
