@@ -49,14 +49,18 @@ func Parse(input, path string) ([]*Statement, error) {
 
 // parseStatements parses YANG source into upstream-shaped statements using the
 // native parser shared with the default schema tier.
-func parseStatements(input, name string) (stmts []*Statement, err error) {
+func parseStatements(input, name string) ([]*Statement, error) {
+	return parseStatementsWithOptions(input, name, yangparse.ParseOptions{})
+}
+
+func parseStatementsWithOptions(input, name string, opts yangparse.ParseOptions) (stmts []*Statement, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			stmts = nil
 			err = fmt.Errorf("%s: YANG parser panic: %v", name, recovered)
 		}
 	}()
-	native, err := yangparse.Parse(input, name)
+	native, _, err := yangparse.ParseWithOptions(input, name, opts)
 	if err != nil {
 		return nil, err
 	}

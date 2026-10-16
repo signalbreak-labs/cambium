@@ -19,20 +19,54 @@ const (
 	maxStatementDepth = 10000
 )
 
+// ParseOptions selects optional parser relaxations. The zero value is the
+// strict RFC 7950 behavior.
+type ParseOptions struct {
+	// AllowPatternEscapes preserves unknown backslash escapes (for example
+	// \*) in double-quoted pattern statement arguments instead of rejecting
+	// them. Real-world vendor modules write regex escapes that way even
+	// though RFC 7950 6.1.3 only defines \n, \t, \" and \\ in double-quoted
+	// strings. Each preserved escape is reported as a Warning. Escapes in
+	// any other statement argument remain errors.
+	AllowPatternEscapes bool
+}
+
+// Warning is a non-fatal parse diagnostic recorded while a ParseOptions
+// relaxation repaired vendor source.
+type Warning struct {
+	File    string
+	Line    int
+	Column  int
+	Message string
+}
+
+// Location returns the warning source location in Statement.Location format.
+func (w Warning) Location() string {
+	return (&Statement{file: w.File, line: w.Line, col: w.Column}).Location()
+}
+
 // Parse parses one YANG module or submodule source into ordered statements using
 // Cambium's own cgo-free RFC 7950 parser (see native.go). The Statement type is
 // defined in statement.go.
-func Parse(input, name string) (stmts []*Statement, err error) {
+func Parse(input, name string) ([]*Statement, error) {
+	stmts, _, err := ParseWithOptions(input, name, ParseOptions{})
+	return stmts, err
+}
+
+// ParseWithOptions is Parse with explicit ParseOptions. It also returns the
+// warnings recorded by any enabled relaxation, in source order.
+func ParseWithOptions(input, name string, opts ParseOptions) (stmts []*Statement, warnings []Warning, err error) {
 	if err := checkInputBounds(input, name); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			stmts = nil
+			warnings = nil
 			err = fmt.Errorf("%s: YANG parser panic: %v", displayName(name), recovered)
 		}
 	}()
-	return parseDocument(input, name)
+	return parseDocument(input, name, opts)
 }
 
 // ReadFile reads a YANG source file after checking parser input bounds that can

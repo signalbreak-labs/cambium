@@ -201,8 +201,10 @@ their parent module, augment and deviation targets excluded by the enabled
 feature set, mandatory config augments, config false mandatory typedef defaults,
 unambiguous local-name path fallbacks, leafref cycles, import and include
 cycles, `yang-version` mismatches between a module and its submodules or a YANG
-1.0 module importing a YANG 1.1 module by revision, and same-module references
-to deprecated or obsolete definitions. Duplicate `Module.Revisions()` entries
+1.0 module importing a YANG 1.1 module by revision, same-module references
+to deprecated or obsolete definitions, and unknown backslash escapes in
+double-quoted `pattern` arguments preserved verbatim as regex escapes.
+Duplicate `Module.Revisions()` entries
 are preserved in declaration order.
 
 An augment or deviation target that does not resolve fails in every mode unless

@@ -183,7 +183,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     same-module references from a current definition to a deprecated or
     obsolete one, or from a deprecated to an obsolete one, through `type`,
     `uses`, `base`, or `if-feature` (§7.21.2; a definition without `status`
-    takes its closest ancestor's). Duplicate revision warnings include
+    takes its closest ancestor's), and unknown backslash escapes in
+    double-quoted `pattern` arguments (§6.1.3 defines only `\n`, `\t`, `\"`,
+    and `\\` there), preserved verbatim as regex escapes with one warning per
+    occurrence naming its source location; unknown escapes in any other
+    double-quoted argument remain errors in every mode. Duplicate revision
+    warnings include
     the module/submodule name, duplicate revision date, the duplicate statement
     source location, and the previous declaration as a related location when
     available. Other revision defects, including malformed dates and duplicate

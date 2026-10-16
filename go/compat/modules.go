@@ -208,6 +208,8 @@ func (m *Module) GetPrefix() string {
 // IgnoreSubmoduleCircularDependencies is set. Setting it selects
 // cambium.ValidationVendorCompatible, so the cycle (and any other
 // vendor-compatible relaxation) is reported as a LoadReport warning.
+// Parse-time relaxations (such as pattern-argument escapes) apply only
+// when the option is set before Parse or Read.
 //
 // No option selects features; compat projects the native schema with no
 // features enabled, so feature selection requires the native
@@ -469,7 +471,7 @@ func (ms *Modules) stageInMemorySources() (stagedInMemorySources, func(), error)
 		if source.path != "" {
 			continue
 		}
-		stmts, err := parseStatements(source.data, source.name)
+		stmts, err := parseStatementsWithOptions(source.data, source.name, ms.parseOptions())
 		if err != nil {
 			cleanup()
 			return stagedInMemorySources{}, func() {}, err

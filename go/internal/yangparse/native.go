@@ -25,29 +25,33 @@ type parser struct {
 	line int // 1-based
 	col  int // 1-based rune column within the current line (for diagnostics)
 	tcol int // 1-based tab-expanded column (tabs advance to the next multiple of 8)
+
+	allowPatternEscapes bool
+	inPattern           bool // set while scanning a pattern statement argument
+	warnings            []Warning
 }
 
 // parseDocument scans the whole input into ordered top-level statements.
-func parseDocument(input, name string) ([]*Statement, error) {
-	p := &parser{src: input, name: name, line: 1, col: 1, tcol: 1}
+func parseDocument(input, name string, opts ParseOptions) ([]*Statement, []Warning, error) {
+	p := &parser{src: input, name: name, line: 1, col: 1, tcol: 1, allowPatternEscapes: opts.AllowPatternEscapes}
 	var stmts []*Statement
 	for {
 		if err := p.skipSeparators(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if p.atEOF() {
 			break
 		}
 		if p.peek() == '}' {
-			return nil, p.errf(p.line, p.col, "unexpected '}'")
+			return nil, nil, p.errf(p.line, p.col, "unexpected '}'")
 		}
 		st, err := p.parseStatement()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		stmts = append(stmts, st)
 	}
-	return stmts, nil
+	return stmts, p.warnings, nil
 }
 
 func (p *parser) atEOF() bool { return p.pos >= len(p.src) }
@@ -152,7 +156,14 @@ func (p *parser) parseStatement() (*Statement, error) {
 
 	// An argument is present iff the next significant token is neither ';' nor '{'.
 	if c := p.peek(); !p.atEOF() && c != ';' && c != '{' {
+		// The pattern statement's argument is a regular expression, so a
+		// backslash there may be regex syntax rather than a YANG string
+		// escape; scanDoubleQuoted consults inPattern for the optional
+		// vendor-compatible preservation.
+		outer := p.inPattern
+		p.inPattern = keyword == "pattern"
 		arg, err := p.scanArgument()
+		p.inPattern = outer
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +324,10 @@ func (p *parser) scanSingleQuoted() (string, error) {
 
 // scanDoubleQuoted reads a double-quoted string, applying RFC 7950 6.1.3 escape
 // processing and whitespace trimming. Only the four escapes \n \t \" \\ are valid;
-// any other escape fails closed. Only a line feed (LF) is a line break for the
+// any other escape fails closed, except that ParseOptions.AllowPatternEscapes
+// preserves unknown escapes verbatim inside pattern statement arguments (where
+// the backslash is regex syntax) and records a Warning for each. Only a line
+// feed (LF) is a line break for the
 // trimming algorithm; a bare carriage return is ordinary content (matching the
 // reference parser). Per-line trailing whitespace is stripped before each line
 // break, and continuation-line leading whitespace is stripped up to the
@@ -352,7 +366,18 @@ func (p *parser) scanDoubleQuoted() (string, error) {
 			case '\\':
 				cur.WriteByte('\\')
 			default:
-				return "", p.errf(p.line, p.col, "invalid escape sequence: \\%c", rune(e))
+				if !p.allowPatternEscapes || !p.inPattern {
+					return "", p.errf(p.line, p.col, "invalid escape sequence: \\%c", rune(e))
+				}
+				r, _ := utf8.DecodeRuneInString(p.src[p.pos:])
+				p.warnings = append(p.warnings, Warning{
+					File:    p.name,
+					Line:    p.line,
+					Column:  p.col,
+					Message: fmt.Sprintf("invalid escape sequence: \\%c in pattern argument preserved as regex escape", r),
+				})
+				cur.WriteByte('\\')
+				cur.WriteRune(r)
 			}
 			p.advance()
 		case '\n':

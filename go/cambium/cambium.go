@@ -645,7 +645,7 @@ func (c *Context) loadModuleByName(name string, revision *string, implemented, r
 		c.restore(snap)
 		return wrap("load module", err)
 	}
-	ok, err := moduleFileDeclaresModule(path, name)
+	ok, err := moduleFileDeclaresModule(path, name, c.validationMode)
 	if err != nil {
 		c.restore(snap)
 		return wrap("load module", err)
@@ -713,7 +713,7 @@ func findModuleDirect(dir, name, revision string, mode ValidationMode) (file str
 	}
 	candidate := filepath.Join(dir, name+".yang")
 	if _, err := os.Stat(candidate); err == nil {
-		ok, err := moduleFileDeclaresName(candidate, name)
+		ok, err := moduleFileDeclaresName(candidate, name, mode)
 		if err != nil {
 			return "", false, err
 		}
@@ -801,7 +801,7 @@ func findModuleRecursive(dir, name, revision string, mode ValidationMode) (file 
 			continue
 		}
 		if entryName == moduleFile {
-			ok, err := moduleFileDeclaresName(path, name)
+			ok, err := moduleFileDeclaresName(path, name, mode)
 			if err != nil {
 				return "", false, err
 			}
@@ -866,20 +866,20 @@ func revisionString(revision *string) string {
 	return *revision
 }
 
-func moduleFileDeclaresName(path, name string) (bool, error) {
-	return moduleFileDeclaresKeywordName(path, name, "")
+func moduleFileDeclaresName(path, name string, mode ValidationMode) (bool, error) {
+	return moduleFileDeclaresKeywordName(path, name, "", mode)
 }
 
-func moduleFileDeclaresModule(path, name string) (bool, error) {
-	return moduleFileDeclaresKeywordName(path, name, "module")
+func moduleFileDeclaresModule(path, name string, mode ValidationMode) (bool, error) {
+	return moduleFileDeclaresKeywordName(path, name, "module", mode)
 }
 
-func moduleFileDeclaresKeywordName(path, name, keyword string) (bool, error) {
+func moduleFileDeclaresKeywordName(path, name, keyword string, mode ValidationMode) (bool, error) {
 	raw, err := yangparse.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
-	stmts, err := yangparse.Parse(raw, path)
+	stmts, _, err := yangparse.ParseWithOptions(raw, path, parseOptionsForMode(mode))
 	if err != nil {
 		return false, err
 	}
@@ -901,7 +901,7 @@ func moduleFileMatchesRevision(path, name, revision string, mode ValidationMode)
 	if err != nil {
 		return false
 	}
-	stmts, err := yangparse.Parse(raw, path)
+	stmts, _, err := yangparse.ParseWithOptions(raw, path, parseOptionsForMode(mode))
 	if err != nil || len(stmts) != 1 {
 		return false
 	}
@@ -927,7 +927,7 @@ func filenameRevisionError(path, revision string, mode ValidationMode) error {
 	if err != nil {
 		return err
 	}
-	stmts, err := yangparse.Parse(raw, path)
+	stmts, _, err := yangparse.ParseWithOptions(raw, path, parseOptionsForMode(mode))
 	if err != nil {
 		return err
 	}
@@ -996,11 +996,48 @@ func (c *Context) removeSearchPath(path string) {
 	}
 }
 
+// parseOptionsForMode maps a validation mode to parser relaxations. Only
+// vendor-compatible loading preserves unknown pattern argument escapes.
+func parseOptionsForMode(mode ValidationMode) yangparse.ParseOptions {
+	return yangparse.ParseOptions{AllowPatternEscapes: mode == ValidationVendorCompatible}
+}
+
+func (c *Context) parseOptions() yangparse.ParseOptions {
+	return parseOptionsForMode(c.validationMode)
+}
+
+// patternEscapeDiagnostics converts parser pattern-escape warnings into load
+// diagnostics for module. The content is preserved, so these are plain
+// warnings, never OmittedContent.
+func patternEscapeDiagnostics(module string, warnings []yangparse.Warning) []Diagnostic {
+	if len(warnings) == 0 {
+		return nil
+	}
+	diagnostics := make([]Diagnostic, len(warnings))
+	for i, warning := range warnings {
+		message := fmt.Sprintf("%s at %s", warning.Message, warning.Location())
+		diagnostics[i] = Diagnostic{
+			Kind:    DiagnosticSyntaxError,
+			Code:    RuleCodeContext,
+			Message: message,
+			Module:  module,
+			Source: SourceLocation{
+				File:   warning.File,
+				Line:   warning.Line,
+				Column: warning.Column,
+				Text:   warning.Location(),
+			},
+			Underlying: fmt.Errorf("%s", message),
+		}
+	}
+	return diagnostics
+}
+
 func (c *Context) loadModuleSource(source, sourceName string, implemented, requested bool) (*moduleData, error) {
 	if c.allImplemented {
 		implemented = true
 	}
-	stmts, err := yangparse.Parse(source, sourceName)
+	stmts, parseWarnings, err := yangparse.ParseWithOptions(source, sourceName, c.parseOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -1008,8 +1045,13 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 		return nil, fmt.Errorf("%s: expected one module or submodule statement, got %d", sourceName, len(stmts))
 	}
 	stmt := stmts[0]
+	parseDiagnostics := patternEscapeDiagnostics(stmt.Argument, parseWarnings)
 	if stmt.Keyword == "submodule" {
 		if c.validationMode == ValidationVendorCompatible {
+			// The direct statement is discarded in favor of the parent's
+			// include resolution, which re-parses this file and reports
+			// its diagnostics when the submodule attaches; adding them
+			// here too would report every occurrence twice.
 			return c.loadDirectSubmoduleSource(sourceName, stmt, implemented, requested)
 		}
 		return nil, c.rejectDirectSubmoduleSource(sourceName, stmt)
@@ -1067,7 +1109,11 @@ func (c *Context) loadModuleSource(source, sourceName string, implemented, reque
 	if err != nil {
 		return nil, err
 	}
-	c.addLoadWarnings(append(orderWarnings, revisionWarnings...))
+	warnings := make([]Diagnostic, 0, len(parseDiagnostics)+len(orderWarnings)+len(revisionWarnings))
+	warnings = append(warnings, parseDiagnostics...)
+	warnings = append(warnings, orderWarnings...)
+	warnings = append(warnings, revisionWarnings...)
+	c.addLoadWarnings(warnings)
 	key := moduleKey(name, revision)
 	mod := c.modulesByKey[key]
 	if mod == nil {
@@ -1570,6 +1616,10 @@ func (c *Context) loadSubmodule(path string, stmt, inc *yangparse.Statement, par
 		}
 	}
 	parent.submodules = append(parent.submodules, &submoduleData{file: path, stmt: stmt})
+	if candidate := resolved[stmt.Argument]; candidate != nil && candidate.stmt == stmt && len(candidate.parseDiagnostics) != 0 {
+		c.addLoadWarnings(candidate.parseDiagnostics)
+		candidate.parseDiagnostics = nil
+	}
 	c.including = append(c.including, stmt)
 	err = c.loadSubmoduleIncludes(parent, stmt, resolved)
 	c.including = c.including[:len(c.including)-1]
@@ -1725,7 +1775,7 @@ func (c *Context) resolveIncludedSubmodule(parent *moduleData, inc *yangparse.St
 	if err != nil {
 		return nil, err
 	}
-	stmts, err := yangparse.Parse(raw, abs)
+	stmts, parseWarnings, err := yangparse.ParseWithOptions(raw, abs, c.parseOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -1742,7 +1792,10 @@ func (c *Context) resolveIncludedSubmodule(parent *moduleData, inc *yangparse.St
 	if _, _, err := validateSubmoduleSource(abs, stmt, parent, c.validationMode); err != nil {
 		return nil, err
 	}
-	return &submoduleData{file: abs, stmt: stmt}, nil
+	// Defer the warnings to attachment: a candidate resolved only to
+	// compare revisions (nested pinned include) is discarded and must
+	// not report occurrences the selected candidate already reported.
+	return &submoduleData{file: abs, stmt: stmt, parseDiagnostics: patternEscapeDiagnostics(stmt.Argument, parseWarnings)}, nil
 }
 
 func (c *Context) loadImports(mod *moduleData) error {
@@ -1828,7 +1881,7 @@ func (c *Context) loadImports(mod *moduleData) error {
 				if err != nil {
 					return err
 				}
-				ok, err := moduleFileDeclaresModule(path, targetName)
+				ok, err := moduleFileDeclaresModule(path, targetName, c.validationMode)
 				if err != nil {
 					return err
 				}
