@@ -295,6 +295,278 @@ func TestParseRejectsUnknownDoubleQuotedPatternEscape(t *testing.T) {
 	}
 }
 
+func patternArguments(stmts []*Statement) []string {
+	var args []string
+	var walk func([]*Statement)
+	walk = func(list []*Statement) {
+		for _, st := range list {
+			if st.Keyword == "pattern" {
+				args = append(args, st.Argument)
+			}
+			walk(st.SubStatements())
+		}
+	}
+	walk(stmts)
+	return args
+}
+
+// Real-world vendor modules write regex escapes such as \* directly in
+// double-quoted pattern arguments. AllowPatternEscapes preserves the
+// backslash so the regex keeps its meaning, and reports each occurrence.
+func TestParseWithOptionsPreservesPatternEscapes(t *testing.T) {
+	source := `module wild-escape {
+  namespace "urn:wild-escape";
+  prefix we;
+  leaf star {
+    type string {
+      pattern "\*";
+    }
+  }
+  leaf dotted {
+    type string {
+      pattern "\d+\.\d+";
+    }
+  }
+  leaf joined {
+    type string {
+      pattern "x" + "\*";
+    }
+  }
+  leaf escaped {
+    type string {
+      pattern "\\*";
+    }
+  }
+}
+`
+	stmts, warnings, err := ParseWithOptions(source, "wild-escape.yang", ParseOptions{AllowPatternEscapes: true})
+	if err != nil {
+		t.Fatalf("ParseWithOptions: %v", err)
+	}
+	want := []string{`\*`, `\d+\.\d+`, `x\*`, `\*`}
+	got := patternArguments(stmts)
+	if len(got) != len(want) {
+		t.Fatalf("pattern arguments = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("pattern arguments = %q, want %q", got, want)
+		}
+	}
+	// One warning per preserved escape (\d+\.\d+ has three); the properly
+	// escaped "\\*" is silent.
+	if len(warnings) != 5 {
+		t.Fatalf("warnings = %+v, want 5", warnings)
+	}
+	if !strings.Contains(warnings[0].Message, `invalid escape sequence: \*`) {
+		t.Fatalf("first warning = %q, want invalid escape sequence", warnings[0].Message)
+	}
+	if warnings[0].File != "wild-escape.yang" || warnings[0].Line != 6 {
+		t.Fatalf("first warning location = %s:%d:%d, want wild-escape.yang:6", warnings[0].File, warnings[0].Line, warnings[0].Column)
+	}
+}
+
+// AllowPatternEscapes is scoped to pattern arguments: unknown escapes in
+// any other double-quoted string remain errors.
+func TestParseWithOptionsStillRejectsNonPatternEscapes(t *testing.T) {
+	source := `module bad-description-escape {
+  namespace "urn:bad-description-escape";
+  prefix bde;
+  leaf value {
+    description "\q";
+    type string;
+  }
+}
+`
+	_, _, err := ParseWithOptions(source, "bad-description-escape.yang", ParseOptions{AllowPatternEscapes: true})
+	if err == nil {
+		t.Fatal("ParseWithOptions accepted unknown double-quoted description escape")
+	}
+	if got := err.Error(); !strings.Contains(got, `invalid escape sequence: \q`) {
+		t.Fatalf("ParseWithOptions error = %q, want invalid escape sequence", got)
+	}
+}
+
+func statementArgs(stmts []*Statement, keyword string) []string {
+	var args []string
+	var walk func([]*Statement)
+	walk = func(list []*Statement) {
+		for _, st := range list {
+			if st.Keyword == keyword {
+				args = append(args, st.Argument)
+			}
+			walk(st.SubStatements())
+		}
+	}
+	walk(stmts)
+	return args
+}
+
+func escapeMatrixModule(stmt string) string {
+	return "module escape-matrix {\n" +
+		"  namespace \"urn:escape-matrix\";\n" +
+		"  prefix em;\n" +
+		"  leaf value {\n" +
+		"    type string {\n" +
+		"      " + stmt + "\n" +
+		"    }\n" +
+		"  }\n" +
+		"}\n"
+}
+
+// TestParsePatternEscapeMatrix pins the RFC 7950 6.1.3 / XSD regex boundary:
+// YANG defines only \n, \t, \" and \\ in double-quoted strings ("The
+// backslash MUST NOT be followed by any other character"), while a pattern
+// argument is an XSD regular expression whose own escapes (\d, \*, \p{...},
+// ...) need the backslash to survive. Strict parsing rejects the collision;
+// AllowPatternEscapes preserves it inside pattern arguments only.
+func TestParsePatternEscapeMatrix(t *testing.T) {
+	vendor := ParseOptions{AllowPatternEscapes: true}
+
+	// Every XSD single/multi character escape that YANG does not define is
+	// preserved verbatim in a pattern argument, with one warning each.
+	preserved := []string{
+		`\*`, `\.`, `\+`, `\?`, `\(`, `\)`, `\{`, `\}`, `\[`, `\]`, `\^`, `\-`, `\|`, `\r`,
+		`\d`, `\D`, `\s`, `\S`, `\w`, `\W`, `\p{L}`, `\P{L}`,
+	}
+	for _, esc := range preserved {
+		source := escapeMatrixModule(`pattern "` + esc + `";`)
+		stmts, warnings, err := ParseWithOptions(source, "escape-matrix.yang", vendor)
+		if err != nil {
+			t.Fatalf("%s: ParseWithOptions(vendor): %v", esc, err)
+		}
+		if got := statementArgs(stmts, "pattern"); len(got) != 1 || got[0] != esc {
+			t.Fatalf("%s: pattern argument = %q, want [%q]", esc, got, esc)
+		}
+		if len(warnings) != 1 {
+			t.Fatalf("%s: warnings = %+v, want 1", esc, warnings)
+		}
+		if _, _, err := ParseWithOptions(source, "escape-matrix.yang", ParseOptions{}); err == nil {
+			t.Fatalf("%s: strict ParseWithOptions accepted escape", esc)
+		}
+	}
+
+	// An escape that is not valid XSD either is still preserved at parse
+	// level (schema compilation validates the regex separately), matching
+	// goyang's pattern handling.
+	stmts, warnings, err := ParseWithOptions(escapeMatrixModule(`pattern "\q";`), "escape-matrix.yang", vendor)
+	if err != nil {
+		t.Fatalf(`\q: ParseWithOptions(vendor): %v`, err)
+	}
+	if got := statementArgs(stmts, "pattern"); len(got) != 1 || got[0] != `\q` || len(warnings) != 1 {
+		t.Fatalf(`\q: args = %q warnings = %+v, want [\q] and 1 warning`, got, warnings)
+	}
+
+	// YANG-defined escapes are substituted in every mode, without warnings,
+	// including the long-standing \' leniency for vendor files.
+	defined := []struct{ source, want string }{
+		{`pattern "\n";`, "\n"},
+		{`pattern "\t";`, "\t"},
+		{`pattern "\\";`, `\`},
+		{`pattern "\"";`, `"`},
+		{`pattern "\'";`, `'`},
+		{`pattern '\*';`, `\*`},
+		{`pattern \*;`, `\*`},
+	}
+	for _, tc := range defined {
+		for _, opts := range []ParseOptions{{}, vendor} {
+			stmts, warnings, err := ParseWithOptions(escapeMatrixModule(tc.source), "escape-matrix.yang", opts)
+			if err != nil {
+				t.Fatalf("%s (opts %+v): %v", tc.source, opts, err)
+			}
+			if got := statementArgs(stmts, "pattern"); len(got) != 1 || got[0] != tc.want {
+				t.Fatalf("%s (opts %+v): pattern argument = %q, want [%q]", tc.source, opts, got, tc.want)
+			}
+			if len(warnings) != 0 {
+				t.Fatalf("%s (opts %+v): warnings = %+v, want none", tc.source, opts, warnings)
+			}
+		}
+	}
+
+	// The relaxation is keyword-scoped: a prefixed extension statement is
+	// not a pattern statement.
+	if _, _, err := ParseWithOptions(escapeMatrixModule(`em:posix-pattern "\d";`), "escape-matrix.yang", vendor); err == nil {
+		t.Fatal("vendor parsing accepted escape in prefixed extension argument")
+	}
+
+	// \r outside a pattern argument stays an error in every mode.
+	if _, _, err := ParseWithOptions(escapeMatrixModule("description \"a\\rb\";\n      pattern \"x\";"), "escape-matrix.yang", vendor); err == nil {
+		t.Fatal("vendor parsing accepted \\r in description")
+	}
+}
+
+// TestParsePatternEscapeShapes covers concatenation, multiline strings,
+// modifiers, and warning order across multiple pattern statements.
+func TestParsePatternEscapeShapes(t *testing.T) {
+	vendor := ParseOptions{AllowPatternEscapes: true}
+	source := `module escape-shapes {
+  namespace "urn:escape-shapes";
+  prefix es;
+  leaf joined {
+    type string {
+      pattern '\d' + "\." + "\d+";
+    }
+  }
+  leaf multiline {
+    type string {
+      pattern "abc
+\*";
+    }
+  }
+  leaf inverted {
+    type string {
+      pattern "\*" {
+        modifier invert-match;
+      }
+      pattern "\d+";
+    }
+  }
+}
+`
+	stmts, warnings, err := ParseWithOptions(source, "escape-shapes.yang", vendor)
+	if err != nil {
+		t.Fatalf("ParseWithOptions: %v", err)
+	}
+	want := []string{`\d\.\d+`, "abc\n\\*", `\*`, `\d+`}
+	got := statementArgs(stmts, "pattern")
+	if len(got) != len(want) {
+		t.Fatalf("pattern arguments = %q, want %q", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("pattern arguments = %q, want %q", got, want)
+		}
+	}
+	// Joined contributes \. and \d, multiline \*, inverted \* and \d.
+	if len(warnings) != 5 {
+		t.Fatalf("warnings = %+v, want 5", warnings)
+	}
+	if warnings[2].Line != 12 {
+		t.Fatalf("multiline warning = %+v, want line 12", warnings[2])
+	}
+}
+
+// TestParsePatternBackslashNewline pins the pathological backslash at end
+// of line inside a double-quoted pattern argument: vendor parsing keeps
+// both characters (schema regex validation rejects the result separately),
+// strict parsing rejects it as an undefined escape.
+func TestParsePatternBackslashNewline(t *testing.T) {
+	source := escapeMatrixModule("pattern \"a\\\nb\";")
+	stmts, warnings, err := ParseWithOptions(source, "escape-matrix.yang", ParseOptions{AllowPatternEscapes: true})
+	if err != nil {
+		t.Fatalf("ParseWithOptions(vendor): %v", err)
+	}
+	if got := statementArgs(stmts, "pattern"); len(got) != 1 || got[0] != "a\\\nb" {
+		t.Fatalf("pattern argument = %q, want a, backslash, newline, b", got)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %+v, want 1", warnings)
+	}
+	if _, _, err := ParseWithOptions(source, "escape-matrix.yang", ParseOptions{}); err == nil {
+		t.Fatal("strict ParseWithOptions accepted backslash-newline")
+	}
+}
+
 func TestReadFileRejectsOversizedFileBeforeRead(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "oversized.yang")
 	file, err := os.Create(path)

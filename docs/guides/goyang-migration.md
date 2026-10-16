@@ -38,7 +38,10 @@ The native replacement for common goyang read use cases is:
 - `SchemaNodeRef` for node metadata, types, defaults, keys, constraints,
   extensions, and operation I/O.
 - `ParseStatements(input, name)` and `ReadStatements(path)` for raw YANG
-  statement inspection without the goyang-shaped `compat.Parse`.
+  statement inspection without the goyang-shaped `compat.Parse`; the
+  `ParseStatementsWithOptions` / `ReadStatementsWithOptions` variants accept
+  `StatementParseOptions{ValidationMode: cambium.ValidationVendorCompatible}`
+  to preserve vendor pattern escapes and report them as diagnostics.
 - `PathsWithModules(root)` for module search-path discovery.
 - `CamelCase(name)` for goyang-compatible exported identifier spelling.
 - `Module.Location()` / `SchemaNodeRef.Location()` for source diagnostics.

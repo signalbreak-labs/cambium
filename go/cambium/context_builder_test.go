@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -868,6 +869,350 @@ func TestLoadModuleRevisionedFileReportsItsParseError(t *testing.T) {
 		if got := err.Error(); !strings.Contains(got, `invalid escape sequence: \*`) || strings.Contains(got, "does not declare filename revision") {
 			t.Fatalf("recursive=%v: LoadModule error = %q, want the parse error", recursive, got)
 		}
+	}
+}
+
+// TestValidationVendorCompatiblePreservesPatternEscapes: real-world
+// vendor modules write pattern "\*", which RFC 7950 6.1.3 does not define
+// as a double-quoted escape. Vendor-compatible loading preserves the
+// backslash so the regex still means "literal *" and reports the
+// relaxation as a LoadReport warning; strict loading is unchanged.
+func TestValidationVendorCompatiblePreservesPatternEscapes(t *testing.T) {
+	src := `module wild-escape {
+    namespace "urn:wild-escape";
+    prefix we;
+    revision 2025-01-01;
+
+    leaf name {
+        type union {
+            type string {
+                pattern "\*";
+            }
+            type uint32 {
+                range "0 .. 1073741823";
+            }
+        }
+    }
+}
+`
+	check := func(t *testing.T, ctx *cambium.Context) {
+		t.Helper()
+		mod, err := ctx.Schema("wild-escape")
+		if err != nil {
+			t.Fatalf("Schema: %v", err)
+		}
+		union, ok := leafType(t, mod, "/we:name").Resolved().(cambium.ResolvedUnion)
+		if !ok {
+			t.Fatalf("leaf name type = %T, want ResolvedUnion", leafType(t, mod, "/we:name").Resolved())
+		}
+		members := union.Members()
+		if len(members) != 2 {
+			t.Fatalf("union members = %d, want 2", len(members))
+		}
+		str, ok := members[0].Resolved().(cambium.ResolvedString)
+		if !ok || len(str.Patterns) != 1 || str.Patterns[0].Regex() != `\*` {
+			t.Fatalf("union string member = %+v, want one pattern \\*", members[0].Resolved())
+		}
+		expr, err := str.Patterns[0].GoRegexp()
+		if err != nil {
+			t.Fatalf("GoRegexp: %v", err)
+		}
+		compiled, err := regexp.Compile(expr)
+		if err != nil {
+			t.Fatalf("compile GoRegexp %q: %v", expr, err)
+		}
+		if !compiled.MatchString("*") || compiled.MatchString("x") || compiled.MatchString("") {
+			t.Fatalf("GoRegexp %q does not match exactly the literal *", expr)
+		}
+		if got := countEscapeWarnings(ctx); got != 1 {
+			t.Fatalf("escape warnings = %d, want exactly 1 (warnings %+v)", got, ctx.LoadReport().Warnings)
+		}
+	}
+
+	t.Run("search path by name", func(t *testing.T) {
+		dir := t.TempDir()
+		writeModuleFile(t, filepath.Join(dir, "wild-escape@2025-01-01.yang"), []byte(src))
+		builder, err := cambium.NewContextBuilder(cambium.ContextFlags{DisableSearchdirCwd: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.SearchPath(dir); err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.LoadModule("wild-escape", nil, nil); err != nil {
+			t.Fatalf("LoadModule: %v", err)
+		}
+		ctx, err := builder.Build()
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		t.Cleanup(ctx.Close)
+		check(t, ctx)
+	})
+
+	t.Run("registered source path", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "wild-escape@2025-01-01.yang")
+		writeModuleFile(t, path, []byte(src))
+		builder, err := cambium.NewContextBuilder(cambium.ContextFlags{DisableSearchdirCwd: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.RegisterSourcePaths(path); err != nil {
+			t.Fatalf("RegisterSourcePaths: %v", err)
+		}
+		if err := builder.LoadModuleFromPath(path); err != nil {
+			t.Fatalf("LoadModuleFromPath: %v", err)
+		}
+		ctx, err := builder.Build()
+		if err != nil {
+			t.Fatalf("Build: %v", err)
+		}
+		t.Cleanup(ctx.Close)
+		check(t, ctx)
+	})
+
+	t.Run("module string", func(t *testing.T) {
+		ctx, err := buildModeContext(t, cambium.ValidationVendorCompatible, nil, src)
+		if err != nil {
+			t.Fatalf("buildModeContext: %v", err)
+		}
+		check(t, ctx)
+	})
+}
+
+func loadModuleFromSearchDir(t *testing.T, dir, name string, mode cambium.ValidationMode) (*cambium.Context, error) {
+	t.Helper()
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{DisableSearchdirCwd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModule(name, nil, nil); err != nil {
+		return nil, err
+	}
+	ctx, err := builder.Build()
+	if err == nil {
+		t.Cleanup(ctx.Close)
+	}
+	return ctx, err
+}
+
+func countEscapeWarnings(ctx *cambium.Context) int {
+	count := 0
+	for _, warning := range ctx.LoadReport().Warnings {
+		if strings.Contains(warning.Message, "invalid escape sequence:") {
+			count++
+		}
+	}
+	return count
+}
+
+// TestValidationVendorCompatiblePatternEscapeInSubmodule: the include
+// resolution parse path must apply the same vendor-compatible pattern
+// escape preservation as direct module loads.
+func TestValidationVendorCompatiblePatternEscapeInSubmodule(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "escape-parent.yang"), []byte(`module escape-parent {
+    namespace "urn:escape-parent";
+    prefix ep;
+    include escape-sub;
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "escape-sub.yang"), []byte(`submodule escape-sub {
+    belongs-to escape-parent {
+        prefix ep;
+    }
+    leaf subname {
+        type string {
+            pattern "\*";
+        }
+    }
+}
+`))
+
+	if _, err := loadModuleFromSearchDir(t, dir, "escape-parent", cambium.ValidationStrict); err == nil {
+		t.Fatal("strict load accepted pattern escape in submodule")
+	} else if !strings.Contains(err.Error(), `invalid escape sequence: \*`) {
+		t.Fatalf("strict load error = %q, want invalid escape sequence", err)
+	}
+
+	ctx, err := loadModuleFromSearchDir(t, dir, "escape-parent", cambium.ValidationVendorCompatible)
+	if err != nil {
+		t.Fatalf("vendor load: %v", err)
+	}
+	mod, err := ctx.Schema("escape-parent")
+	if err != nil {
+		t.Fatalf("Schema: %v", err)
+	}
+	str, ok := leafType(t, mod, "/ep:subname").Resolved().(cambium.ResolvedString)
+	if !ok || len(str.Patterns) != 1 || str.Patterns[0].Regex() != `\*` {
+		t.Fatalf("submodule leaf type = %+v, want one pattern \\*", leafType(t, mod, "/ep:subname").Resolved())
+	}
+	if got := countEscapeWarnings(ctx); got != 1 {
+		t.Fatalf("escape warnings = %d, want 1 (warnings %+v)", got, ctx.LoadReport().Warnings)
+	}
+}
+
+// TestValidationVendorCompatiblePatternEscapeInRevisionedImport: search-path
+// revision probes re-parse candidate files before the real load, so they
+// must apply vendor-compatible parsing too, or a revisioned import still
+// fails before the module is ever loaded.
+func TestValidationVendorCompatiblePatternEscapeInRevisionedImport(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "escape-dep@2025-01-01.yang"), []byte(`module escape-dep {
+    namespace "urn:escape-dep";
+    prefix ed;
+    revision 2025-01-01;
+    leaf code {
+        type string {
+            pattern "\d+";
+        }
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "escape-root.yang"), []byte(`module escape-root {
+    namespace "urn:escape-root";
+    prefix er;
+    import escape-dep {
+        prefix ed;
+        revision-date 2025-01-01;
+    }
+    leaf own {
+        type string;
+    }
+}
+`))
+
+	if _, err := loadModuleFromSearchDir(t, dir, "escape-root", cambium.ValidationStrict); err == nil {
+		t.Fatal("strict load accepted pattern escape in revisioned import")
+	} else if !strings.Contains(err.Error(), `invalid escape sequence: \d`) {
+		t.Fatalf("strict load error = %q, want invalid escape sequence", err)
+	}
+
+	ctx, err := loadModuleFromSearchDir(t, dir, "escape-root", cambium.ValidationVendorCompatible)
+	if err != nil {
+		t.Fatalf("vendor load: %v", err)
+	}
+	dep, err := ctx.Schema("escape-dep")
+	if err != nil {
+		t.Fatalf("Schema(escape-dep): %v", err)
+	}
+	str, ok := leafType(t, dep, "/ed:code").Resolved().(cambium.ResolvedString)
+	if !ok || len(str.Patterns) != 1 || str.Patterns[0].Regex() != `\d+` {
+		t.Fatalf("imported leaf type = %+v, want one pattern \\d+", leafType(t, dep, "/ed:code").Resolved())
+	}
+	if got := countEscapeWarnings(ctx); got != 1 {
+		t.Fatalf("escape warnings = %d, want exactly 1 without probe duplicates (warnings %+v)", got, ctx.LoadReport().Warnings)
+	}
+}
+
+// TestValidationVendorCompatibleDirectSubmoduleEscapeWarnsOnce: a direct
+// submodule load resolves to its parent, whose include resolution parses
+// the submodule file again. The escape occurrence must still be reported
+// exactly once.
+func TestValidationVendorCompatibleDirectSubmoduleEscapeWarnsOnce(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "escape-parent.yang"), []byte(`module escape-parent {
+    namespace "urn:escape-parent";
+    prefix ep;
+    include escape-sub;
+}
+`))
+	subPath := filepath.Join(dir, "escape-sub.yang")
+	writeModuleFile(t, subPath, []byte(`submodule escape-sub {
+    belongs-to escape-parent {
+        prefix ep;
+    }
+    leaf subname {
+        type string {
+            pattern "\*";
+        }
+    }
+}
+`))
+
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{DisableSearchdirCwd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SearchPath(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleFromPath(subPath); err != nil {
+		t.Fatalf("LoadModuleFromPath(submodule): %v", err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	t.Cleanup(ctx.Close)
+	if got := countEscapeWarnings(ctx); got != 1 {
+		t.Fatalf("escape warnings = %d, want exactly 1 (warnings %+v)", got, ctx.LoadReport().Warnings)
+	}
+}
+
+// TestValidationVendorCompatibleNestedPinnedIncludeEscapeWarnsOnce: a
+// nested include with an explicit revision-date re-resolves its target to
+// compare revisions and then keeps the parent's selection. The discarded
+// candidate must not produce a second warning for the same occurrence.
+func TestValidationVendorCompatibleNestedPinnedIncludeEscapeWarnsOnce(t *testing.T) {
+	dir := t.TempDir()
+	writeModuleFile(t, filepath.Join(dir, "escape-nested-parent.yang"), []byte(`module escape-nested-parent {
+    yang-version 1.1;
+    namespace "urn:escape-nested-parent";
+    prefix enp;
+    include escape-a;
+    include escape-b;
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "escape-a.yang"), []byte(`submodule escape-a {
+    yang-version 1.1;
+    belongs-to escape-nested-parent {
+        prefix enp;
+    }
+    include escape-b {
+        revision-date 2025-01-01;
+    }
+    leaf from-a {
+        type string;
+    }
+}
+`))
+	writeModuleFile(t, filepath.Join(dir, "escape-b.yang"), []byte(`submodule escape-b {
+    yang-version 1.1;
+    belongs-to escape-nested-parent {
+        prefix enp;
+    }
+    revision 2025-01-01;
+    leaf from-b {
+        type string {
+            pattern "\*";
+        }
+    }
+}
+`))
+
+	ctx, err := loadModuleFromSearchDir(t, dir, "escape-nested-parent", cambium.ValidationVendorCompatible)
+	if err != nil {
+		t.Fatalf("vendor load: %v", err)
+	}
+	if got := countEscapeWarnings(ctx); got != 1 {
+		t.Fatalf("escape warnings = %d, want exactly 1 (warnings %+v)", got, ctx.LoadReport().Warnings)
 	}
 }
 

@@ -89,9 +89,10 @@ historically loaded with goyang but contain known source defects, call
 Compatibility mode is explicit and warning-producing: duplicate or out-of-order
 revisions, direct submodule entrypoints resolved to their parent module, skipped
 feature-disabled augment targets, mandatory config augments, config false
-mandatory typedef defaults, unambiguous local-name path fallbacks, and leafref
-cycles are reported in `ctx.LoadReport().Warnings` rather than silently
-discarded.
+mandatory typedef defaults, unambiguous local-name path fallbacks, leafref
+cycles, and unknown backslash escapes in double-quoted `pattern` arguments
+preserved verbatim as regex escapes are reported in
+`ctx.LoadReport().Warnings` rather than silently discarded.
 
 `ContextFlags` controls loading behavior; the zero value is the common case. See
 godoc for the individual fields.

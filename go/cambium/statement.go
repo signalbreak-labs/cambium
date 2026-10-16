@@ -3,7 +3,11 @@
 
 package cambium
 
-import "github.com/signalbreak-labs/cambium/go/internal/yangparse"
+import (
+	"fmt"
+
+	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
+)
 
 // Statement is a read-only handle to one parsed YANG statement.
 //
@@ -13,23 +17,59 @@ import "github.com/signalbreak-labs/cambium/go/internal/yangparse"
 // Semantic schema resolution lives on Context/Module/SchemaNodeRef.
 type Statement struct{ stmt *yangparse.Statement }
 
+// StatementParseOptions selects raw statement parsing behavior. The zero
+// value is strict RFC 7950 parsing.
+type StatementParseOptions struct {
+	// ValidationMode mirrors the schema-loading modes: ValidationStrict
+	// (the default) fails closed on vendor source defects, while
+	// ValidationVendorCompatible preserves unknown backslash escapes in
+	// double-quoted pattern arguments as regex escapes and reports each
+	// one in the returned diagnostics.
+	ValidationMode ValidationMode
+}
+
 // ParseStatements parses one YANG source document into ordered top-level
-// statements using Cambium's native RFC 7950 parser.
+// statements using Cambium's native RFC 7950 parser. Parsing is strict;
+// use ParseStatementsWithOptions for vendor-compatible parsing.
 func ParseStatements(input, name string) ([]Statement, error) {
-	stmts, err := yangparse.Parse(input, name)
-	if err != nil {
-		return nil, err
+	stmts, _, err := ParseStatementsWithOptions(input, name, StatementParseOptions{})
+	return stmts, err
+}
+
+// ParseStatementsWithOptions is ParseStatements with explicit options. The
+// returned diagnostics report every vendor-compatible relaxation applied
+// while parsing, in source order; they are empty in strict mode.
+func ParseStatementsWithOptions(input, name string, opts StatementParseOptions) ([]Statement, []Diagnostic, error) {
+	if !validValidationMode(opts.ValidationMode) {
+		return nil, nil, wrap("parse statements", fmt.Errorf("invalid validation mode %d", opts.ValidationMode))
 	}
-	return publicStatements(stmts), nil
+	stmts, warnings, err := yangparse.ParseWithOptions(input, name, parseOptionsForMode(opts.ValidationMode))
+	if err != nil {
+		return nil, nil, err
+	}
+	module := ""
+	if len(stmts) == 1 && (stmts[0].Keyword == "module" || stmts[0].Keyword == "submodule") {
+		module = stmts[0].Argument
+	}
+	return publicStatements(stmts), patternEscapeDiagnostics(module, warnings), nil
 }
 
 // ReadStatements reads path and parses it into ordered top-level statements.
+// Parsing is strict; use ReadStatementsWithOptions for vendor-compatible
+// parsing.
 func ReadStatements(path string) ([]Statement, error) {
+	stmts, _, err := ReadStatementsWithOptions(path, StatementParseOptions{})
+	return stmts, err
+}
+
+// ReadStatementsWithOptions is ReadStatements with explicit options; see
+// ParseStatementsWithOptions for the returned diagnostics.
+func ReadStatementsWithOptions(path string, opts StatementParseOptions) ([]Statement, []Diagnostic, error) {
 	input, err := yangparse.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return ParseStatements(input, path)
+	return ParseStatementsWithOptions(input, path, opts)
 }
 
 // IsValid reports whether s refers to a parsed statement.

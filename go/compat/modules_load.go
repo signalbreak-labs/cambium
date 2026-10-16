@@ -56,12 +56,20 @@ func findInDir(dir, name string, recurse bool) (string, error) {
 	return "", nil
 }
 
+// parseOptions maps the goyang-shaped options that select vendor-compatible
+// loading (see Options) to native parser relaxations.
+func (ms *Modules) parseOptions() yangparse.ParseOptions {
+	return yangparse.ParseOptions{
+		AllowPatternEscapes: ms != nil && ms.ParseOptions.IgnoreSubmoduleCircularDependencies,
+	}
+}
+
 // Parse parses YANG source and registers module/submodule names.
 func (ms *Modules) Parse(data, name string) error {
 	if ms == nil {
 		return fmt.Errorf("nil Modules")
 	}
-	stmts, err := parseStatements(data, name)
+	stmts, err := parseStatementsWithOptions(data, name, ms.parseOptions())
 	if err != nil {
 		return err
 	}

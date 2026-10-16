@@ -57,7 +57,7 @@ func readSourceIdentity(path string, mode ValidationMode) (sourceIdentity, error
 	if err != nil {
 		return sourceIdentity{}, err
 	}
-	statements, err := yangparse.Parse(raw, path)
+	statements, _, err := yangparse.ParseWithOptions(raw, path, parseOptionsForMode(mode))
 	if err != nil {
 		return sourceIdentity{}, err
 	}

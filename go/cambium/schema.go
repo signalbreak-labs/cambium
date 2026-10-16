@@ -1171,6 +1171,10 @@ type moduleData struct {
 type submoduleData struct {
 	file string
 	stmt *yangparse.Statement
+	// parseDiagnostics holds vendor-compatible parse warnings for a
+	// resolution candidate; they are reported only if the candidate is
+	// actually attached to its parent (see loadSubmodule).
+	parseDiagnostics []Diagnostic
 }
 
 // featureExcludedName identifies a schema child the enabled feature set
