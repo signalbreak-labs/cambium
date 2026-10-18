@@ -6,10 +6,10 @@ package cambium
 import (
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
+	"github.com/signalbreak-labs/cambium/go/yangpattern"
 )
 
 // Pattern is a textual pattern constraint for strings.
@@ -28,14 +28,17 @@ func (p Pattern) Regex() string { return p.regex }
 // It does not apply invert-match; callers must apply IsInverted separately.
 // Translation failure does not make the source pattern invalid YANG.
 func (p Pattern) GoRegexp() (string, error) {
-	if unsupported := xsdregex.UnsupportedNativeSyntax(p.regex); unsupported != "" {
-		return "", fmt.Errorf("pattern %q: %s", p.regex, unsupported)
+	program, err := p.Program()
+	if err != nil {
+		return "", err
 	}
-	expression := "^(?:" + xsdregex.NativePattern(p.regex) + ")$"
-	if _, err := regexp.Compile(expression); err != nil {
-		return "", fmt.Errorf("pattern %q cannot be compiled as a Go regexp: %w", p.regex, err)
-	}
-	return expression, nil
+	return program.GoRegexp()
+}
+
+// Program compiles the raw XSD pattern to a bounded, portable matcher.
+// Like GoRegexp, it leaves invert-match to the caller.
+func (p Pattern) Program() (*yangpattern.Program, error) {
+	return yangpattern.Compile(p.regex)
 }
 
 func (m *moduleData) patternModifierRequiresYang11(st *yangparse.Statement) bool {
@@ -110,260 +113,6 @@ func patterns(st *yangparse.Statement) ([]Pattern, error) {
 }
 
 func validateYANGPatternSyntax(pattern string) error {
-	// YANG uses XML Schema regex syntax, not Go regexp syntax. This structural
-	// sanity check runs before the native-regexp compatibility gate below so
-	// malformed YANG patterns fail with parser-oriented diagnostics.
-	runes := []rune(pattern)
-	parenDepth := 0
-	canRepeat := false
-	lastWasQuantifier := false
-	for i := 0; i < len(runes); i++ {
-		switch r := runes[i]; r {
-		case '\\':
-			if i == len(runes)-1 {
-				return fmt.Errorf("trailing escape")
-			}
-			end, err := validateYANGPatternEscape(runes, i+1)
-			if err != nil {
-				return err
-			}
-			i = end
-			canRepeat = true
-			lastWasQuantifier = false
-		case '[':
-			end, err := validateYANGPatternClass(runes, i)
-			if err != nil {
-				return err
-			}
-			i = end
-			canRepeat = true
-			lastWasQuantifier = false
-		case '(':
-			parenDepth++
-			canRepeat = false
-			lastWasQuantifier = false
-		case ')':
-			if parenDepth == 0 {
-				return fmt.Errorf("unmatched ')'")
-			}
-			parenDepth--
-			canRepeat = true
-			lastWasQuantifier = false
-		case '*', '+', '?':
-			if !canRepeat || lastWasQuantifier {
-				return fmt.Errorf("invalid repeated quantifier")
-			}
-			canRepeat = false
-			lastWasQuantifier = true
-		case '{':
-			end, ok, err := parseYANGPatternQuantifier(runes, i)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				canRepeat = true
-				lastWasQuantifier = false
-				continue
-			}
-			if !canRepeat || lastWasQuantifier {
-				return fmt.Errorf("invalid quantifier")
-			}
-			i = end
-			canRepeat = false
-			lastWasQuantifier = true
-		case '|':
-			canRepeat = false
-			lastWasQuantifier = false
-		default:
-			canRepeat = true
-			lastWasQuantifier = false
-		}
-	}
-	if parenDepth != 0 {
-		return fmt.Errorf("unterminated group")
-	}
-	return nil
-}
-
-type yangPatternClassFrame struct {
-	items    int
-	atStart  bool
-	prev     rune
-	havePrev bool
-}
-
-func validateYANGPatternClass(runes []rune, start int) (int, error) {
-	frames := []yangPatternClassFrame{{atStart: true}}
-	for i := start + 1; i < len(runes); i++ {
-		frame := &frames[len(frames)-1]
-		switch r := runes[i]; r {
-		case '\\':
-			if i == len(runes)-1 {
-				return 0, fmt.Errorf("trailing escape")
-			}
-			end, err := validateYANGPatternEscape(runes, i+1)
-			if err != nil {
-				return 0, err
-			}
-			i = end
-			frame.items++
-			frame.atStart = false
-			frame.havePrev = false
-		case '[':
-			frame.items++
-			frame.atStart = false
-			frame.havePrev = false
-			frames = append(frames, yangPatternClassFrame{atStart: true})
-		case ']':
-			if frame.items == 0 {
-				return 0, fmt.Errorf("empty character class")
-			}
-			frames = frames[:len(frames)-1]
-			if len(frames) == 0 {
-				return i, nil
-			}
-			frames[len(frames)-1].havePrev = false
-		case '^':
-			if frame.atStart {
-				frame.atStart = false
-				frame.havePrev = false
-				continue
-			}
-			recordYANGPatternClassRune(frame, runes, i)
-		default:
-			if frame.havePrev && r == '-' && i+1 < len(runes) {
-				next := runes[i+1]
-				if next != ']' && next != '[' && next != '\\' && frame.prev > next {
-					return 0, fmt.Errorf("reversed character range")
-				}
-			}
-			recordYANGPatternClassRune(frame, runes, i)
-		}
-	}
-	return 0, fmt.Errorf("unterminated character class")
-}
-
-func validateYANGPatternEscape(runes []rune, start int) (int, error) {
-	switch r := runes[start]; r {
-	case 'p', 'P':
-		if start+1 >= len(runes) || runes[start+1] != '{' {
-			return 0, fmt.Errorf("invalid character category escape")
-		}
-		end := start + 2
-		for end < len(runes) && runes[end] != '}' {
-			end++
-		}
-		if end >= len(runes) || end == start+2 {
-			return 0, fmt.Errorf("invalid character category escape")
-		}
-		if !validYANGPatternCategory(string(runes[start+2 : end])) {
-			return 0, fmt.Errorf("unknown character category")
-		}
-		return end, nil
-	case 'c', 'C', 'd', 'D', 'i', 'I', 'n', 'r', 's', 'S', 't', 'w', 'W':
-		return start, nil
-	default:
-		if isYANGPatternEscapedChar(r) {
-			return start, nil
-		}
-		return 0, fmt.Errorf("unrecognized escape")
-	}
-}
-
-func validYANGPatternCategory(category string) bool {
-	if _, ok := yangPatternCategories[category]; ok {
-		return true
-	}
-	if !strings.HasPrefix(category, "Is") {
-		return false
-	}
-	_, ok := yangPatternUnicodeBlocks[category[len("Is"):]]
-	return ok
-}
-
-func isYANGPatternEscapedChar(r rune) bool {
-	switch r {
-	case '\\', '|', '-', '.', '?', '*', '+', '{', '}', '(', ')', '[', ']', '^', '$':
-		return true
-	default:
-		return false
-	}
-}
-
-func recordYANGPatternClassRune(frame *yangPatternClassFrame, runes []rune, i int) {
-	frame.items++
-	frame.atStart = false
-	frame.prev = runes[i]
-	frame.havePrev = true
-}
-
-func parseYANGPatternQuantifier(runes []rune, start int) (end int, ok bool, err error) {
-	i := start + 1
-	if i >= len(runes) || !isYANGPatternDigit(runes[i]) {
-		return 0, false, nil
-	}
-	minStart := i
-	for i < len(runes) && isYANGPatternDigit(runes[i]) {
-		i++
-	}
-	minimum := string(runes[minStart:i])
-	if i >= len(runes) {
-		return 0, false, nil
-	}
-	if runes[i] == '}' {
-		return i, true, nil
-	}
-	if runes[i] != ',' {
-		return 0, false, nil
-	}
-	i++
-	if i >= len(runes) {
-		return 0, false, nil
-	}
-	if runes[i] == '}' {
-		return i, true, nil
-	}
-	maxStart := i
-	if !isYANGPatternDigit(runes[i]) {
-		return 0, false, nil
-	}
-	for i < len(runes) && isYANGPatternDigit(runes[i]) {
-		i++
-	}
-	if i >= len(runes) || runes[i] != '}' {
-		return 0, false, nil
-	}
-	maximum := string(runes[maxStart:i])
-	if compareYANGPatternDecimal(minimum, maximum) > 0 {
-		return 0, true, fmt.Errorf("reversed quantifier range")
-	}
-	return i, true, nil
-}
-
-func isYANGPatternDigit(r rune) bool {
-	return r >= '0' && r <= '9'
-}
-
-func compareYANGPatternDecimal(a, b string) int {
-	a = strings.TrimLeft(a, "0")
-	b = strings.TrimLeft(b, "0")
-	if a == "" {
-		a = "0"
-	}
-	if b == "" {
-		b = "0"
-	}
-	if len(a) < len(b) {
-		return -1
-	}
-	if len(a) > len(b) {
-		return 1
-	}
-	if a < b {
-		return -1
-	}
-	if a > b {
-		return 1
-	}
-	return 0
+	_, err := yangpattern.Compile(pattern)
+	return err
 }

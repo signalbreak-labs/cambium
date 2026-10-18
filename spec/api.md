@@ -894,6 +894,39 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 	    returns an empty expression and an error, without changing schema-load
 	    validity or raw `Regex()` text. The returned expression does not apply
 	    `invert-match`; consumers apply `IsInverted()` separately.
+    Cambium retains its existing named ASCII character-class compatibility
+    extension (for example `[[:alnum:]_]*`), using Go's documented named classes
+    and complements. This is an extension to XSD syntax, not Unicode category
+    matching. A standalone raw dash is allowed at the beginning/end of a positive
+    group or immediately after a completed range, as in `[a-b-c]`. The post-range
+    case preserves existing compatibility beyond the literal XSD1.0 rule; it
+    does not adopt all XSD1.1 or Go/PCRE syntax. Raw dashes remain invalid range
+    endpoints; escaped dashes may be endpoints. XSD subtraction after a nonempty
+    base retains its precedence, including in `[a-z--[aeiou]]`.
+
+    The Go API additionally exposes `Pattern.Program() (*yangpattern.Program,
+    error)` for the bounded XSD compiler/runtime in `go/yangpattern`. Compilation
+    structurally normalizes arbitrary-magnitude decimal counts, including leading
+    zeros, while preserving the raw source and separate inversion. `GoRegexp`
+    uses that same normalized representation; native-inexpressible counts may
+    still return an error without making a pattern invalid.
+
+    `Compile`/`CompileWithLimits`, `Restore`/`RestoreWithLimits`, and
+    `MatchString`/`MatchStringWithLimits` have distinct phase policies. Zero policy
+    fields select documented defaults. Matching returns an exact full-string
+    boolean or a typed operational error; exhaustion is never a nonmatch or an
+    inverted success. `ResourceError` identifies phase, stage, limit, allowance
+    and observed work. `ConfigurationError` identifies invalid source/metadata.
+    Programs are immutable and concurrency-safe; export and restore deep-copy
+    metadata. Saturating numeric bounds are precomputed once in charged
+    constructor work; no matching engine rescans arbitrary-length decimal bounds.
+    The versioned portable DAG validates all indexes, cycles, arities,
+    scalar ranges and canonical bounds, including unreachable nodes. Policies and
+    native handles are not serialized. The compiler exposes an explicit,
+    byte-copyable Apache-2.0 runtime inventory requiring only Go 1.26 stdlib.
+    This core API does not yet imply migration of every schema-default, data-tree
+    or generated-code consumer; those consumers' existing contracts still apply.
+
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices
     must not mutate the schema IR observed by later handle reads.
