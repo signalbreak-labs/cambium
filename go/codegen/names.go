@@ -56,10 +56,12 @@ type identAllocator struct {
 	names map[nameKey]string
 }
 
-func newIdentAllocator() *identAllocator {
+func newIdentAllocator(patternIdentifiers ...string) *identAllocator {
 	a := &identAllocator{used: make(map[string]bool), names: make(map[nameKey]string)}
-	for _, name := range runtimeIdentifiers {
-		a.used[name] = true
+	for _, family := range [][]string{runtimeIdentifiers, patternIdentifiers} {
+		for _, name := range family {
+			a.used[name] = true
+		}
 	}
 	return a
 }

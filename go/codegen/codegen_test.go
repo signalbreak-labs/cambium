@@ -12920,7 +12920,7 @@ const generatedGoCommandTimeout = 5 * time.Minute
 // stay open (for example, held by an orphaned grandchild) before Wait gives up.
 const generatedCommandWaitDelay = 5 * time.Second
 
-func runGeneratedGoTest(t *testing.T, generatedSrc, testBody string) {
+func runGeneratedGoTest(t *testing.T, generatedSrc, testBody string, testImports ...string) {
 	t.Helper()
 
 	// The generator must already emit gofmt-stable source; re-assert it here so
@@ -12948,7 +12948,7 @@ go 1.27.1
 	helper := `
 func ptr[T any](v T) *T { return &v }
 `
-	genTest := "package generated\n\nimport \"testing\"\n" + helper + testBody
+	genTest := "package generated\n\nimport (\n\"testing\"\n" + strings.Join(testImports, "\n") + "\n)\n" + helper + testBody
 	if err := os.WriteFile(filepath.Join(dir, "gen_test.go"), []byte(genTest), 0o644); err != nil {
 		t.Fatalf("write test source: %v", err)
 	}

@@ -623,6 +623,10 @@ func (g *goEmitter) emitJSONParseScalarValue(varName, rawExpr, keyExpr string, f
 			out.WriteString(indent + "if err != nil { return err }\n")
 			return true
 		}
+		if info, ok := stringPatternInfo(f.node); ok {
+			g.helpers["patternValidate"] = true
+			fmt.Fprintf(out, "%sif err := cambiumValidatePatternMetadata(%s); err != nil { return fmt.Errorf(\"%%s: %%w\", %s, err) }\n", indent, g.stringPatternLiteral(info), keyExpr)
+		}
 		fmt.Fprintf(out, "%ss, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
 		out.WriteString(indent + "if err != nil { return err }\n")
 		if f.isNewtype {
@@ -635,7 +639,7 @@ func (g *goEmitter) emitJSONParseScalarValue(varName, rawExpr, keyExpr string, f
 		}
 		if info, ok := stringPatternInfo(f.node); ok {
 			g.helpers["patternValidate"] = true
-			fmt.Fprintf(out, "%sif err := cambiumValidateStringPatterns(s, %s); err != nil { return fmt.Errorf(\"%%s %%v\", %s, err) }\n", indent, stringPatternLiteral(info), keyExpr)
+			fmt.Fprintf(out, "%sif err := cambiumValidateStringPatterns(s, %s); err != nil { return fmt.Errorf(\"%%s %%w\", %s, err) }\n", indent, g.stringPatternLiteral(info), keyExpr)
 		}
 		return true
 	case "Bool":
@@ -700,6 +704,10 @@ func (g *goEmitter) emitJSONParseUnionValue(varName, rawExpr, keyExpr string, f 
 		return false
 	}
 	unionName := fieldConcreteType(f)
+	if metadata := g.unionPatternLiteral(union.Members()); metadata != "nil" {
+		g.helpers["patternValidate"] = true
+		fmt.Fprintf(out, "%sif err := cambiumValidatePatternMetadata(%s); err != nil { return fmt.Errorf(\"%%s: %%w\", %s, err) }\n", indent, metadata, keyExpr)
+	}
 	fmt.Fprintf(out, "%svar %s %s\n", indent, varName, unionName)
 	out.WriteString(indent + "matched := false\n")
 	used := make(map[string]bool)
@@ -744,7 +752,7 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 		g.emitUnionStringAttempt(targetVar, matchedVar, variantType, rawExpr, keyExpr, false, member, out, indent)
 		return true
 	case cambium.ResolvedString:
-		patterns := stringPatternLiteral(member)
+		patterns := g.stringPatternLiteral(member)
 		if patterns != "nil" {
 			g.helpers["patternValidate"] = true
 		}
@@ -752,7 +760,7 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 			fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 			fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
 			if patterns != "nil" {
-				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { %s = %s; %s = true } } }\n", indent, payloadType, patterns, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
+				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { %s = %s; %s = true } else if cambiumPatternOperational(err) { return fmt.Errorf(\"%%s: %%w\", %s, err) } } }\n", indent, payloadType, patterns, targetVar, unionVariantAssignExpr(variantType, member), matchedVar, keyExpr)
 			} else {
 				fmt.Fprintf(out, "%s\tif err == nil { if candidate, err := New%s(s); err == nil { %s = %s; %s = true } }\n", indent, payloadType, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
 			}
@@ -762,7 +770,7 @@ func (g *goEmitter) emitJSONParseUnionMemberAttempt(targetVar, matchedVar, varia
 		if patterns != "nil" {
 			fmt.Fprintf(out, "%sif !%s {\n", indent, matchedVar)
 			fmt.Fprintf(out, "%s\ts, err := cambiumJSONString(%s, %s)\n", indent, rawExpr, keyExpr)
-			fmt.Fprintf(out, "%s\tif err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { candidate := s; %s = %s; %s = true } }\n", indent, patterns, targetVar, unionVariantAssignExpr(variantType, member), matchedVar)
+			fmt.Fprintf(out, "%s\tif err == nil { if err := cambiumValidateStringPatterns(s, %s); err == nil { candidate := s; %s = %s; %s = true } else if cambiumPatternOperational(err) { return fmt.Errorf(\"%%s: %%w\", %s, err) } }\n", indent, patterns, targetVar, unionVariantAssignExpr(variantType, member), matchedVar, keyExpr)
 			out.WriteString(indent + "}\n")
 			return true
 		}

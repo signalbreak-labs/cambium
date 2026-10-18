@@ -956,7 +956,21 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     compatibility change in the experimental API. `Validate` retains ordinary
     `*ValidationError` results and may join prior violations to an operational
     error. Parse/ParseModules and Serialize retain their existing public signatures.
-    Generated-code consumers are not yet migrated to this bounded matcher.
+    Generated Go uses the same bounded matcher, rendering all five inventoried
+    runtime files as unchanged declarations in its self-contained file, with
+    merged standard-library imports and no Cambium runtime dependency. Portable
+    metadata is restored before pattern value trials; ordered unions validate
+    metadata from all members before selecting a value arm. Legitimate earlier
+    value success still short-circuits later matching. Generated `Validate` and
+    `FromJSONIETF` (including operation documents) preserve the generated runtime's
+    `ResourceError`/`ConfigurationError` through `errors.As`, with field/path
+    context; ordinary pattern violations retain their existing diagnostics and
+    `Validate`'s `ValidationError`. Generation-time default member selection uses
+    the shared fallible matcher, including leafrefs/nested unions, and computes
+    fallible default sort keys before sorting. `GenerateGo` preserves operational
+    causes at its error boundary. Serializer string-returning signatures do not
+    change. These finite budgets do not guarantee every valid pattern/value pair
+    can be evaluated, and do not extend the existing XPath capability subset.
 
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices

@@ -29,6 +29,7 @@ func (g *goEmitter) documentValidationSourceChildren() []cambium.SchemaNodeRef {
 }
 
 func (g *goEmitter) emitPatternValidateHelper(out *strings.Builder) {
+	out.WriteString(g.patternRuntime.declarations)
 	out.WriteString(tmplPatternValidate)
 }
 
@@ -124,8 +125,40 @@ func (g *goEmitter) emitStringValueValidationAt(f fieldInfo, owner, pathExpr str
 	}
 }
 
+// emitPatternMetadataValidationAt checks a present field's stored program before
+// length, UTF-8, or other ordinary value checks can return. It does not match a
+// value, and absent optional leaves/empty collections retain their old behavior.
+func (g *goEmitter) emitPatternMetadataValidationAt(f fieldInfo, owner, pathExpr string, out *strings.Builder, indent string) {
+	info, ok := stringPatternInfo(f.node)
+	if !ok {
+		return
+	}
+	var condition string
+	switch f.node.Kind() {
+	case cambium.SchemaNodeKindLeaf:
+		if f.optional {
+			condition = owner + "." + f.ident + " != nil"
+		}
+	case cambium.SchemaNodeKindLeafList:
+		condition = validationLenExpr(owner, f) + " > 0"
+	default:
+		return
+	}
+	g.helpers["patternValidate"] = true
+	innerIndent := indent
+	if condition != "" {
+		fmt.Fprintf(out, "%sif %s {\n", indent, condition)
+		innerIndent += "\t"
+	}
+	fmt.Fprintf(out, "%sif err := cambiumValidatePatternMetadata(%s); err != nil { return cambiumPatternValidationError(%s, err) }\n", innerIndent, g.stringPatternLiteral(info), pathExpr)
+	if condition != "" {
+		fmt.Fprintf(out, "%s}\n", indent)
+	}
+}
+
 func (g *goEmitter) emitFieldValidation(f fieldInfo, out *strings.Builder) {
 	wire := f.wire
+	g.emitPatternMetadataValidationAt(f, "n", fmt.Sprintf("cambiumJoinPath(path, %q)", wire), out, "\t")
 	switch f.node.Kind() {
 	case cambium.SchemaNodeKindLeafList, cambium.SchemaNodeKindList:
 		lenExpr := validationLenExpr("n", f)
@@ -187,7 +220,7 @@ func (g *goEmitter) emitFieldValidation(f fieldInfo, out *strings.Builder) {
 
 	if info, ok := stringPatternInfo(f.node); ok {
 		g.helpers["patternValidate"] = true
-		patterns := stringPatternLiteral(info)
+		patterns := g.stringPatternLiteral(info)
 		pathExpr := fmt.Sprintf("cambiumJoinPath(path, %q)", wire)
 		_, isLengthType := g.stringLengthTypes[base]
 		switch f.node.Kind() {
@@ -198,14 +231,14 @@ func (g *goEmitter) emitFieldValidation(f fieldInfo, out *strings.Builder) {
 					valueExpr = fmt.Sprintf("n.%s.String()", f.ident)
 				}
 				fmt.Fprintf(out, "\tif n.%s != nil {\n", f.ident)
-				fmt.Fprintf(out, "\t\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumValidationError(%s, err.Error()) }\n", valueExpr, patterns, pathExpr)
+				fmt.Fprintf(out, "\t\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumPatternValidationError(%s, err) }\n", valueExpr, patterns, pathExpr)
 				out.WriteString("\t}\n")
 			} else {
 				valueExpr := fmt.Sprintf("n.%s", f.ident)
 				if isLengthType {
 					valueExpr = fmt.Sprintf("n.%s.String()", f.ident)
 				}
-				fmt.Fprintf(out, "\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumValidationError(%s, err.Error()) }\n", valueExpr, patterns, pathExpr)
+				fmt.Fprintf(out, "\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumPatternValidationError(%s, err) }\n", valueExpr, patterns, pathExpr)
 			}
 		case cambium.SchemaNodeKindLeafList:
 			itemsExpr := fieldItemsExpr("n", f.ident, f)
@@ -214,7 +247,7 @@ func (g *goEmitter) emitFieldValidation(f fieldInfo, out *strings.Builder) {
 				valueExpr = "v.String()"
 			}
 			fmt.Fprintf(out, "\tfor _, v := range %s {\n", itemsExpr)
-			fmt.Fprintf(out, "\t\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumValidationError(%s, err.Error()) }\n", valueExpr, patterns, pathExpr)
+			fmt.Fprintf(out, "\t\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumPatternValidationError(%s, err) }\n", valueExpr, patterns, pathExpr)
 			out.WriteString("\t}\n")
 		}
 	}
@@ -572,6 +605,7 @@ func (g *goEmitter) emitSelectedCaseDescendantValidation(children cambium.Schema
 }
 
 func (g *goEmitter) emitScalarFieldValidationAt(f fieldInfo, owner, pathExpr string, out *strings.Builder, indent string) {
+	g.emitPatternMetadataValidationAt(f, owner, pathExpr, out, indent)
 	base := fieldConcreteType(f)
 	ref := owner + "." + f.ident
 	if _, ok := g.intRangeTypes[base]; ok {
@@ -613,7 +647,7 @@ func (g *goEmitter) emitScalarFieldValidationAt(f fieldInfo, owner, pathExpr str
 
 	if info, ok := stringPatternInfo(f.node); ok {
 		g.helpers["patternValidate"] = true
-		patterns := stringPatternLiteral(info)
+		patterns := g.stringPatternLiteral(info)
 		_, isLengthType := g.stringLengthTypes[base]
 		switch f.node.Kind() {
 		case cambium.SchemaNodeKindLeaf:
@@ -623,14 +657,14 @@ func (g *goEmitter) emitScalarFieldValidationAt(f fieldInfo, owner, pathExpr str
 					valueExpr = ref + ".String()"
 				}
 				fmt.Fprintf(out, "%sif %s != nil {\n", indent, ref)
-				fmt.Fprintf(out, "%s\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumValidationError(%s, err.Error()) }\n", indent, valueExpr, patterns, pathExpr)
+				fmt.Fprintf(out, "%s\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumPatternValidationError(%s, err) }\n", indent, valueExpr, patterns, pathExpr)
 				fmt.Fprintf(out, "%s}\n", indent)
 			} else {
 				valueExpr := ref
 				if isLengthType {
 					valueExpr = ref + ".String()"
 				}
-				fmt.Fprintf(out, "%sif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumValidationError(%s, err.Error()) }\n", indent, valueExpr, patterns, pathExpr)
+				fmt.Fprintf(out, "%sif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumPatternValidationError(%s, err) }\n", indent, valueExpr, patterns, pathExpr)
 			}
 		case cambium.SchemaNodeKindLeafList:
 			itemsExpr := fieldItemsExpr(owner, f.ident, f)
@@ -639,7 +673,7 @@ func (g *goEmitter) emitScalarFieldValidationAt(f fieldInfo, owner, pathExpr str
 				valueExpr = "v.String()"
 			}
 			fmt.Fprintf(out, "%sfor _, v := range %s {\n", indent, itemsExpr)
-			fmt.Fprintf(out, "%s\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumValidationError(%s, err.Error()) }\n", indent, valueExpr, patterns, pathExpr)
+			fmt.Fprintf(out, "%s\tif err := cambiumValidateStringPatterns(%s, %s); err != nil { return cambiumPatternValidationError(%s, err) }\n", indent, valueExpr, patterns, pathExpr)
 			fmt.Fprintf(out, "%s}\n", indent)
 		}
 	}
