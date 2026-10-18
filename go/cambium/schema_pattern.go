@@ -4,10 +4,9 @@
 package cambium
 
 import (
+	"errors"
 	"fmt"
-	"regexp"
 
-	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
 	"github.com/signalbreak-labs/cambium/go/internal/yangparse"
 	"github.com/signalbreak-labs/cambium/go/yangpattern"
 )
@@ -53,23 +52,29 @@ func (m *moduleData) patternModifierRequiresYang11(st *yangparse.Statement) bool
 	return len(modifiers) == 1 && modifiers[0] == st
 }
 
-func stringPatternMatchesDefault(pattern Pattern, value string) bool {
-	re, err := regexp.Compile("^(?:" + xsdregex.NativePattern(pattern.Regex()) + ")$")
+func stringPatternMatchesDefault(pattern Pattern, value string) (bool, error) {
+	program, err := pattern.Program()
 	if err != nil {
-		return false
+		return false, err
 	}
-	matched := re.MatchString(value)
+	matched, err := program.MatchString(value)
+	if err != nil {
+		return false, err
+	}
 	if pattern.IsInverted() {
 		matched = !matched
 	}
-	return matched
+	return matched, nil
 }
 
 func patterns(st *yangparse.Statement) ([]Pattern, error) {
 	var out []Pattern
 	for _, p := range direct(st, "pattern") {
 		if err := validateYANGPatternSyntax(p.Argument); err != nil {
-			return nil, fmt.Errorf("invalid pattern %q at %s: %w", p.Argument, p.Location(), err)
+			if _, ok := errors.AsType[*yangpattern.ConfigurationError](err); ok {
+				return nil, fmt.Errorf("invalid pattern %q at %s: %w", p.Argument, p.Location(), err)
+			}
+			return nil, fmt.Errorf("cannot compile pattern %q at %s: %w", p.Argument, p.Location(), err)
 		}
 		var tag *string
 		errorMessage, err := constraintMetadataArg(p, "error-message")

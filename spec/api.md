@@ -734,14 +734,16 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     no effective members; this never restores values excluded by its restriction.
     Disabled declarations still undergo subset and assigned value/position
     validation. An empty bits value remains valid with no effective members.
-    String defaults must satisfy effective length
+    String defaults must satisfy effective length and pattern
     restrictions; binary defaults must be base64 and satisfy effective decoded
     length restrictions; identityref defaults must resolve to an identity
     strictly derived from every identity in the effective base set, and, on a node
     instantiated in an implemented module (not in an import-only module or an
     unused grouping body), from an implemented module; `empty` types
     cannot have defaults;
-    union defaults must be accepted by at least one effective member type;
+    union defaults try effective member types in declaration order until a member
+    accepts the value; an operational pattern-evaluation failure stops selection
+    and is returned rather than selecting a later member;
     leafref defaults are validated against the resolved target real type when
     resolvable.
     Generated validators and pure-Go data-tree validators likewise require an
@@ -924,8 +926,19 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     scalar ranges and canonical bounds, including unreachable nodes. Policies and
     native handles are not serialized. The compiler exposes an explicit,
     byte-copyable Apache-2.0 runtime inventory requiring only Go 1.26 stdlib.
-    This core API does not yet imply migration of every schema-default, data-tree
-    or generated-code consumer; those consumers' existing contracts still apply.
+    Schema string-default validation uses `Pattern.Program` and its bounded
+    matcher, including inherited typedef restrictions/defaults, leaf-list defaults,
+    nested ordered unions and resolved leafref real types. Native translation
+    refusal cannot by itself reject a valid default. Pattern compilation validates
+    all stored string/union pattern metadata during type construction, including
+    later union members; value matching still short-circuits in declaration order
+    and is not performed when there is no default. Ordinary proven default
+    mismatches keep their constraint diagnostics. Matcher operational errors carry
+    pattern and schema/default context, retain `CAMBIUM_E0001` at the context
+    boundary, and preserve the underlying `ResourceError` or `ConfigurationError`
+    through Go `errors.As`. A compile-resource refusal is not a syntax verdict.
+    Pure-Go data-tree and generated-code consumers are not yet migrated to this
+    bounded matcher; their existing contracts still apply.
 
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices
