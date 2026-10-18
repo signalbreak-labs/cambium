@@ -1,17 +1,44 @@
 type cambiumStringPattern struct {
-	expr       string
-	nativeExpr string
-	inverted   bool
+ expr string
+ data ProgramData
+ inverted bool
 }
 
+// An explicit wrapper marks errors from restoration/matching as operational.
+// Ordinary proven nonmatches keep their established ValidationError behavior.
+type cambiumPatternError struct { cause error }
+func (e *cambiumPatternError) Error() string { return e.cause.Error() }
+func (e *cambiumPatternError) Unwrap() error { return e.cause }
+func cambiumPatternOperational(err error) bool {
+ _,ok := errors.AsType[*cambiumPatternError](err)
+ return ok
+}
+func cambiumPatternValidationError(path string, err error) error {
+ if cambiumPatternOperational(err) { return fmt.Errorf("%s: %w",path,err) }
+ return cambiumValidationError(path,err.Error())
+}
+func cambiumRestoreStringPatterns(patterns []cambiumStringPattern) ([]*Program,error) {
+ programs := make([]*Program,len(patterns))
+ // Validate all metadata before any mismatch can short-circuit matching.
+ for i,p := range patterns {
+  program,err := Restore(p.data)
+  if err != nil { return nil,&cambiumPatternError{fmt.Errorf("pattern %q: %w",p.expr,err)} }
+  programs[i] = program
+ }
+ return programs,nil
+}
+func cambiumValidatePatternMetadata(patterns []cambiumStringPattern) error {
+ _,err := cambiumRestoreStringPatterns(patterns)
+ return err
+}
 func cambiumValidateStringPatterns(s string, patterns []cambiumStringPattern) error {
-	for _, p := range patterns {
-		re, err := regexp.Compile("^(?:" + p.nativeExpr + ")$")
-		if err != nil { return fmt.Errorf("invalid pattern expression: %w", err) }
-		matched := re.MatchString(s)
-		if p.inverted { matched = !matched }
-		if !matched { return fmt.Errorf("pattern violation") }
-	}
-	return nil
+ programs,err := cambiumRestoreStringPatterns(patterns)
+ if err != nil { return err }
+ for i,p := range patterns {
+  matched,err := programs[i].MatchString(s)
+  if err != nil { return &cambiumPatternError{fmt.Errorf("pattern %q: %w",p.expr,err)} }
+  if p.inverted { matched = !matched }
+  if !matched { return fmt.Errorf("pattern violation") }
+ }
+ return nil
 }
-

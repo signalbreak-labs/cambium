@@ -229,7 +229,10 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 		if err != nil {
 			return nil, fmt.Errorf("datatree: leaf %q: %w", sn.Name(), err)
 		}
-		n.value = canonicalLeafToken(sn, v)
+		n.value, err = canonicalLeafToken(sn, v)
+		if err != nil {
+			return nil, err
+		}
 	case sn.IsLeafList():
 		n.kind = kindLeafList
 		elems, err := splitArray(raw)
@@ -241,9 +244,15 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			if err != nil {
 				return nil, fmt.Errorf("datatree: leaf-list %q element: %w", sn.Name(), err)
 			}
-			n.values = append(n.values, canonicalLeafToken(sn, v))
+			token, err := canonicalLeafToken(sn, v)
+			if err != nil {
+				return nil, err
+			}
+			n.values = append(n.values, token)
 		}
-		sortSystemOrdered(sn, n)
+		if err := sortSystemOrdered(sn, n); err != nil {
+			return nil, err
+		}
 	case sn.IsContainer():
 		n.kind = kindContainer
 		obj, err := decodeJSONObject(fmt.Sprintf("container %q", sn.Name()), raw)
@@ -272,7 +281,9 @@ func parseNode(sn cambium.SchemaNodeRef, raw json.RawMessage) (*node, error) {
 			}
 			n.entries = append(n.entries, keysFirst(sn, kids))
 		}
-		sortSystemOrdered(sn, n)
+		if err := sortSystemOrdered(sn, n); err != nil {
+			return nil, err
+		}
 	case sn.IsAnyData():
 		n.kind = kindAnyData
 		v, err := compactJSON(raw)

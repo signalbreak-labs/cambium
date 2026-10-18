@@ -5,6 +5,7 @@ package cambium
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"iter"
 	"math/big"
@@ -3206,7 +3207,11 @@ func validateDefaultValueForType(n *schemaNodeData, def DefaultValue) error {
 	case ResolvedEmpty:
 		return fmt.Errorf("empty %s %q cannot have a default", nodeStatementKeyword(n), n.name)
 	case ResolvedUnion:
-		if !unionDefaultValueValid(n, def, resolved) {
+		valid, err := unionDefaultValueValid(n, def, resolved)
+		if err != nil {
+			return err
+		}
+		if !valid {
 			return fmt.Errorf("default %q is not valid for union %s %q", value, nodeStatementKeyword(n), n.name)
 		}
 	case ResolvedLeafRef:
@@ -3239,16 +3244,20 @@ func conditionalEnumDefault(values []EnumValue, name string) bool {
 	return ok && value.conditional
 }
 
-func unionDefaultValueValid(n *schemaNodeData, def DefaultValue, resolved ResolvedUnion) bool {
+func unionDefaultValueValid(n *schemaNodeData, def DefaultValue, resolved ResolvedUnion) (bool, error) {
 	for _, member := range resolved.Members() {
 		memberNode := *n
 		memberInfo := member
 		memberNode.typeInfo = &memberInfo
-		if validateDefaultValueForType(&memberNode, def) == nil {
-			return true
+		err := validateDefaultValueForType(&memberNode, def)
+		if err == nil {
+			return true, nil
+		}
+		if _, ok := errors.AsType[*defaultPatternEvaluationError](err); ok {
+			return false, err
 		}
 	}
-	return false
+	return false, nil
 }
 
 func bitsValueValid(values []EnumValue, value string) bool {
@@ -3295,6 +3304,13 @@ func bitsASCIIFields(value string) []string {
 	return fields
 }
 
+// defaultPatternEvaluationError distinguishes an unevaluated constraint from an
+// ordinary invalid default, so ordered unions cannot hide matcher failures.
+type defaultPatternEvaluationError struct{ err error }
+
+func (e *defaultPatternEvaluationError) Error() string { return e.err.Error() }
+func (e *defaultPatternEvaluationError) Unwrap() error { return e.err }
+
 func validateStringDefaultValue(n *schemaNodeData, value string, resolved ResolvedString) error {
 	if len(resolved.Length) > 0 {
 		length := strconv.FormatInt(int64(utf8.RuneCountInString(value)), 10)
@@ -3303,7 +3319,13 @@ func validateStringDefaultValue(n *schemaNodeData, value string, resolved Resolv
 		}
 	}
 	for _, pattern := range resolved.Patterns {
-		matched := stringPatternMatchesDefault(pattern, value)
+		matched, err := stringPatternMatchesDefault(pattern, value)
+		if err != nil {
+			return &defaultPatternEvaluationError{err: fmt.Errorf(
+				"cannot evaluate pattern %q for string %s %q at %s with default %q: %w",
+				pattern.Regex(), nodeStatementKeyword(n), n.name, parentPath(n), value, err,
+			)}
+		}
 		if !matched {
 			return fmt.Errorf("default %q does not satisfy pattern for string %s %q", value, nodeStatementKeyword(n), n.name)
 		}
@@ -6707,133 +6729,6 @@ func intMax(base BaseType) string {
 	default:
 		return "0"
 	}
-}
-
-var yangPatternCategories = map[string]struct{}{
-	"C":  {},
-	"Cc": {},
-	"Cf": {},
-	"Cn": {},
-	"Co": {},
-	"Cs": {},
-	"L":  {},
-	"Ll": {},
-	"Lm": {},
-	"Lo": {},
-	"Lt": {},
-	"Lu": {},
-	"M":  {},
-	"Mc": {},
-	"Me": {},
-	"Mn": {},
-	"N":  {},
-	"Nd": {},
-	"Nl": {},
-	"No": {},
-	"P":  {},
-	"Pc": {},
-	"Pd": {},
-	"Pe": {},
-	"Pf": {},
-	"Pi": {},
-	"Po": {},
-	"Ps": {},
-	"S":  {},
-	"Sc": {},
-	"Sk": {},
-	"Sm": {},
-	"So": {},
-	"Z":  {},
-	"Zl": {},
-	"Zp": {},
-	"Zs": {},
-}
-
-var yangPatternUnicodeBlocks = map[string]struct{}{
-	"BasicLatin":                         {},
-	"Latin-1Supplement":                  {},
-	"LatinExtended-A":                    {},
-	"LatinExtended-B":                    {},
-	"IPAExtensions":                      {},
-	"SpacingModifierLetters":             {},
-	"CombiningDiacriticalMarks":          {},
-	"Greek":                              {},
-	"Cyrillic":                           {},
-	"Armenian":                           {},
-	"Hebrew":                             {},
-	"Arabic":                             {},
-	"Syriac":                             {},
-	"Thaana":                             {},
-	"Devanagari":                         {},
-	"Bengali":                            {},
-	"Gurmukhi":                           {},
-	"Gujarati":                           {},
-	"Oriya":                              {},
-	"Tamil":                              {},
-	"Telugu":                             {},
-	"Kannada":                            {},
-	"Malayalam":                          {},
-	"Sinhala":                            {},
-	"Thai":                               {},
-	"Lao":                                {},
-	"Tibetan":                            {},
-	"Myanmar":                            {},
-	"Georgian":                           {},
-	"HangulJamo":                         {},
-	"Ethiopic":                           {},
-	"Cherokee":                           {},
-	"UnifiedCanadianAboriginalSyllabics": {},
-	"Ogham":                              {},
-	"Runic":                              {},
-	"Khmer":                              {},
-	"Mongolian":                          {},
-	"LatinExtendedAdditional":            {},
-	"GreekExtended":                      {},
-	"GeneralPunctuation":                 {},
-	"SuperscriptsandSubscripts":          {},
-	"CurrencySymbols":                    {},
-	"CombiningMarksforSymbols":           {},
-	"LetterlikeSymbols":                  {},
-	"NumberForms":                        {},
-	"Arrows":                             {},
-	"MathematicalOperators":              {},
-	"MiscellaneousTechnical":             {},
-	"ControlPictures":                    {},
-	"OpticalCharacterRecognition":        {},
-	"EnclosedAlphanumerics":              {},
-	"BoxDrawing":                         {},
-	"BlockElements":                      {},
-	"GeometricShapes":                    {},
-	"MiscellaneousSymbols":               {},
-	"Dingbats":                           {},
-	"BraillePatterns":                    {},
-	"CJKRadicalsSupplement":              {},
-	"KangxiRadicals":                     {},
-	"IdeographicDescriptionCharacters":   {},
-	"CJKSymbolsandPunctuation":           {},
-	"Hiragana":                           {},
-	"Katakana":                           {},
-	"Bopomofo":                           {},
-	"HangulCompatibilityJamo":            {},
-	"Kanbun":                             {},
-	"BopomofoExtended":                   {},
-	"EnclosedCJKLettersandMonths":        {},
-	"CJKCompatibility":                   {},
-	"CJKUnifiedIdeographsExtensionA":     {},
-	"CJKUnifiedIdeographs":               {},
-	"YiSyllables":                        {},
-	"YiRadicals":                         {},
-	"HangulSyllables":                    {},
-	"PrivateUse":                         {},
-	"CJKCompatibilityIdeographs":         {},
-	"AlphabeticPresentationForms":        {},
-	"ArabicPresentationForms-A":          {},
-	"CombiningHalfMarks":                 {},
-	"CJKCompatibilityForms":              {},
-	"SmallFormVariants":                  {},
-	"ArabicPresentationForms-B":          {},
-	"HalfwidthandFullwidthForms":         {},
-	"Specials":                           {},
 }
 
 func (m *moduleData) enumValues(st *yangparse.Statement, keyword, valueKeyword string) ([]EnumValue, error) {

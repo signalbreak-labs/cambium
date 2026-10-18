@@ -160,9 +160,29 @@ printed as the string it was written as.
   cardinality (`min`/`max-elements`), choice/case exclusivity, leaf-list value
   uniqueness, list-key and `unique`-statement uniqueness, leafref instance
   existence (leaves and leaf-lists), and `must`/`when` constraints over a
-  growing XPath subset. It returns a `*ValidationError` listing every violation.
-- `(*Tree).ApplyDefaults()` fills absent leaves and leaf-lists with their schema
-  defaults inside the data that is present.
+  growing XPath subset. Ordinary violations return a `*ValidationError`. Matcher
+  operational failures return their wrapped typed cause, optionally joined with
+  violations already found.
+- `(*Tree).ApplyDefaults() error` fills absent leaves and leaf-lists with their schema
+  defaults inside the data that is present. On error, the original tree (including
+  nested values and ordering) is unchanged.
+
+Always check the result:
+
+```go
+if err := tree.ApplyDefaults(); err != nil {
+    return err
+}
+```
+
+This experimental method previously returned no value. Ordinary Go call
+statements remain legal but would discard the error; method values typed `func()`
+and interfaces declaring `ApplyDefaults()` require migration to the new signature.
+String patterns and XPath `re-match` use the shared bounded XSD matcher, including
+large and leading-zero counts. A resource or configuration failure preserves its
+`yangpattern` error cause through `errors.As`; it cannot select a later union arm,
+become an inverted success, or silently omit a default. The same error propagation
+applies to parsing, canonical sorting, and XML serialization.
 
 Validation follows the data model RFC 7950 describes, with the verdicts libyang
 gives:
@@ -210,7 +230,9 @@ several modules. It does **not** yet handle:
   plus the YANG functions `re-match`, `bit-is-set`, `derived-from`, and
   `derived-from-or-self`, and **skips** `deref()` (and any other unimplemented
   function) rather than mis-evaluating it. Validation that depends on an
-  unsupported construct is skipped, not failed.
+  unsupported construct is skipped, not failed. Operational errors from supported
+  `re-match` expressions are returned; unreachable operands of `and`/`or` stay
+  unevaluated.
 
 In addition, leaf values are currently held as raw JSON tokens with XML conversion
 layered on top; the planned neutral value-representation refactor will change the

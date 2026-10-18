@@ -6,11 +6,10 @@ package datatree
 import (
 	"fmt"
 	"math"
-	"regexp"
 	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
+	"github.com/signalbreak-labs/cambium/go/yangpattern"
 )
 
 // Core XPath 1.0 function library. Functions outside this set return an error so
@@ -158,14 +157,15 @@ func (ev *evaluator) evalCall(x *xCall, c ectx) (xval, error) {
 			return xval{}, err
 		}
 		pattern := args[1].toStr()
-		if unsupported := xsdregex.UnsupportedNativeSyntax(pattern); unsupported != "" {
-			return xval{}, fmt.Errorf("re-match() unsupported regex syntax: %s", unsupported)
-		}
-		re, err := regexp.Compile("^(?:" + xsdregex.NativePattern(pattern) + ")$")
+		program, err := yangpattern.Compile(pattern)
 		if err != nil {
-			return xval{}, fmt.Errorf("re-match() regex compile: %w", err)
+			return xval{}, &patternEvaluationError{fmt.Errorf("re-match pattern %q: %w", pattern, err)}
 		}
-		return boolVal(re.MatchString(args[0].toStr())), nil
+		matched, err := program.MatchString(args[0].toStr())
+		if err != nil {
+			return xval{}, &patternEvaluationError{fmt.Errorf("re-match pattern %q: %w", pattern, err)}
+		}
+		return boolVal(matched), nil
 	case "bit-is-set":
 		if err := arity(2); err != nil {
 			return xval{}, err

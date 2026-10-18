@@ -14,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
 )
 
 // intImplicitBounds is the inclusive range each integer base type permits before
@@ -40,16 +39,16 @@ var intImplicitBounds = map[cambium.IntKind][2]string{
 // leafrefs (delegated to the referenced type), and identityref derivation.
 // Leafref instance existence and instance-identifier resolution need data/path
 // context and are later slices; instance-identifiers get a shape check only.
-func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModule string, out *[]string) {
+func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModule string, out *[]string) error {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedString:
 		s, ok := jsonStringValue(raw)
 		if !ok {
 			*out = append(*out, fmt.Sprintf("%s: expected a JSON string", path))
-			return
+			return nil
 		}
 		checkLengthRanges(int64(utf8.RuneCountInString(s)), r.Length, path, out)
-		checkPatterns(s, r.Patterns, path, out)
+		return checkPatterns(s, r.Patterns, path, out)
 	case cambium.ResolvedInt:
 		text, ok := integerText(raw, r.Kind)
 		if !ok {
@@ -58,16 +57,16 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModul
 			} else {
 				*out = append(*out, fmt.Sprintf("%s: expected an integer JSON number", path))
 			}
-			return
+			return nil
 		}
 		if len(text) > maxNumericLexicalLen {
 			*out = append(*out, fmt.Sprintf("%s: integer value is longer than %d characters", path, maxNumericLexicalLen))
-			return
+			return nil
 		}
 		v, ok := new(big.Int).SetString(text, 10)
 		if !ok {
 			*out = append(*out, fmt.Sprintf("%s: %q is not a valid integer", path, text))
-			return
+			return nil
 		}
 		checkIntImplicit(v, r.Kind, path, out)
 		if len(r.Range) > 0 && !intInRanges(v, r.Range) {
@@ -77,7 +76,7 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModul
 		s, ok := jsonStringValue(raw)
 		if !ok {
 			*out = append(*out, fmt.Sprintf("%s: decimal64 must be a JSON string", path))
-			return
+			return nil
 		}
 		checkDecimal(s, r, path, out)
 	case cambium.ResolvedBoolean:
@@ -99,37 +98,41 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModul
 		s, ok := jsonStringValue(raw)
 		if !ok {
 			*out = append(*out, fmt.Sprintf("%s: binary must be a base64 JSON string", path))
-			return
+			return nil
 		}
 		decoded, err := decodeBinaryValue(s)
 		if err != nil {
 			*out = append(*out, fmt.Sprintf("%s: invalid base64: %v", path, err))
-			return
+			return nil
 		}
 		checkLengthRanges(int64(len(decoded)), r.Length, path, out)
 	case cambium.ResolvedUnion:
 		members := r.Members()
 		if len(members) == 0 {
-			return
+			return nil
 		}
 		for _, m := range members {
 			var trial []string
-			validateLeafValue(m, raw, path, leafModule, &trial)
+			if err := validateLeafValue(m, raw, path, leafModule, &trial); err != nil {
+				return err
+			}
 			if len(trial) == 0 {
-				return // first matching member type wins
+				return nil // first matching member type wins
 			}
 		}
 		*out = append(*out, fmt.Sprintf("%s: %s matches no union member type", path, rawDisplay(raw)))
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
-			validateLeafValue(*rt, raw, path, leafModule, out)
+			if err := validateLeafValue(*rt, raw, path, leafModule, out); err != nil {
+				return err
+			}
 		}
 		// instance existence is a later slice
 	case cambium.ResolvedIdentityRef:
 		s, ok := jsonStringValue(raw)
 		if !ok {
 			*out = append(*out, fmt.Sprintf("%s: expected a JSON string", path))
-			return
+			return nil
 		}
 		validateIdentityRef(r, s, path, leafModule, out)
 	case cambium.ResolvedInstanceIdentifier:
@@ -141,6 +144,7 @@ func validateLeafValue(ti cambium.TypeInfo, raw json.RawMessage, path, leafModul
 	default:
 		// ResolvedUnknown or a future type: do not guess, do not false-flag.
 	}
+	return nil
 }
 
 func jsonStringValue(raw json.RawMessage) (string, bool) {
@@ -333,15 +337,16 @@ func lengthInRange(n int64, r cambium.RangeBound) bool {
 	return true
 }
 
-func checkPatterns(s string, patterns []cambium.Pattern, path string, out *[]string) {
+func checkPatterns(s string, patterns []cambium.Pattern, path string, out *[]string) error {
 	for _, p := range patterns {
-		re, err := regexp.Compile("^(?:" + xsdregex.NativePattern(p.Regex()) + ")$")
+		program, err := p.Program()
 		if err != nil {
-			// Pattern compilability was already checked at schema build; skip
-			// rather than emit a spurious data violation.
-			continue
+			return &patternEvaluationError{fmt.Errorf("%s: pattern %q: %w", path, p.Regex(), err)}
 		}
-		matched := re.MatchString(s)
+		matched, err := program.MatchString(s)
+		if err != nil {
+			return &patternEvaluationError{fmt.Errorf("%s: pattern %q: %w", path, p.Regex(), err)}
+		}
 		if p.IsInverted() {
 			if matched {
 				*out = append(*out, fmt.Sprintf("%s: value matches inverted pattern %q", path, p.Regex()))
@@ -350,6 +355,7 @@ func checkPatterns(s string, patterns []cambium.Pattern, path string, out *[]str
 			*out = append(*out, fmt.Sprintf("%s: value does not match pattern %q", path, p.Regex()))
 		}
 	}
+	return nil
 }
 
 func checkBits(raw json.RawMessage, values []cambium.EnumValue, path string, out *[]string) {

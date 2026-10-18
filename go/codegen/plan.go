@@ -3,7 +3,10 @@
 
 package codegen
 
-import "github.com/signalbreak-labs/cambium/go/cambium"
+import (
+	"github.com/signalbreak-labs/cambium/go/cambium"
+	"github.com/signalbreak-labs/cambium/go/yangpattern"
+)
 
 // PlanVersion is the stable version tag for the public codegen planning API.
 const PlanVersion = "cambium.codegen.plan.v1"
@@ -45,10 +48,13 @@ type FieldPlan struct {
 // TypePlan summarizes field type metadata. GoType is the current Go renderer's
 // type expression; Base and Resolved expose target-neutral Cambium type data.
 type TypePlan struct {
-	GoType        string
-	Base          cambium.BaseType
-	Resolved      cambium.ResolvedType
-	JSONKind      string
+	GoType   string
+	Base     cambium.BaseType
+	Resolved cambium.ResolvedType
+	JSONKind string
+	// IsNewtype classifies a scalar field as a generated range/length/decimal64
+	// wrapper. Collection fields remain false even when their elements use wrappers;
+	// Base and Resolved describe those element types.
 	IsNewtype     bool
 	IsEnum        bool
 	IsBits        bool
@@ -101,7 +107,7 @@ func Plan(ctx *cambium.Context, module string) (*ModulePlan, error) {
 	for identity := range mod.Identities() {
 		plan.Identities = append(plan.Identities, identityPlan(identity))
 	}
-	return plan, nil
+	return plan, g.emitErr
 }
 
 func (g *goEmitter) initPlanningState() {
@@ -113,7 +119,13 @@ func (g *goEmitter) initPlanningState() {
 	g.bitsTypes = make(map[string]bool)
 	g.identityrefTypes = make(map[string]bool)
 	g.unionTypes = make(map[string]bool)
-	g.names = newIdentAllocator()
+	var err error
+	g.patternRuntime, err = readPatternRuntime(yangpattern.RuntimeSources())
+	g.names = newIdentAllocator(g.patternRuntime.names...)
+	if err != nil {
+		g.recordEmitError(err)
+		return
+	}
 }
 
 func (g *goEmitter) appendRecordPlans(plan *ModulePlan, field fieldInfo) {
@@ -179,7 +191,7 @@ func typePlan(field fieldInfo) TypePlan {
 	plan := TypePlan{
 		GoType:        field.goType,
 		JSONKind:      field.jsonKind,
-		IsNewtype:     field.isNewtype,
+		IsNewtype:     field.isNewtype && field.node.Kind() == cambium.SchemaNodeKindLeaf,
 		IsEnum:        field.isEnum,
 		IsBits:        field.isBits,
 		IsIdentityRef: field.isIdentityref,

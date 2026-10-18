@@ -734,14 +734,16 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     no effective members; this never restores values excluded by its restriction.
     Disabled declarations still undergo subset and assigned value/position
     validation. An empty bits value remains valid with no effective members.
-    String defaults must satisfy effective length
+    String defaults must satisfy effective length and pattern
     restrictions; binary defaults must be base64 and satisfy effective decoded
     length restrictions; identityref defaults must resolve to an identity
     strictly derived from every identity in the effective base set, and, on a node
     instantiated in an implemented module (not in an import-only module or an
     unused grouping body), from an implemented module; `empty` types
     cannot have defaults;
-    union defaults must be accepted by at least one effective member type;
+    union defaults try effective member types in declaration order until a member
+    accepts the value; an operational pattern-evaluation failure stops selection
+    and is returned rather than selecting a later member;
     leafref defaults are validated against the resolved target real type when
     resolvable.
     Generated validators and pure-Go data-tree validators likewise require an
@@ -894,6 +896,95 @@ Backend/data-tier fixtures where both sides have a comparable backend.
 	    returns an empty expression and an error, without changing schema-load
 	    validity or raw `Regex()` text. The returned expression does not apply
 	    `invert-match`; consumers apply `IsInverted()` separately.
+    Cambium retains its existing named ASCII character-class compatibility
+    extension (for example `[[:alnum:]_]*`), using Go's documented named classes
+    and complements. This is an extension to XSD syntax, not Unicode category
+    matching. A standalone raw dash is allowed at the beginning/end of a positive
+    group or immediately after a completed range, as in `[a-b-c]`. The post-range
+    case preserves existing compatibility beyond the literal XSD1.0 rule; it
+    does not adopt all XSD1.1 or Go/PCRE syntax. Raw dashes remain invalid range
+    endpoints; escaped dashes may be endpoints. XSD subtraction after a nonempty
+    base retains its precedence, including in `[a-z--[aeiou]]`.
+
+    The Go API additionally exposes `Pattern.Program() (*yangpattern.Program,
+    error)` for the bounded XSD compiler/runtime in `go/yangpattern`. Compilation
+    structurally normalizes arbitrary-magnitude decimal counts, including leading
+    zeros, while preserving the raw source and separate inversion. `GoRegexp`
+    uses that same normalized representation; native-inexpressible counts may
+    still return an error without making a pattern invalid.
+
+    `Compile`/`CompileWithLimits`, `Restore`/`RestoreWithLimits`, and
+    `MatchString`/`MatchStringWithLimits` have distinct phase policies. Zero policy
+    fields select documented defaults. Matching returns an exact full-string
+    boolean or a typed operational error; exhaustion is never a nonmatch or an
+    inverted success. `ResourceError` identifies phase, stage, limit, allowance
+    and observed work. `ConfigurationError` identifies invalid source/metadata.
+    Programs are immutable and concurrency-safe; export and restore deep-copy
+    metadata. Saturating numeric bounds are precomputed once in charged
+    constructor work; no matching engine rescans arbitrary-length decimal bounds.
+    The versioned portable DAG validates all indexes, cycles, arities,
+    scalar ranges and canonical bounds, including unreachable nodes. Policies and
+    native handles are not serialized. The compiler exposes an explicit,
+    byte-copyable Apache-2.0 runtime inventory requiring only Go 1.26 stdlib.
+    Schema string-default validation uses `Pattern.Program` and its bounded
+    matcher, including inherited typedef restrictions/defaults, leaf-list defaults,
+    nested ordered unions and resolved leafref real types. Native translation
+    refusal cannot by itself reject a valid default. Pattern compilation validates
+    all stored string/union pattern metadata during type construction, including
+    later union members; value matching still short-circuits in declaration order
+    and is not performed when there is no default. Ordinary proven default
+    mismatches keep their constraint diagnostics. Matcher operational errors carry
+    pattern and schema/default context, retain `CAMBIUM_E0001` at the context
+    boundary, and preserve the underlying `ResourceError` or `ConfigurationError`
+    through Go `errors.As`. A compile-resource refusal is not a syntax verdict.
+    The experimental pure-Go data tree uses this same bounded matcher for string
+    restrictions and supported XPath `re-match`, with exact full-string XSD
+    semantics. Matcher failures propagate through ordered union selection,
+    canonicalization, ordering, XML conversion, validation and defaults to the
+    initiating public operation, preserving their typed cause through `errors.As`.
+    Inversion applies only to successful booleans. Ordinary mismatch remains a
+    validation violation; unsupported XPath retains its existing skip/inactive
+    policy, and `and`/`or` retain short-circuit evaluation.
+
+    `Tree.ApplyDefaults() error` is transactional: failure leaves all original
+    nodes, nested values and ordering unchanged. Successful application preserves
+    schema order, keys-first order, user order, canonical system order and
+    idempotence. Guards see the initial tree view, without fixed-point reevaluation.
+    Callers must handle the returned error. Ordinary Go call statements remain
+    legal, but method values typed `func()` and interfaces declaring
+    `ApplyDefaults()` must migrate to the error-returning signature; this is a real
+    compatibility change in the experimental API. `Validate` retains ordinary
+    `*ValidationError` results and may join prior violations to an operational
+    error. Parse/ParseModules and Serialize retain their existing public signatures.
+    Generated Go uses the same bounded matcher, rendering all five inventoried
+    runtime files as unchanged declarations in its self-contained file, with
+    merged standard-library imports and no Cambium runtime dependency. Portable
+    metadata is restored before pattern value trials; ordered unions validate
+    metadata from all members before selecting a value arm. Legitimate earlier
+    value success still short-circuits later matching. Generated `Validate` and
+    `FromJSONIETF` (including operation documents) preserve the generated runtime's
+    `ResourceError`/`ConfigurationError` through `errors.As`, with field/path
+    context; ordinary pattern violations retain their existing diagnostics and
+    `Validate`'s `ValidationError`. Generation-time default member selection uses
+    the shared fallible matcher, including leafrefs/nested unions, and computes
+    fallible default sort keys before sorting. `GenerateGo` preserves operational
+    causes at its error boundary. Serializer string-returning signatures do not
+    change. These finite budgets do not guarantee every valid pattern/value pair
+    can be evaluated, and do not extend the existing XPath capability subset.
+
+    Before schema names are allocated, Go codegen reserves every package-level
+    declaration in the portable pattern runtime, whether or not a schema uses
+    patterns or emits that runtime. This keeps generated schema names stable when
+    pattern helpers later become necessary, while preserving the runtime
+    declarations unchanged in the single self-contained generated file. It is a
+    bounded generated-source compatibility exception: an existing no-pattern
+    schema may gain suffixed public names after regeneration (for example, module
+    `program` changes root type `Program` to `Program2`), and callers of affected
+    generated or planned identifiers must migrate. The public `PlanVersion`
+    remains `cambium.codegen.plan.v1` because the planning record format is
+    unchanged; it does not guarantee identical name values across generator
+    versions. See the [codegen generated-name migration guide](../docs/guides/codegen.md#generated-names).
+
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices
     must not mutate the schema IR observed by later handle reads.

@@ -7,13 +7,12 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/big"
-	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
+	"github.com/signalbreak-labs/cambium/go/yangpattern"
 )
 
 func (g *goEmitter) emitFieldXML(f fieldInfo, currentNS string, out *strings.Builder) {
@@ -603,7 +602,12 @@ func (g *goEmitter) jsonLiteralExpr(valueRef string, f fieldInfo) string {
 
 func (g *goEmitter) defaultJSONLiteralExpr(f fieldInfo, def cambium.DefaultValue) string {
 	if info, ok := f.node.LeafType(); ok {
-		if literal, ok := g.typeDefaultJSONLiteralExpr(info, def, f.node.Module()); ok {
+		literal, ok, err := g.typeDefaultJSONLiteralExpr(info, def, f.node.Module())
+		if err != nil {
+			g.recordEmitError(fmt.Errorf("default for %s: %w", f.node.Path(), err))
+			return "\"\""
+		}
+		if ok {
 			return literal
 		}
 		g.recordEmitError(fmt.Errorf("invalid default %q for %s", def.Value(), f.node.Path()))
@@ -623,72 +627,80 @@ func (g *goEmitter) defaultJSONLiteralExpr(f fieldInfo, def cambium.DefaultValue
 	}
 }
 
-func (g *goEmitter) typeDefaultJSONLiteralExpr(info cambium.TypeInfo, def cambium.DefaultValue, leafModule cambium.Module) (string, bool) {
+func (g *goEmitter) typeDefaultJSONLiteralExpr(info cambium.TypeInfo, def cambium.DefaultValue, leafModule cambium.Module) (text string, matched bool, err error) {
 	value := def.Value()
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
 			return g.typeDefaultJSONLiteralExpr(*realtype, def, leafModule)
 		}
-		return g.jsonStringLiteralExpr(value), true
+		return g.jsonStringLiteralExpr(value), true, nil
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			if literal, ok := g.typeDefaultJSONLiteralExpr(member, def, leafModule); ok {
-				return literal, true
+			literal, ok, err := g.typeDefaultJSONLiteralExpr(member, def, leafModule)
+			if err != nil {
+				return "", false, err
+			}
+			if ok {
+				return literal, true, nil
 			}
 		}
-		return "", false
+		return "", false, nil
 	case cambium.ResolvedBoolean:
 		if value == "true" || value == "false" {
-			return strconv.Quote(value), true
+			return strconv.Quote(value), true, nil
 		}
-		return "", false
+		return "", false, nil
 	case cambium.ResolvedInt:
 		normalized, ok := integerDefaultJSONValue(value, r)
 		if !ok {
-			return "", false
+			return "", false, nil
 		}
 		if jsonIntegerKindQuoted(r.Kind) {
-			return strconv.Quote(`"` + normalized + `"`), true
+			return strconv.Quote(`"` + normalized + `"`), true, nil
 		}
-		return strconv.Quote(normalized), true
+		return strconv.Quote(normalized), true, nil
 	case cambium.ResolvedDecimal64:
 		canonical, ok := decimal64DefaultCanonical(value, r)
 		if !ok {
-			return "", false
+			return "", false, nil
 		}
-		return strconv.Quote(`"` + canonical + `"`), true
+		return strconv.Quote(`"` + canonical + `"`), true, nil
 	case cambium.ResolvedString:
-		if !stringDefaultMatches(value, r) {
-			return "", false
+		matched, err := stringDefaultMatches(value, r)
+		if err != nil {
+			return "", false, err
 		}
-		return g.jsonStringLiteralExpr(value), true
+		if !matched {
+			return "", false, nil
+		}
+		return g.jsonStringLiteralExpr(value), true, nil
 	case cambium.ResolvedBinary:
 		if !binaryDefaultMatches(value, r) {
-			return "", false
+			return "", false, nil
 		}
-		return g.jsonStringLiteralExpr(value), true
+		return g.jsonStringLiteralExpr(value), true, nil
 	case cambium.ResolvedEnumeration:
 		if !enumDefaultMatches(value, r.Values()) {
-			return "", false
+			return "", false, nil
 		}
-		return g.jsonStringLiteralExpr(value), true
+		return g.jsonStringLiteralExpr(value), true, nil
 	case cambium.ResolvedBits:
 		canonical, ok := bitsDefaultCanonical(value, r.Values())
 		if !ok {
-			return "", false
+			return "", false, nil
 		}
-		return g.jsonStringLiteralExpr(canonical), true
+		return g.jsonStringLiteralExpr(canonical), true, nil
 	case cambium.ResolvedIdentityRef:
 		jsonName, ok := g.identityrefDefaultJSONName(value, r, def.SourceModule(), leafModule)
 		if !ok {
-			return "", false
+			return "", false, nil
 		}
-		return g.jsonStringLiteralExpr(jsonName), true
+		return g.jsonStringLiteralExpr(jsonName), true, nil
 	case cambium.ResolvedInstanceIdentifier, cambium.ResolvedUnknown:
-		return g.jsonStringLiteralExpr(value), true
+		return g.jsonStringLiteralExpr(value), true, nil
 	default:
-		return "", false
+		return "", false, nil
 	}
 }
 
@@ -856,24 +868,31 @@ func formatDecimal64Raw(raw int64, fractionDigits uint8) string {
 	return fmt.Sprintf("%d.%s", whole, trimmed)
 }
 
-func stringDefaultMatches(value string, resolved cambium.ResolvedString) bool {
-	length := int64(len([]rune(value)))
-	if !lengthDefaultMatches(length, resolved.Length) {
-		return false
-	}
-	for _, pattern := range resolved.Patterns {
-		matched, err := regexp.MatchString("^(?:"+xsdregex.NativePattern(pattern.Regex())+")$", value)
+func stringDefaultMatches(value string, resolved cambium.ResolvedString) (bool, error) {
+	programs := make([]*yangpattern.Program, len(resolved.Patterns))
+	for i, pattern := range resolved.Patterns {
+		program, err := pattern.Program()
 		if err != nil {
-			return false
+			return false, fmt.Errorf("pattern %q: %w", pattern.Regex(), err)
+		}
+		programs[i] = program
+	}
+	if !lengthDefaultMatches(int64(len([]rune(value))), resolved.Length) {
+		return false, nil
+	}
+	for i, pattern := range resolved.Patterns {
+		matched, err := programs[i].MatchString(value)
+		if err != nil {
+			return false, fmt.Errorf("pattern %q: %w", pattern.Regex(), err)
 		}
 		if pattern.IsInverted() {
 			matched = !matched
 		}
 		if !matched {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
 func binaryDefaultMatches(value string, resolved cambium.ResolvedBinary) bool {
@@ -1005,7 +1024,12 @@ func (g *goEmitter) emitLeafListJSONArray(wire, writer, depthExpr, elemDepthExpr
 }
 
 func (g *goEmitter) emitDefaultLeafListJSONArray(wire, writer, depthExpr, elemDepthExpr string, defaults []cambium.DefaultValue, f fieldInfo, out *strings.Builder) {
-	defaults = g.orderedDefaultValues(defaults, f)
+	var err error
+	defaults, err = g.orderedDefaultValues(defaults, f)
+	if err != nil {
+		g.recordEmitError(err)
+		return
+	}
 	fmt.Fprintf(out, "\t\tif !first { %s.WriteByte(',') }\n", writer)
 	out.WriteString("\t\tfirst = false\n")
 	fmt.Fprintf(out, "\t\tcambiumJSONIndent(%s, %s)\n", writer, depthExpr)
@@ -1021,117 +1045,133 @@ func (g *goEmitter) emitDefaultLeafListJSONArray(wire, writer, depthExpr, elemDe
 	fmt.Fprintf(out, "\t\t%s.WriteByte(']')\n", writer)
 }
 
-func (g *goEmitter) orderedDefaultValues(defaults []cambium.DefaultValue, f fieldInfo) []cambium.DefaultValue {
-	out := append([]cambium.DefaultValue(nil), defaults...)
-	if len(out) < 2 || !g.shouldSortCollection(f) {
-		return out
-	}
-	info, ok := f.node.LeafType()
-	if !ok {
-		sort.Slice(out, func(i, j int) bool {
-			return out[i].Value() < out[j].Value()
-		})
-		return out
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		return g.defaultValueLess(info, out[i], out[j], f)
-	})
-	return out
+// defaultSortKey is computed before sorting so fallible union trials never run
+// inside a comparator or after the collection has started being reordered.
+type defaultSortKey struct {
+	text   string
+	number *big.Int
 }
 
-func (g *goEmitter) defaultValueLess(info cambium.TypeInfo, left, right cambium.DefaultValue, f fieldInfo) bool {
-	if f.isUnion {
-		leftText, leftOK := g.defaultTextForType(info, left, f.node.Module())
-		rightText, rightOK := g.defaultTextForType(info, right, f.node.Module())
-		if leftOK && rightOK {
-			return leftText < rightText
+func (g *goEmitter) orderedDefaultValues(defaults []cambium.DefaultValue, f fieldInfo) ([]cambium.DefaultValue, error) {
+	out := slices.Clone(defaults)
+	if len(out) < 2 || !g.shouldSortCollection(f) {
+		return out, nil
+	}
+	info, hasType := f.node.LeafType()
+	type keyedDefault struct {
+		value cambium.DefaultValue
+		key   defaultSortKey
+	}
+	keyed := make([]keyedDefault, len(out))
+	for i, value := range out {
+		key := defaultSortKey{text: value.Value()}
+		if hasType {
+			var err error
+			key, err = g.defaultValueSortKey(info, value, f)
+			if err != nil {
+				return nil, fmt.Errorf("default for %s: %w", f.node.Path(), err)
+			}
 		}
-		return left.Value() < right.Value()
+		keyed[i] = keyedDefault{value, key}
+	}
+	slices.SortStableFunc(keyed, func(a, b keyedDefault) int {
+		if a.key.number != nil && b.key.number != nil {
+			return a.key.number.Cmp(b.key.number)
+		}
+		return strings.Compare(a.key.text, b.key.text)
+	})
+	for i, item := range keyed {
+		out[i] = item.value
+	}
+	return out, nil
+}
+
+func (g *goEmitter) defaultValueSortKey(info cambium.TypeInfo, value cambium.DefaultValue, f fieldInfo) (defaultSortKey, error) {
+	text, ok, err := g.defaultTextForType(info, value, f.node.Module())
+	if err != nil {
+		return defaultSortKey{}, err
+	}
+	if !ok {
+		text = value.Value()
+	}
+	key := defaultSortKey{text: text}
+	if f.isUnion {
+		return key, nil
 	}
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
-			return g.defaultValueLess(*realtype, left, right, f)
-		}
-	case cambium.ResolvedBoolean:
-		if (left.Value() == "true" || left.Value() == "false") && (right.Value() == "true" || right.Value() == "false") {
-			return left.Value() == "false" && right.Value() == "true"
+			return g.defaultValueSortKey(*realtype, value, f)
 		}
 	case cambium.ResolvedInt:
-		leftValue, leftOK := integerDefaultSortValue(left.Value(), r)
-		rightValue, rightOK := integerDefaultSortValue(right.Value(), r)
-		if leftOK && rightOK {
-			return leftValue.Cmp(rightValue) < 0
-		}
+		key.number, _ = integerDefaultSortValue(value.Value(), r)
 	case cambium.ResolvedDecimal64:
-		fd := r.FractionDigits().Value()
-		leftRaw, leftOK := decimal64DefaultRaw(left.Value(), fd)
-		rightRaw, rightOK := decimal64DefaultRaw(right.Value(), fd)
-		if leftOK && rightOK {
-			return leftRaw < rightRaw
-		}
-	case cambium.ResolvedIdentityRef:
-		leftText, leftOK := g.identityrefDefaultJSONName(left.Value(), r, left.SourceModule(), f.node.Module())
-		rightText, rightOK := g.identityrefDefaultJSONName(right.Value(), r, right.SourceModule(), f.node.Module())
-		if leftOK && rightOK {
-			return leftText < rightText
+		if raw, ok := decimal64DefaultRaw(value.Value(), r.FractionDigits().Value()); ok {
+			key.number = big.NewInt(raw)
 		}
 	}
-	leftText, leftOK := g.defaultTextForType(info, left, f.node.Module())
-	rightText, rightOK := g.defaultTextForType(info, right, f.node.Module())
-	if leftOK && rightOK {
-		return leftText < rightText
-	}
-	return left.Value() < right.Value()
+	return key, nil
 }
 
-func (g *goEmitter) defaultTextForType(info cambium.TypeInfo, def cambium.DefaultValue, leafModule cambium.Module) (string, bool) {
+func (g *goEmitter) defaultTextForType(info cambium.TypeInfo, def cambium.DefaultValue, leafModule cambium.Module) (text string, matched bool, err error) {
 	value := def.Value()
 	switch r := info.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
 			return g.defaultTextForType(*realtype, def, leafModule)
 		}
-		return value, true
+		return value, true, nil
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			if text, ok := g.defaultTextForType(member, def, leafModule); ok {
-				return text, true
+			text, ok, err := g.defaultTextForType(member, def, leafModule)
+			if err != nil {
+				return "", false, err
+			}
+			if ok {
+				return text, true, nil
 			}
 		}
-		return "", false
+		return "", false, nil
 	case cambium.ResolvedBoolean:
 		if value == "true" || value == "false" {
-			return value, true
+			return value, true, nil
 		}
-		return "", false
+		return "", false, nil
 	case cambium.ResolvedInt:
-		return integerDefaultJSONValue(value, r)
+		text, ok := integerDefaultJSONValue(value, r)
+		return text, ok, nil
 	case cambium.ResolvedDecimal64:
-		return decimal64DefaultCanonical(value, r)
+		text, ok := decimal64DefaultCanonical(value, r)
+		return text, ok, nil
 	case cambium.ResolvedString:
-		if !stringDefaultMatches(value, r) {
-			return "", false
+		matched, err := stringDefaultMatches(value, r)
+		if err != nil {
+			return "", false, err
 		}
-		return value, true
+		if !matched {
+			return "", false, nil
+		}
+		return value, true, nil
 	case cambium.ResolvedBinary:
 		if !binaryDefaultMatches(value, r) {
-			return "", false
+			return "", false, nil
 		}
-		return value, true
+		return value, true, nil
 	case cambium.ResolvedEnumeration:
 		if enumDefaultMatches(value, r.Values()) {
-			return value, true
+			return value, true, nil
 		}
-		return "", false
+		return "", false, nil
 	case cambium.ResolvedBits:
-		return bitsDefaultCanonical(value, r.Values())
+		text, ok := bitsDefaultCanonical(value, r.Values())
+		return text, ok, nil
 	case cambium.ResolvedIdentityRef:
-		return g.identityrefDefaultJSONName(value, r, def.SourceModule(), leafModule)
+		text, ok := g.identityrefDefaultJSONName(value, r, def.SourceModule(), leafModule)
+		return text, ok, nil
 	case cambium.ResolvedInstanceIdentifier, cambium.ResolvedUnknown:
-		return value, true
+		return value, true, nil
 	default:
-		return "", false
+		return "", false, nil
 	}
 }
 

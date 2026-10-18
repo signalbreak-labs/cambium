@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,15 +48,15 @@ func systemOrdered(sn cambium.SchemaNodeRef) bool {
 // sortSystemOrdered puts n's leaf-list values or list entries in canonical
 // order when sn is ordered-by system; ordered-by user data is left untouched,
 // in insertion order (I1).
-func sortSystemOrdered(sn cambium.SchemaNodeRef, n *node) {
+func sortSystemOrdered(sn cambium.SchemaNodeRef, n *node) error {
 	if !systemOrdered(sn) {
-		return
+		return nil
 	}
 	switch n.kind {
 	case kindLeafList:
 		ti, ok := sn.LeafType()
 		if !ok || len(n.values) < 2 {
-			return
+			return nil
 		}
 		type keyed struct {
 			key   orderKey
@@ -63,7 +64,11 @@ func sortSystemOrdered(sn cambium.SchemaNodeRef, n *node) {
 		}
 		items := make([]keyed, len(n.values))
 		for i, v := range n.values {
-			items[i] = keyed{key: valueOrderKey(ti, v, sn.Module().Name()), value: v}
+			key, err := valueOrderKey(ti, v, sn.Module().Name())
+			if err != nil {
+				return fmt.Errorf("%s: sort key: %w", sn.Path(), err)
+			}
+			items[i] = keyed{key: key, value: v}
 		}
 		slices.SortStableFunc(items, func(a, b keyed) int { return compareOrderKeys(a.key, b.key) })
 		for i := range items {
@@ -71,7 +76,7 @@ func sortSystemOrdered(sn cambium.SchemaNodeRef, n *node) {
 		}
 	case kindList:
 		if len(n.entries) < 2 {
-			return
+			return nil
 		}
 		keys := childRefs(sn.ListKeys())
 		type keyed struct {
@@ -80,7 +85,11 @@ func sortSystemOrdered(sn cambium.SchemaNodeRef, n *node) {
 		}
 		items := make([]keyed, len(n.entries))
 		for i, entry := range n.entries {
-			items[i] = keyed{keys: entryOrderKeys(keys, entry), entry: entry}
+			entryKeys, err := entryOrderKeys(keys, entry)
+			if err != nil {
+				return fmt.Errorf("%s: sort key: %w", sn.Path(), err)
+			}
+			items[i] = keyed{keys: entryKeys, entry: entry}
 		}
 		slices.SortStableFunc(items, func(a, b keyed) int {
 			for k := range a.keys {
@@ -94,24 +103,29 @@ func sortSystemOrdered(sn cambium.SchemaNodeRef, n *node) {
 			n.entries[i] = items[i].entry
 		}
 	}
+	return nil
 }
 
 // entryOrderKeys returns the order keys of a list entry's key leaves, in
 // key-statement order. A missing key (invalid data) sorts as an invalid value.
-func entryOrderKeys(keys []cambium.SchemaNodeRef, entry []*node) []orderKey {
+func entryOrderKeys(keys []cambium.SchemaNodeRef, entry []*node) ([]orderKey, error) {
 	out := make([]orderKey, len(keys))
 	for i, k := range keys {
 		want := schemaNodeKey(k)
 		for _, c := range entry {
 			if c.kind == kindLeaf && dataNodeKey(c) == want {
 				if ti, ok := k.LeafType(); ok {
-					out[i] = valueOrderKey(ti, c.value, k.Module().Name())
+					key, err := valueOrderKey(ti, c.value, k.Module().Name())
+					if err != nil {
+						return nil, fmt.Errorf("%s: %w", k.Path(), err)
+					}
+					out[i] = key
 				}
 				break
 			}
 		}
 	}
-	return out
+	return out, nil
 }
 
 type orderKind uint8
@@ -196,90 +210,90 @@ func compareSparseBitmaps(a, b []uint64) int {
 
 // valueOrderKey computes the canonical-order key of a leaf value token of type
 // ti. leafModule is the leaf's module name (bare identityref context).
-func valueOrderKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) orderKey {
+func valueOrderKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) (orderKey, error) {
 	invalid := orderKey{b: raw}
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedInt:
 		text, ok := integerText(raw, r.Kind)
 		if !ok || len(text) > maxNumericLexicalLen {
-			return invalid
+			return invalid, nil
 		}
 		if unsignedIntKind(r.Kind) {
 			u, err := strconv.ParseUint(text, 10, 64)
 			if err != nil {
-				return invalid
+				return invalid, nil //nolint:nilerr // Invalid lexical values retain the existing raw-token ordering.
 			}
-			return orderKey{valid: true, kind: orderUnsigned, u: u}
+			return orderKey{valid: true, kind: orderUnsigned, u: u}, nil
 		}
 		i, err := strconv.ParseInt(text, 10, 64)
 		if err != nil {
-			return invalid
+			return invalid, nil //nolint:nilerr // Invalid lexical values retain the existing raw-token ordering.
 		}
-		return orderKey{valid: true, kind: orderSigned, i: i}
+		return orderKey{valid: true, kind: orderSigned, i: i}, nil
 	case cambium.ResolvedDecimal64:
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
 		num, ok := parseDecimal64(s, int(r.FractionDigits().Value()))
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
-		return orderKey{valid: true, kind: orderSigned, i: num}
+		return orderKey{valid: true, kind: orderSigned, i: num}, nil
 	case cambium.ResolvedBoolean:
 		var v bool
 		if json.Unmarshal(raw, &v) != nil {
-			return invalid
+			return invalid, nil //nolint:nilerr // Invalid lexical values retain the existing raw-token ordering.
 		}
 		if v {
-			return orderKey{valid: true, kind: orderSigned, i: 1}
+			return orderKey{valid: true, kind: orderSigned, i: 1}, nil
 		}
-		return orderKey{valid: true, kind: orderSigned}
+		return orderKey{valid: true, kind: orderSigned}, nil
 	case cambium.ResolvedEnumeration:
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
 		for _, v := range r.Values() {
 			if v.Name() == s {
-				return orderKey{valid: true, kind: orderSigned, i: v.Value()}
+				return orderKey{valid: true, kind: orderSigned, i: v.Value()}, nil
 			}
 		}
-		return invalid
+		return invalid, nil
 	case cambium.ResolvedBits:
 		bits, ok := bitsOrderBitmap(raw, r.Values())
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
-		return orderKey{valid: true, kind: orderBits, bits: bits}
+		return orderKey{valid: true, kind: orderBits, bits: bits}, nil
 	case cambium.ResolvedBinary:
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
 		data, err := decodeBinaryValue(s)
 		if err != nil {
-			return invalid
+			return invalid, nil //nolint:nilerr // Invalid lexical values retain the existing raw-token ordering.
 		}
-		return orderKey{valid: true, kind: orderSizedBytes, b: data}
+		return orderKey{valid: true, kind: orderSizedBytes, b: data}, nil
 	case cambium.ResolvedIdentityRef:
 		// libyang compares the identity names only, not their modules.
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
-		if i := strings.LastIndexByte(s, ':'); i >= 0 {
-			s = s[i+1:]
+		if _, local, qualified := strings.CutLast(s, ":"); qualified {
+			s = local
 		}
-		return orderKey{valid: true, kind: orderBytes, b: []byte(s)}
+		return orderKey{valid: true, kind: orderBytes, b: []byte(s)}, nil
 	case cambium.ResolvedString, cambium.ResolvedInstanceIdentifier:
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return invalid
+			return invalid, nil
 		}
-		return orderKey{valid: true, kind: orderBytes, b: []byte(s)}
+		return orderKey{valid: true, kind: orderBytes, b: []byte(s)}, nil
 	case cambium.ResolvedEmpty:
-		return orderKey{valid: true, kind: orderBytes}
+		return orderKey{valid: true, kind: orderBytes}, nil
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
 			return valueOrderKey(*rt, raw, leafModule)
@@ -287,16 +301,21 @@ func valueOrderKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) 
 	case cambium.ResolvedUnion:
 		for i, member := range flattenUnionMembers(r) {
 			var trial []string
-			validateLeafValue(member, raw, "", leafModule, &trial)
+			if err := validateLeafValue(member, raw, "", leafModule, &trial); err != nil {
+				return orderKey{}, err
+			}
 			if len(trial) == 0 {
-				k := valueOrderKey(member, raw, leafModule)
+				k, err := valueOrderKey(member, raw, leafModule)
+				if err != nil {
+					return orderKey{}, err
+				}
 				k.member = i
-				return k
+				return k, nil
 			}
 		}
-		return invalid
+		return invalid, nil
 	}
-	return orderKey{valid: true, kind: orderBytes, b: raw}
+	return orderKey{valid: true, kind: orderBytes, b: raw}, nil
 }
 
 // flattenUnionMembers returns a union's member types with nested unions

@@ -25,18 +25,18 @@ import (
 // checkLeafRefInstance reports a violation only when the leafref path is fully
 // resolvable and the value is definitely absent from the target instances.
 // Values are compared as values, not spellings (see valueKey).
-func checkLeafRefInstance(sn cambium.SchemaNodeRef, value json.RawMessage, ancestors [][]*node, path string, out *[]string) {
+func checkLeafRefInstance(sn cambium.SchemaNodeRef, value json.RawMessage, ancestors [][]*node, path string, out *[]string) error {
 	ti, ok := sn.LeafType()
 	if !ok {
-		return
+		return nil
 	}
 	lr, ok := ti.Resolved().(cambium.ResolvedLeafRef)
 	if !ok || !lr.RequireInstance() {
-		return
+		return nil
 	}
 	expr, ok := lr.Path()
 	if !ok {
-		return
+		return nil
 	}
 	// RFC 7950 section 6.4.1: prefixes resolve through the imports of the
 	// module that wrote the path, while an unprefixed name belongs to the
@@ -47,11 +47,19 @@ func checkLeafRefInstance(sn cambium.SchemaNodeRef, value json.RawMessage, ances
 	if sourceModule.Name() == "" {
 		sourceModule = current
 	}
-	found, supported := leafRefTargetExists(expr, ancestors, sourceModule, current, valueKey(ti, value, current.Name()))
+	want, err := valueKey(ti, value, current.Name())
+	if err != nil {
+		return fmt.Errorf("%s: leafref: %w", path, err)
+	}
+	found, supported, err := leafRefTargetExists(expr, ancestors, sourceModule, current, want)
+	if err != nil {
+		return fmt.Errorf("%s: leafref: %w", path, err)
+	}
 	if !supported || found {
-		return // an unsupported path construct is skipped, never false-rejected
+		return nil // an unsupported path construct is skipped, never false-rejected
 	}
 	*out = append(*out, fmt.Sprintf("%s: leafref value %s has no matching instance at path %q", path, value, expr))
+	return nil
 }
 
 // leafRefTargetExists resolves a leafref path in the data tree and reports
@@ -59,10 +67,10 @@ func checkLeafRefInstance(sn cambium.SchemaNodeRef, value json.RawMessage, ances
 // comparison key (see valueKey) is want. supported=false means the path used a
 // construct outside the name-step subset and the caller must skip the check.
 // Prefixes resolve in module; unprefixed steps belong to current.
-func leafRefTargetExists(pathExpr string, ancestors [][]*node, module, current cambium.Module, want string) (found, supported bool) {
+func leafRefTargetExists(pathExpr string, ancestors [][]*node, module, current cambium.Module, want string) (found, supported bool, err error) {
 	expr := strings.TrimSpace(pathExpr)
 	if expr == "" || strings.ContainsAny(expr, "[]()") {
-		return false, false
+		return false, false, nil
 	}
 	var start []*node
 	switch {
@@ -76,20 +84,20 @@ func leafRefTargetExists(pathExpr string, ancestors [][]*node, module, current c
 			expr = expr[len("../"):]
 		}
 		if up == 0 {
-			return false, false // descendant-of-leaf path: nothing to match, skip
+			return false, false, nil // descendant-of-leaf path: nothing to match, skip
 		}
 		idx := len(ancestors) - up
 		if idx < 0 {
-			return false, false // path climbs above the root
+			return false, false, nil // path climbs above the root
 		}
 		start = ancestors[idx]
 	}
 	steps, ok := splitLeafRefSteps(expr, module, current)
 	if !ok {
-		return false, false
+		return false, false, nil
 	}
 	if len(steps) == 0 {
-		return false, false
+		return false, false, nil
 	}
 	return navigateLeafRef([][]*node{start}, steps, want)
 }
@@ -103,7 +111,7 @@ type leafRefStep struct {
 // branching at lists, until a terminal leaf / leaf-list value matches want.
 // Without a match it visits every target, so an unsupported shape anywhere on
 // the path is still reported.
-func navigateLeafRef(frames [][]*node, steps []leafRefStep, want string) (found, supported bool) {
+func navigateLeafRef(frames [][]*node, steps []leafRefStep, want string) (found, supported bool, err error) {
 	step, last := steps[0], len(steps) == 1
 	for _, frame := range frames {
 		n := findByLeafRefStep(frame, step)
@@ -113,43 +121,59 @@ func navigateLeafRef(frames [][]*node, steps []leafRefStep, want string) (found,
 		var next [][]*node
 		switch {
 		case last && n.kind == kindLeaf:
-			if leafRefValueMatches(n, n.value, want) {
-				return true, true
+			matched, err := leafRefValueMatches(n, n.value, want)
+			if err != nil {
+				return false, false, err
+			}
+			if matched {
+				return true, true, nil
 			}
 			continue
 		case last && n.kind == kindLeafList:
 			for _, v := range n.values {
-				if leafRefValueMatches(n, v, want) {
-					return true, true
+				matched, err := leafRefValueMatches(n, v, want)
+				if err != nil {
+					return false, false, err
+				}
+				if matched {
+					return true, true, nil
 				}
 			}
 			continue
 		case last:
-			return false, false // leafref target must be a leaf or leaf-list
+			return false, false, nil // leafref target must be a leaf or leaf-list
 		case n.kind == kindContainer:
 			next = [][]*node{n.children}
 		case n.kind == kindList:
 			next = n.entries
 		default:
-			return false, false // cannot descend through a leaf mid-path
+			return false, false, nil // cannot descend through a leaf mid-path
 		}
-		if found, supported := navigateLeafRef(next, steps[1:], want); found || !supported {
-			return found, supported
+		found, supported, err := navigateLeafRef(next, steps[1:], want)
+		if err != nil {
+			return false, false, err
+		}
+		if found || !supported {
+			return found, supported, nil
 		}
 	}
-	return false, true
+	return false, true, nil
 }
 
 // leafRefValueMatches reports whether value, held by the leaf or leaf-list n,
 // is the value whose comparison key is want. Equal tokens are the same value;
 // different tokens can only be when n's type may name an identity, so only
 // then is the key computed.
-func leafRefValueMatches(n *node, value json.RawMessage, want string) bool {
+func leafRefValueMatches(n *node, value json.RawMessage, want string) (bool, error) {
 	if string(value) == want {
-		return true
+		return true, nil
 	}
 	ti, ok := n.schema.LeafType()
-	return ok && valueKeyQualifies(ti) && valueKey(ti, value, n.module) == want
+	if !ok || !valueKeyQualifies(ti) {
+		return false, nil
+	}
+	key, err := valueKey(ti, value, n.module)
+	return key == want, err
 }
 
 func splitLeafRefSteps(rest string, module, current cambium.Module) ([]leafRefStep, bool) {

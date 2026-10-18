@@ -413,7 +413,9 @@ func TestCanonicalDefaultValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	out, err := tree.Serialize(datatree.FormatJSONIETF)
 	if err != nil {
 		t.Fatalf("Serialize: %v", err)

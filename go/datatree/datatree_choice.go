@@ -3,7 +3,11 @@
 
 package datatree
 
-import "github.com/signalbreak-labs/cambium/go/cambium"
+import (
+	"fmt"
+
+	"github.com/signalbreak-labs/cambium/go/cambium"
+)
 
 // choice/case semantics (RFC 7950 §7.9). Data is stored flattened: a case's
 // data nodes sit directly among their data parent's children, in schema
@@ -141,7 +145,7 @@ func effectiveCase(choice cambium.SchemaNodeRef, present levelIndex) (cambium.Sc
 // nodes, so those are read from one of the choice's data nodes, keeping the
 // ones inherited from a subtree rooted at or above the choice. Every one of
 // them is evaluated with the choice's closest data ancestor as context.
-func choiceActive(root, parent *xnode, choice cambium.SchemaNodeRef) bool {
+func choiceActive(root, parent *xnode, choice cambium.SchemaNodeRef) (bool, error) {
 	whens := choice.Whens()
 	if data := appendFlattened(nil, choice); len(data) > 0 {
 		above := map[cambium.SchemaNodeRef]bool{choice: true}
@@ -160,13 +164,16 @@ func choiceActive(root, parent *xnode, choice cambium.SchemaNodeRef) bool {
 	for _, w := range whens {
 		contextNode := missingConstraintContext(parent, nil, max(w.ContextAncestorDepth(), 1))
 		if contextNode == nil {
-			return false
+			return false, nil
 		}
 		ev := constraintEvaluator(root, contextNode, contextNode, w.SourceModule(), choice.Module(), w.ExcludedSubtreeRoots())
-		ok, err := evalConstraint(ev, w.Expression(), ectx{node: contextNode, pos: 1, size: 1})
-		if err != nil || !ok {
-			return false
+		disposition, err := constraintDisposition(ev, w.Expression(), ectx{node: contextNode, pos: 1, size: 1})
+		if err != nil {
+			return false, fmt.Errorf("%s: when %q: %w", xnodePath(dummyMissingNode(parent, choice)), w.Expression(), err)
+		}
+		if disposition != predicateTrue {
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }

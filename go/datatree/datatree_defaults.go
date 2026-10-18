@@ -5,6 +5,8 @@ package datatree
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
 )
@@ -26,25 +28,58 @@ import (
 // Order is preserved: each level is rebuilt in schema declaration order, list
 // entries keep their keys-first ordering (I3), and ordered-by system
 // leaf-list defaults are put in canonical order (I2).
-func (t *Tree) ApplyDefaults() {
-	root := t.xroot()
-	t.roots = applyDefaultsLevel(root, root, topLevelSchema(t.modules...), t.roots)
+//
+// Matcher operational errors are returned with their original typed cause. On
+// error the tree, including nested values and ordering, is unchanged. Predicates
+// see the same initial data view as before default application; defaults are not
+// reevaluated to a fixed point. Unsupported XPath guards still omit defaults.
+func (t *Tree) ApplyDefaults() error {
+	candidate := *t
+	candidate.roots = cloneNodes(t.roots)
+	root := candidate.xroot()
+	roots, err := applyDefaultsLevel(root, root, topLevelSchema(t.modules...), candidate.roots)
+	if err != nil {
+		return err
+	}
+	t.roots = roots
+	return nil
 }
 
-func applyDefaultsLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, data []*node) []*node {
+// Clone all mutable structure; token byte slices are immutable and every value
+// update replaces the token. No candidate mutation can alter the original tree.
+func cloneNodes(nodes []*node) []*node {
+	out := make([]*node, len(nodes))
+	for i, original := range nodes {
+		n := *original
+		n.children = cloneNodes(original.children)
+		n.values = slices.Clone(original.values)
+		n.entries = make([][]*node, len(original.entries))
+		for j, entry := range original.entries {
+			n.entries[j] = cloneNodes(entry)
+		}
+		out[i] = &n
+	}
+	return out
+}
+
+func applyDefaultsLevel(root, parent *xnode, schema []cambium.SchemaNodeRef, data []*node) ([]*node, error) {
 	return appendDefaults(nil, root, parent, schema, indexLevel(data))
 }
 
 // appendDefaults appends to out, in schema declaration order, the data present
 // at this level with defaults filled below it, plus the absent leaves and
 // leaf-lists whose defaults are in use.
-func appendDefaults(out []*node, root, parent *xnode, schema []cambium.SchemaNodeRef, present levelIndex) []*node {
+func appendDefaults(out []*node, root, parent *xnode, schema []cambium.SchemaNodeRef, present levelIndex) ([]*node, error) {
 	for _, sn := range schema {
 		if sn.IsChoice() {
 			effective, ok := effectiveCase(sn, present)
 			for _, c := range choiceCases(sn) {
 				if ok && c == effective {
-					out = appendDefaults(out, root, parent, caseSchema(c), present)
+					var err error
+					out, err = appendDefaults(out, root, parent, caseSchema(c), present)
+					if err != nil {
+						return nil, err
+					}
 				} else {
 					out = appendCaseData(out, c, present, ok)
 				}
@@ -52,22 +87,46 @@ func appendDefaults(out []*node, root, parent *xnode, schema []cambium.SchemaNod
 			continue
 		}
 		if dn := present.node(sn); dn != nil {
-			applyDefaultsBelow(root, parent, sn, dn)
+			if err := applyDefaultsBelow(root, parent, sn, dn); err != nil {
+				return nil, err
+			}
 			out = append(out, dn)
 			continue
 		}
+		var added *node
 		switch {
 		case sn.IsLeaf():
-			if def, ok := sn.DefaultEntry(); ok && schemaNodeActiveForMissing(root, parent, sn) {
-				out = append(out, defaultLeafNode(sn, def))
+			if def, ok := sn.DefaultEntry(); ok {
+				active, err := schemaNodeActiveForMissing(root, parent, sn)
+				if err != nil {
+					return nil, err
+				}
+				if active {
+					added, err = defaultLeafNode(sn, def)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		case sn.IsLeafList():
-			if defs := sn.DefaultEntries(); len(defs) > 0 && schemaNodeActiveForMissing(root, parent, sn) {
-				out = append(out, defaultLeafListNode(sn, defs))
+			if defs := sn.DefaultEntries(); len(defs) > 0 {
+				active, err := schemaNodeActiveForMissing(root, parent, sn)
+				if err != nil {
+					return nil, err
+				}
+				if active {
+					added, err = defaultLeafListNode(sn, defs)
+					if err != nil {
+						return nil, err
+					}
+				}
 			}
 		}
+		if added != nil {
+			out = append(out, added)
+		}
 	}
-	return out
+	return out, nil
 }
 
 // appendCaseData appends the data present in a case that is not in effect,
@@ -84,10 +143,14 @@ func appendCaseData(out []*node, c cambium.SchemaNodeRef, present levelIndex, dr
 
 // applyDefaultsBelow fills defaults inside a present container or in each
 // entry of a present list.
-func applyDefaultsBelow(root, parent *xnode, sn cambium.SchemaNodeRef, dn *node) {
+func applyDefaultsBelow(root, parent *xnode, sn cambium.SchemaNodeRef, dn *node) error {
 	switch {
 	case sn.IsContainer():
-		dn.children = applyDefaultsLevel(root, firstMatchingChildXNode(parent, sn), levelSchema(sn), dn.children)
+		children, err := applyDefaultsLevel(root, firstMatchingChildXNode(parent, sn), levelSchema(sn), dn.children)
+		if err != nil {
+			return err
+		}
+		dn.children = children
 	case sn.IsList():
 		listNodes := matchingChildXNodes(parent, sn)
 		for i := range dn.entries {
@@ -95,38 +158,56 @@ func applyDefaultsBelow(root, parent *xnode, sn cambium.SchemaNodeRef, dn *node)
 			if i < len(listNodes) {
 				listParent = listNodes[i]
 			}
-			filled := applyDefaultsLevel(root, listParent, levelSchema(sn), dn.entries[i])
+			filled, err := applyDefaultsLevel(root, listParent, levelSchema(sn), dn.entries[i])
+			if err != nil {
+				return err
+			}
 			dn.entries[i] = keysFirst(sn, filled)
 		}
 	}
+	return nil
 }
 
-func defaultLeafNode(sn cambium.SchemaNodeRef, def cambium.DefaultValue) *node {
+func defaultLeafNode(sn cambium.SchemaNodeRef, def cambium.DefaultValue) (*node, error) {
 	n := newNode(sn)
 	n.kind = kindLeaf
-	n.value = defaultToken(sn, def)
-	return n
+	value, err := defaultToken(sn, def)
+	if err != nil {
+		return nil, err
+	}
+	n.value = value
+	return n, nil
 }
 
-func defaultLeafListNode(sn cambium.SchemaNodeRef, defs []cambium.DefaultValue) *node {
+func defaultLeafListNode(sn cambium.SchemaNodeRef, defs []cambium.DefaultValue) (*node, error) {
 	n := newNode(sn)
 	n.kind = kindLeafList
 	for _, def := range defs {
-		n.values = append(n.values, defaultToken(sn, def))
+		value, err := defaultToken(sn, def)
+		if err != nil {
+			return nil, err
+		}
+		n.values = append(n.values, value)
 	}
-	sortSystemOrdered(sn, n)
-	return n
+	if err := sortSystemOrdered(sn, n); err != nil {
+		return nil, err
+	}
+	return n, nil
 }
 
 // defaultToken returns the canonical token of a leaf or leaf-list default,
 // resolving its prefixes in the module that declared it.
-func defaultToken(sn cambium.SchemaNodeRef, def cambium.DefaultValue) json.RawMessage {
+func defaultToken(sn cambium.SchemaNodeRef, def cambium.DefaultValue) (json.RawMessage, error) {
 	ti, _ := sn.LeafType()
 	source := def.SourceModule()
 	if source.Name() == "" {
 		source = sn.Module()
 	}
-	return canonicalLeafToken(sn, defaultValueToken(ti, def.Value(), sn.Module(), schemaScope{module: source}))
+	token, err := defaultValueToken(ti, def.Value(), sn.Module(), schemaScope{module: source})
+	if err != nil {
+		return nil, fmt.Errorf("%s: default: %w", sn.Path(), err)
+	}
+	return canonicalLeafToken(sn, token)
 }
 
 // defaultValueToken converts a schema default value to its instance-data JSON
@@ -134,19 +215,24 @@ func defaultToken(sn cambium.SchemaNodeRef, def cambium.DefaultValue) json.RawMe
 // in integer notation: a default written in a module may use RFC 7950 section
 // 9.2.1 hexadecimal or octal notation, which instance data may not, and is
 // instantiated as its canonical decimal value.
-func defaultValueToken(ti cambium.TypeInfo, text string, leafModule cambium.Module, scope valueScope) json.RawMessage {
+func defaultValueToken(ti cambium.TypeInfo, text string, leafModule cambium.Module, scope valueScope) (json.RawMessage, error) {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedInt:
 		if canonical, ok := cambium.CanonicalIntegerDefault(text, r.Kind); ok {
-			return jsonTokenFromIntegerText(canonical, r.Kind)
+			return jsonTokenFromIntegerText(canonical, r.Kind), nil
 		}
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			token := defaultValueToken(member, text, leafModule, scope)
+			token, err := defaultValueToken(member, text, leafModule, scope)
+			if err != nil {
+				return nil, err
+			}
 			var trial []string
-			validateLeafValue(member, token, "", leafModule.Name(), &trial)
+			if err := validateLeafValue(member, token, "", leafModule.Name(), &trial); err != nil {
+				return nil, err
+			}
 			if len(trial) == 0 {
-				return token
+				return token, nil
 			}
 		}
 	case cambium.ResolvedLeafRef:

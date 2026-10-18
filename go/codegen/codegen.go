@@ -14,13 +14,13 @@ import (
 	"fmt"
 	"go/format"
 	"math/big"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/signalbreak-labs/cambium/go/cambium"
-	"github.com/signalbreak-labs/cambium/go/internal/xsdregex"
 )
 
 // GenerateGo returns a deterministic, gofmt-stable Go source file for the
@@ -68,6 +68,7 @@ type goEmitter struct {
 	emittedMetadata    bool
 	names              *identAllocator
 	emitErr            error
+	patternRuntime     patternRuntime
 }
 
 type intRangeInfo struct {
@@ -91,7 +92,7 @@ type fieldInfo struct {
 	goType        string // Go type expression
 	optional      bool   // true for optional leaves / presence containers
 	jsonKind      string // "String" | "BareNumber" | "QuotedNumber" | "Bool" | "Empty" | "InstanceIdentifier"
-	isNewtype     bool   // true for generated range/length/decimal64 wrapper types
+	isNewtype     bool   // true for scalar values (including collection elements) using range/length/decimal64 wrappers
 	intSigned     bool   // true for signed integer native types
 	isEnum        bool
 	isBits        bool
@@ -175,7 +176,7 @@ func (g *goEmitter) emitImports(out *strings.Builder) {
 		imports = append(imports, "\"fmt\"")
 	}
 	if g.helpers["patternValidate"] {
-		imports = append(imports, "\"regexp\"")
+		imports = append(imports, g.patternRuntime.imports...)
 	}
 	if needMathBig {
 		imports = append(imports, "\"math/big\"")
@@ -190,6 +191,7 @@ func (g *goEmitter) emitImports(out *strings.Builder) {
 		imports = append(imports, "\"sort\"")
 	}
 	sort.Strings(imports)
+	imports = slices.Compact(imports)
 
 	if len(imports) == 1 {
 		fmt.Fprintf(out, "import %s\n\n", imports[0])
@@ -428,31 +430,37 @@ func (g *goEmitter) emitIntRangeHelper(name string, info intRangeInfo, out *stri
 
 	ranges := make([]string, 0, len(bounds))
 	zeroInRange := false
-	var minVal int64 = -1
-	if len(bounds) == 0 {
-		lo := parseIntBound("min", limits)
-		hi := parseIntBound("max", limits)
-		ranges = append(ranges, fmt.Sprintf("(v >= %d && v <= %d)", lo, hi))
-		if lo <= 0 && 0 <= hi {
+	var minVal *big.Int
+	addRange := func(lower, upper string) bool {
+		lo, loOK := intBoundBig(lower, limits)
+		hi, hiOK := intBoundBig(upper, limits)
+		if !loOK || !hiOK {
+			g.recordEmitError(fmt.Errorf("invalid integer range bounds for %s: %q..%q", name, lower, upper))
+			return false
+		}
+		ranges = append(ranges, fmt.Sprintf("(v >= %s && v <= %s)", lo.String(), hi.String()))
+		if lo.Sign() <= 0 && hi.Sign() >= 0 {
 			zeroInRange = true
 		}
-		minVal = lo
+		if minVal == nil || lo.Cmp(minVal) < 0 {
+			minVal = lo
+		}
+		return true
+	}
+	if len(bounds) == 0 {
+		if !addRange("min", "max") {
+			return
+		}
 	}
 	for _, b := range bounds {
-		lo := parseIntBound(b.Min(), limits)
-		hi := parseIntBound(b.Max(), limits)
-		ranges = append(ranges, fmt.Sprintf("(v >= %d && v <= %d)", lo, hi))
-		if lo <= 0 && 0 <= hi {
-			zeroInRange = true
-		}
-		if minVal == -1 || lo < minVal {
-			minVal = lo
+		if !addRange(b.Min(), b.Max()) {
+			return
 		}
 	}
 	check := strings.Join(ranges, " || ")
 	defaultExpr := ""
 	if !zeroInRange {
-		defaultExpr = fmt.Sprintf("\n// Default%s returns a valid default value.\nfunc Default%s() %s {\n\tv, _ := New%s(%d)\n\treturn v\n}\n", name, name, name, name, minVal)
+		defaultExpr = fmt.Sprintf("\n// Default%s returns a valid default value.\nfunc Default%s() %s {\n\tv, _ := New%s(%s)\n\treturn v\n}\n", name, name, name, name, minVal.String())
 	}
 
 	fmt.Fprintf(out, "// %s is a generated YANG integer range type.\n", name)
@@ -598,6 +606,7 @@ func (g *goEmitter) ensureUnion(name, yangName, leafModule string, members []cam
 	g.helpers["jsonEscape"] = true
 
 	view := unionView{Name: name, YangName: yangName}
+	metadata := g.unionPatternLiteral(members)
 	used := make(map[string]bool)
 	for _, member := range members {
 		label := unionMemberLabel(member)
@@ -609,14 +618,14 @@ func (g *goEmitter) ensureUnion(name, yangName, leafModule string, members []cam
 			Variant:     variant,
 			PayloadType: payloadType,
 			Wrapper:     unionMemberNeedsWrapper(member),
-			Methods:     g.unionVariantMethods(name, variantType, payloadType, member),
+			Methods:     g.unionVariantMethods(name, variantType, payloadType, member, metadata),
 		})
 	}
 	if len(view.Members) == 0 {
 		view.Members = append(view.Members, unionMemberView{
 			VariantType: name + "String",
 			Fallback:    true,
-			Methods:     g.unionVariantMethods(name, name+"String", "string", cambium.TypeInfo{}),
+			Methods:     g.unionVariantMethods(name, name+"String", "string", cambium.TypeInfo{}, "nil"),
 		})
 	}
 	g.typeSnippets[name] = g.renderType(tmplUnion, view)
@@ -681,7 +690,7 @@ func (g *goEmitter) unionPayloadType(unionName, variant, leafModule string, memb
 	}
 }
 
-func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType string, member cambium.TypeInfo) string {
+func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType string, member cambium.TypeInfo, metadata string) string {
 	xmlExpr := ""
 	xmlPrefixExpr := "return \"\", \"\", false"
 	jsonExpr := ""
@@ -691,7 +700,7 @@ func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType stri
 	switch r := member.Resolved().(type) {
 	case cambium.ResolvedLeafRef:
 		if realtype, ok := r.Realtype(); ok {
-			return g.unionVariantMethods(unionName, variantType, payloadType, *realtype)
+			return g.unionVariantMethods(unionName, variantType, payloadType, *realtype, metadata)
 		}
 		xmlExpr = "cambiumXMLEscapeText(string(v))"
 		jsonExpr = "cambiumJSONEscape(string(v))"
@@ -733,7 +742,7 @@ func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType stri
 		fd, ranges := decimal64ValidationArgs(member)
 		validateExpr = fmt.Sprintf("if err := cambiumValidateDecimal64Value(Decimal64(v), %d, %s); err != nil { return cambiumValidationError(path, err.Error()) }\n\treturn nil", fd, ranges)
 	case cambium.ResolvedString:
-		patterns := stringPatternLiteral(member)
+		patterns := g.stringPatternLiteral(member)
 		if patterns != "nil" {
 			g.helpers["patternValidate"] = true
 		}
@@ -743,7 +752,7 @@ func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType stri
 			stringExpr = fmt.Sprintf("%s(v).String()", payloadType)
 			validateExpr = fmt.Sprintf("if _, err := New%s(%s(v).String()); err != nil { return cambiumValidationError(path, err.Error()) }\n\treturn nil", payloadType, payloadType)
 			if patterns != "nil" {
-				validateExpr = fmt.Sprintf("if _, err := New%s(%s(v).String()); err != nil { return cambiumValidationError(path, err.Error()) }\n\tif err := cambiumValidateStringPatterns(%s(v).String(), %s); err != nil { return cambiumValidationError(path, err.Error()) }\n\treturn nil", payloadType, payloadType, payloadType, patterns)
+				validateExpr = fmt.Sprintf("if _, err := New%s(%s(v).String()); err != nil { return cambiumValidationError(path, err.Error()) }\n\tif err := cambiumValidateStringPatterns(%s(v).String(), %s); err != nil { return cambiumPatternValidationError(path, err) }\n\treturn nil", payloadType, payloadType, payloadType, patterns)
 			}
 			break
 		}
@@ -752,7 +761,7 @@ func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType stri
 		stringExpr = "string(v)"
 		validateExpr = "if err := cambiumValidateStringValue(string(v)); err != nil { return cambiumValidationError(path, err.Error()) }\n\treturn nil"
 		if patterns != "nil" {
-			validateExpr = fmt.Sprintf("if err := cambiumValidateStringValue(string(v)); err != nil { return cambiumValidationError(path, err.Error()) }\n\tif err := cambiumValidateStringPatterns(string(v), %s); err != nil { return cambiumValidationError(path, err.Error()) }\n\treturn nil", patterns)
+			validateExpr = fmt.Sprintf("if err := cambiumValidateStringValue(string(v)); err != nil { return cambiumValidationError(path, err.Error()) }\n\tif err := cambiumValidateStringPatterns(string(v), %s); err != nil { return cambiumPatternValidationError(path, err) }\n\treturn nil", patterns)
 		}
 	case cambium.ResolvedEnumeration:
 		xmlExpr = fmt.Sprintf("cambiumXMLEscapeText(%s(v).String())", payloadType)
@@ -795,6 +804,11 @@ func (g *goEmitter) unionVariantMethods(unionName, variantType, payloadType stri
 		xmlExpr = "cambiumXMLEscapeText(string(v))"
 		jsonExpr = "cambiumJSONEscape(string(v))"
 		stringExpr = "string(v)"
+	}
+
+	if metadata != "nil" {
+		g.helpers["patternValidate"] = true
+		validateExpr = fmt.Sprintf("if err := cambiumValidatePatternMetadata(%s); err != nil { return cambiumPatternValidationError(path, err) }\n\t", metadata) + validateExpr
 	}
 
 	return fmt.Sprintf("func (%s) is%s() {}\nfunc (v %s) XMLValue() string { return %s }\nfunc (v %s) XMLPrefixNS() (string, string, bool) { %s }\nfunc (v %s) JSONValue() string { return %s }\nfunc (v %s) String() string { return %s }\nfunc (v %s) validate(path string) error { %s }\n", variantType, unionName, variantType, xmlExpr, variantType, xmlPrefixExpr, variantType, jsonExpr, variantType, stringExpr, variantType, validateExpr)
@@ -1132,7 +1146,12 @@ func (g *goEmitter) emitTrimHasContentChecks(fields []fieldInfo, out *strings.Bu
 }
 
 func (g *goEmitter) emitLeafListDefaultCheck(owner string, f fieldInfo, defaults []cambium.DefaultValue, out *strings.Builder, indent string) string {
-	defaults = g.orderedDefaultValues(defaults, f)
+	var err error
+	defaults, err = g.orderedDefaultValues(defaults, f)
+	if err != nil {
+		g.recordEmitError(err)
+		return "false"
+	}
 	defaultVar := "isDefault" + f.ident
 	fmt.Fprintf(out, "%s%s := false\n", indent, defaultVar)
 	if strings.HasPrefix(f.goType, "UserOrderedVec[") {
@@ -1552,14 +1571,48 @@ func stringPatternInfoForType(info cambium.TypeInfo) (cambium.TypeInfo, bool) {
 	return cambium.TypeInfo{}, false
 }
 
-func stringPatternLiteral(info cambium.TypeInfo) string {
-	r, ok := info.Resolved().(cambium.ResolvedString)
-	if !ok || len(r.Patterns) == 0 {
+func patternsForType(info cambium.TypeInfo) []cambium.Pattern {
+	switch r := info.Resolved().(type) {
+	case cambium.ResolvedString:
+		return r.Patterns
+	case cambium.ResolvedUnion:
+		var patterns []cambium.Pattern
+		for _, member := range r.Members() {
+			patterns = append(patterns, patternsForType(member)...)
+		}
+		return patterns
+	case cambium.ResolvedLeafRef:
+		if realtype, ok := r.Realtype(); ok {
+			return patternsForType(*realtype)
+		}
+	}
+	return nil
+}
+
+func (g *goEmitter) unionPatternLiteral(members []cambium.TypeInfo) string {
+	var patterns []cambium.Pattern
+	for _, member := range members {
+		patterns = append(patterns, patternsForType(member)...)
+	}
+	return g.patternLiteral(patterns)
+}
+
+func (g *goEmitter) stringPatternLiteral(info cambium.TypeInfo) string {
+	return g.patternLiteral(patternsForType(info))
+}
+
+func (g *goEmitter) patternLiteral(patterns []cambium.Pattern) string {
+	if len(patterns) == 0 {
 		return "nil"
 	}
-	parts := make([]string, 0, len(r.Patterns))
-	for _, p := range r.Patterns {
-		parts = append(parts, fmt.Sprintf("{expr: %s, nativeExpr: %s, inverted: %t}", strconv.Quote(p.Regex()), strconv.Quote(xsdregex.NativePattern(p.Regex())), p.IsInverted()))
+	parts := make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		program, err := p.Program()
+		if err != nil {
+			g.recordEmitError(fmt.Errorf("pattern %q: %w", p.Regex(), err))
+			return "nil"
+		}
+		parts = append(parts, fmt.Sprintf("{expr: %s, data: %s, inverted: %t}", strconv.Quote(p.Regex()), programDataLiteral(program.Export()), p.IsInverted()))
 	}
 	return "[]cambiumStringPattern{" + strings.Join(parts, ", ") + "}"
 }
@@ -1626,7 +1679,8 @@ func (g *goEmitter) fieldType(prefix string, node cambium.SchemaNodeRef, fieldId
 		shape = g.scalarType(prefix, node, fieldIdent)
 		base := shape.goType
 		if node.Kind() == cambium.SchemaNodeKindLeafList {
-			shape.isNewtype = false
+			// Collection wrapping changes the field type, not its scalar element
+			// classification used by parsing, ordering, and serialization.
 			if node.OrderedBy() == cambium.OrderedByUser {
 				g.emittedUserOrdered = true
 				shape.goType = "UserOrderedVec[" + base + "]"
@@ -2130,19 +2184,6 @@ func intTypeLimits(k cambium.IntKind) intLimits {
 	default:
 		return intLimits{min: "-9223372036854775808", max: "9223372036854775807"}
 	}
-}
-
-func parseIntBound(s string, limits intLimits) int64 {
-	if s == "min" {
-		v, _ := strconv.ParseInt(limits.min, 10, 64)
-		return v
-	}
-	if s == "max" {
-		v, _ := strconv.ParseInt(limits.max, 10, 64)
-		return v
-	}
-	v, _ := strconv.ParseInt(s, 10, 64)
-	return v
 }
 
 func parseLengthBound(s string) int64 {

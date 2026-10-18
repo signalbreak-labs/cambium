@@ -5,6 +5,7 @@ package xsdregex
 
 import (
 	"fmt"
+	"regexp/syntax"
 	"sort"
 	"strings"
 	"unicode"
@@ -425,6 +426,10 @@ func findClassSubtraction(runes []rune, start int) (marker, subStart, subEnd, en
 	subStart = -1
 	subEnd = -1
 	depth := 0
+	positiveStart := start + 1
+	if positiveStart < len(runes) && runes[positiveStart] == '^' {
+		positiveStart++
+	}
 	for i := start; i < len(runes); i++ {
 		switch runes[i] {
 		case '\\':
@@ -443,6 +448,11 @@ func findClassSubtraction(runes []rune, start int) (marker, subStart, subEnd, en
 				return marker, subStart, subEnd, i, marker != -1 && subStart != -1 && subEnd != -1
 			}
 		case '-':
+			// A leading dash is a literal when followed by a POSIX compatibility
+			// atom. With a nonempty base, retain XSD subtraction precedence.
+			if i == positiveStart && i+2 < len(runes) && runes[i+1] == '[' && runes[i+2] == ':' {
+				continue
+			}
 			if depth == 1 && i+1 < len(runes) && runes[i+1] == '[' && marker == -1 {
 				marker = i
 			}
@@ -459,7 +469,7 @@ func parseClassExprRanges(runes []rune, start int) ([]runeRange, int, bool) {
 			return nil, end, false
 		}
 		sub, parsedSubEnd, ok := parseClassExprRanges(runes, subStart)
-		if !ok || parsedSubEnd != subEnd {
+		if !ok || parsedSubEnd != subEnd || subEnd+1 != end {
 			return nil, end, false
 		}
 		return subtractRanges(base, sub), end, true
@@ -503,21 +513,29 @@ func parseClassContentRanges(runes []rune) ([]runeRange, bool) {
 		}
 	}
 	ranges := make([]runeRange, 0, len(runes))
+	previousRange := false
 	for i := 0; i < len(runes); {
 		start, ok := parseClassAtom(runes, i)
 		if !ok {
 			return nil, false
 		}
+		// Preserve the standalone post-range dash compatibility extension in
+		// addition to XSD group-end dashes. Raw range endpoints remain invalid.
+		if start.rawDash && i != 0 && start.next != len(runes) && !previousRange {
+			return nil, false
+		}
 		if start.next < len(runes) && runes[start.next] == '-' && start.next+1 < len(runes) {
 			end, ok := parseClassAtom(runes, start.next+1)
-			if !ok || !start.singleOK || !end.singleOK || start.single > end.single {
+			if !ok || !start.singleOK || !end.singleOK || start.rawDash || end.rawDash || start.single > end.single {
 				return nil, false
 			}
 			ranges = append(ranges, runeRange{lo: start.single, hi: end.single})
+			previousRange = true
 			i = end.next
 			continue
 		}
 		ranges = append(ranges, start.ranges...)
+		previousRange = false
 		i = start.next
 	}
 	ranges = normalizeRanges(ranges)
@@ -531,6 +549,7 @@ type classAtom struct {
 	ranges   []runeRange
 	single   rune
 	singleOK bool
+	rawDash  bool
 	next     int
 }
 
@@ -539,6 +558,9 @@ func parseClassAtom(runes []rune, start int) (classAtom, bool) {
 		return classAtom{}, false
 	}
 	r := runes[start]
+	if r == '[' && start+1 < len(runes) && runes[start+1] == ':' {
+		return parsePOSIXClassAtom(runes, start)
+	}
 	if r == '[' || r == ']' {
 		return classAtom{}, false
 	}
@@ -549,8 +571,28 @@ func parseClassAtom(runes []rune, start int) (classAtom, bool) {
 		ranges:   []runeRange{{lo: r, hi: r}},
 		single:   r,
 		singleOK: true,
+		rawDash:  r == '-',
 		next:     start + 1,
 	}, true
+}
+
+// parsePOSIXClassAtom preserves Cambium's established ASCII named-class
+// extension. Decode only this complete class atom with the standard library;
+// the surrounding XSD structure and subtraction remain owned by this parser.
+func parsePOSIXClassAtom(runes []rune, start int) (classAtom, bool) {
+	end, ok := skipPOSIXCharacterClass(runes, start)
+	if !ok {
+		return classAtom{}, false
+	}
+	parsed, err := syntax.Parse("["+string(runes[start:end+1])+"]", syntax.Perl)
+	if err != nil || parsed.Op != syntax.OpCharClass {
+		return classAtom{}, false
+	}
+	ranges := make([]runeRange, 0, len(parsed.Rune)/2)
+	for i := 0; i < len(parsed.Rune); i += 2 {
+		ranges = append(ranges, runeRange{lo: parsed.Rune[i], hi: parsed.Rune[i+1]})
+	}
+	return classAtom{ranges: ranges, next: end + 1}, true
 }
 
 func parseClassEscapeAtom(runes []rune, slash int) (classAtom, bool) {
