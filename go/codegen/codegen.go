@@ -92,7 +92,7 @@ type fieldInfo struct {
 	goType        string // Go type expression
 	optional      bool   // true for optional leaves / presence containers
 	jsonKind      string // "String" | "BareNumber" | "QuotedNumber" | "Bool" | "Empty" | "InstanceIdentifier"
-	isNewtype     bool   // true for generated range/length/decimal64 wrapper types
+	isNewtype     bool   // true for scalar values (including collection elements) using range/length/decimal64 wrappers
 	intSigned     bool   // true for signed integer native types
 	isEnum        bool
 	isBits        bool
@@ -430,31 +430,37 @@ func (g *goEmitter) emitIntRangeHelper(name string, info intRangeInfo, out *stri
 
 	ranges := make([]string, 0, len(bounds))
 	zeroInRange := false
-	var minVal int64 = -1
-	if len(bounds) == 0 {
-		lo := parseIntBound("min", limits)
-		hi := parseIntBound("max", limits)
-		ranges = append(ranges, fmt.Sprintf("(v >= %d && v <= %d)", lo, hi))
-		if lo <= 0 && 0 <= hi {
+	var minVal *big.Int
+	addRange := func(lower, upper string) bool {
+		lo, loOK := intBoundBig(lower, limits)
+		hi, hiOK := intBoundBig(upper, limits)
+		if !loOK || !hiOK {
+			g.recordEmitError(fmt.Errorf("invalid integer range bounds for %s: %q..%q", name, lower, upper))
+			return false
+		}
+		ranges = append(ranges, fmt.Sprintf("(v >= %s && v <= %s)", lo.String(), hi.String()))
+		if lo.Sign() <= 0 && hi.Sign() >= 0 {
 			zeroInRange = true
 		}
-		minVal = lo
+		if minVal == nil || lo.Cmp(minVal) < 0 {
+			minVal = lo
+		}
+		return true
+	}
+	if len(bounds) == 0 {
+		if !addRange("min", "max") {
+			return
+		}
 	}
 	for _, b := range bounds {
-		lo := parseIntBound(b.Min(), limits)
-		hi := parseIntBound(b.Max(), limits)
-		ranges = append(ranges, fmt.Sprintf("(v >= %d && v <= %d)", lo, hi))
-		if lo <= 0 && 0 <= hi {
-			zeroInRange = true
-		}
-		if minVal == -1 || lo < minVal {
-			minVal = lo
+		if !addRange(b.Min(), b.Max()) {
+			return
 		}
 	}
 	check := strings.Join(ranges, " || ")
 	defaultExpr := ""
 	if !zeroInRange {
-		defaultExpr = fmt.Sprintf("\n// Default%s returns a valid default value.\nfunc Default%s() %s {\n\tv, _ := New%s(%d)\n\treturn v\n}\n", name, name, name, name, minVal)
+		defaultExpr = fmt.Sprintf("\n// Default%s returns a valid default value.\nfunc Default%s() %s {\n\tv, _ := New%s(%s)\n\treturn v\n}\n", name, name, name, name, minVal.String())
 	}
 
 	fmt.Fprintf(out, "// %s is a generated YANG integer range type.\n", name)
@@ -1673,7 +1679,8 @@ func (g *goEmitter) fieldType(prefix string, node cambium.SchemaNodeRef, fieldId
 		shape = g.scalarType(prefix, node, fieldIdent)
 		base := shape.goType
 		if node.Kind() == cambium.SchemaNodeKindLeafList {
-			shape.isNewtype = false
+			// Collection wrapping changes the field type, not its scalar element
+			// classification used by parsing, ordering, and serialization.
 			if node.OrderedBy() == cambium.OrderedByUser {
 				g.emittedUserOrdered = true
 				shape.goType = "UserOrderedVec[" + base + "]"
@@ -2177,19 +2184,6 @@ func intTypeLimits(k cambium.IntKind) intLimits {
 	default:
 		return intLimits{min: "-9223372036854775808", max: "9223372036854775807"}
 	}
-}
-
-func parseIntBound(s string, limits intLimits) int64 {
-	if s == "min" {
-		v, _ := strconv.ParseInt(limits.min, 10, 64)
-		return v
-	}
-	if s == "max" {
-		v, _ := strconv.ParseInt(limits.max, 10, 64)
-		return v
-	}
-	v, _ := strconv.ParseInt(s, 10, 64)
-	return v
 }
 
 func parseLengthBound(s string) int64 {
