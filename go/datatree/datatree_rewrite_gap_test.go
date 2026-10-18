@@ -272,7 +272,9 @@ func TestApplyDefaultsSkipsLeafWhenWhenFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse disabled: %v", err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	out, err := tree.Serialize(datatree.FormatJSONIETF)
 	if err != nil {
 		t.Fatalf("Serialize disabled: %v", err)
@@ -285,7 +287,9 @@ func TestApplyDefaultsSkipsLeafWhenWhenFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse enabled: %v", err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	out, err = tree.Serialize(datatree.FormatJSONIETF)
 	if err != nil {
 		t.Fatalf("Serialize enabled: %v", err)
@@ -333,7 +337,9 @@ func TestRefineIdentityRefDefaultUsesRefinePrefixContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	out, err := tree.Serialize(datatree.FormatJSONIETF)
 	if err != nil {
 		t.Fatalf("Serialize: %v", err)
@@ -380,7 +386,9 @@ func TestDeviationIdentityRefDefaultUsesDeviationPrefixContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	out, err := tree.Serialize(datatree.FormatJSONIETF)
 	if err != nil {
 		t.Fatalf("Serialize: %v", err)

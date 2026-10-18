@@ -24,7 +24,9 @@ func applyDefaultsJSON(t *testing.T, src, name, in string) string {
 	if err != nil {
 		t.Fatalf("Parse(%s): %v", in, err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	out, err := tree.Serialize(datatree.FormatJSONIETF)
 	if err != nil {
 		t.Fatalf("Serialize: %v", err)
@@ -62,9 +64,13 @@ func TestApplyDefaultsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	first, _ := tree.Serialize(datatree.FormatJSONIETF)
-	tree.ApplyDefaults()
+	if err := tree.ApplyDefaults(); err != nil {
+		t.Fatal(err)
+	}
 	second, _ := tree.Serialize(datatree.FormatJSONIETF)
 	if string(first) != string(second) {
 		t.Fatalf("ApplyDefaults not idempotent:\n first: %s\nsecond: %s", first, second)

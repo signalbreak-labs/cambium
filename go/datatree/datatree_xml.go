@@ -226,7 +226,14 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 		}
 		n.kind = kindLeaf
 		ti, _ := sn.LeafType()
-		n.value = canonicalLeafToken(sn, jsonTokenFromText(ti, group[0].text, sn.Module(), group[0].scope))
+		token, err := jsonTokenFromText(ti, group[0].text, sn.Module(), group[0].scope)
+		if err != nil {
+			return nil, fmt.Errorf("%s: XML value: %w", sn.Path(), err)
+		}
+		n.value, err = canonicalLeafToken(sn, token)
+		if err != nil {
+			return nil, err
+		}
 	case sn.IsLeafList():
 		n.kind = kindLeafList
 		ti, _ := sn.LeafType()
@@ -234,9 +241,19 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 			if len(e.kids) > 0 {
 				return nil, fmt.Errorf("datatree: XML leaf-list %q contains child elements", sn.Name())
 			}
-			n.values = append(n.values, canonicalLeafToken(sn, jsonTokenFromText(ti, e.text, sn.Module(), e.scope)))
+			token, err := jsonTokenFromText(ti, e.text, sn.Module(), e.scope)
+			if err != nil {
+				return nil, fmt.Errorf("%s: XML value: %w", sn.Path(), err)
+			}
+			token, err = canonicalLeafToken(sn, token)
+			if err != nil {
+				return nil, err
+			}
+			n.values = append(n.values, token)
 		}
-		sortSystemOrdered(sn, n)
+		if err := sortSystemOrdered(sn, n); err != nil {
+			return nil, err
+		}
 	case sn.IsContainer():
 		if err := requireSingleXML(sn, group); err != nil {
 			return nil, err
@@ -262,7 +279,9 @@ func bindXMLNode(sn cambium.SchemaNodeRef, group []*xmlElem) (*node, error) {
 			}
 			n.entries = append(n.entries, keysFirst(sn, kids))
 		}
-		sortSystemOrdered(sn, n)
+		if err := sortSystemOrdered(sn, n); err != nil {
+			return nil, err
+		}
 	case sn.IsAnyData(), sn.IsAnyXML():
 		return nil, fmt.Errorf("datatree: anydata/anyxml %q in XML input is not supported "+
 			"(the pure-Go XML reader cannot losslessly capture opaque content; use JSON_IETF "+
@@ -283,48 +302,57 @@ func requireSingleXML(sn cambium.SchemaNodeRef, group []*xmlElem) error {
 // jsonTokenFromText converts a lexical value — XML element text or a schema
 // default — to the internal JSON_IETF token for type ti. scope resolves the
 // prefixes inside identityref and instance-identifier values.
-func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule cambium.Module, scope valueScope) json.RawMessage {
+func jsonTokenFromText(ti cambium.TypeInfo, text string, leafModule cambium.Module, scope valueScope) (json.RawMessage, error) {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedBoolean:
 		s := strings.TrimSpace(text)
 		if s == "true" || s == "false" {
-			return json.RawMessage(s)
+			return json.RawMessage(s), nil
 		}
-		return jsonStringToken(text)
+		return jsonStringToken(text), nil
 	case cambium.ResolvedEmpty:
 		if strings.TrimSpace(text) == "" {
-			return json.RawMessage("[null]")
+			return json.RawMessage("[null]"), nil
 		}
-		return jsonStringToken(text)
+		return jsonStringToken(text), nil
 	case cambium.ResolvedInt:
-		return jsonTokenFromIntegerText(text, r.Kind)
+		return jsonTokenFromIntegerText(text, r.Kind), nil
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
-			token := jsonTokenFromText(member, text, leafModule, scope)
+			token, err := jsonTokenFromText(member, text, leafModule, scope)
+			if err != nil {
+				return nil, err
+			}
 			var trial []string
-			validateLeafValue(member, token, "", leafModule.Name(), &trial)
+			if err := validateLeafValue(member, token, "", leafModule.Name(), &trial); err != nil {
+				return nil, err
+			}
 			if len(trial) == 0 {
-				return token
+				return token, nil
 			}
 		}
-		return jsonStringToken(text)
+		return jsonStringToken(text), nil
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
 			return jsonTokenFromText(*rt, text, leafModule, scope)
 		}
-		return jsonStringToken(text)
+		return jsonStringToken(text), nil
 	case cambium.ResolvedIdentityRef:
 		if jsonName, ok := identityrefJSONName(text, r, leafModule, scope); ok {
-			return jsonStringToken(jsonName)
+			return jsonStringToken(jsonName), nil
 		}
-		return jsonStringToken(text)
+		return jsonStringToken(text), nil
 	case cambium.ResolvedInstanceIdentifier:
-		if path, ok := instanceIdentifierFromLexical(text, leafModule, scope); ok {
-			return jsonStringToken(path)
+		path, ok, err := instanceIdentifierFromLexical(text, leafModule, scope)
+		if err != nil {
+			return nil, err
 		}
-		return jsonStringToken(text)
+		if ok {
+			return jsonStringToken(path), nil
+		}
+		return jsonStringToken(text), nil
 	default:
-		return jsonStringToken(text)
+		return jsonStringToken(text), nil
 	}
 }
 
@@ -444,11 +472,17 @@ func (t *Tree) serializeXML() ([]byte, error) {
 func writeXMLNode(b *bytes.Buffer, n *node, parentNS string) error {
 	switch n.kind {
 	case kindLeaf:
-		text, decls := xmlLeafText(n, n.value)
+		text, decls, err := xmlLeafText(n, n.value)
+		if err != nil {
+			return err
+		}
 		writeXMLLeaf(b, n, parentNS, text, decls)
 	case kindLeafList:
 		for _, v := range n.values {
-			text, decls := xmlLeafText(n, v)
+			text, decls, err := xmlLeafText(n, v)
+			if err != nil {
+				return err
+			}
 			writeXMLLeaf(b, n, parentNS, text, decls)
 		}
 	case kindContainer:
@@ -531,29 +565,37 @@ func writeXMLNS(b *bytes.Buffer, n *node, parentNS string) {
 type xmlNSDecl struct{ prefix, uri string }
 
 // xmlLeafText renders the value token of leaf or leaf-list n as XML text.
-func xmlLeafText(n *node, raw json.RawMessage) (string, []xmlNSDecl) {
+func xmlLeafText(n *node, raw json.RawMessage) (string, []xmlNSDecl, error) {
 	ti, ok := n.schema.LeafType()
 	if !ok {
-		return xmlTextFromToken(raw), nil
+		return xmlTextFromToken(raw), nil, nil
 	}
-	return xmlValueText(ti, raw, n.schema.Module())
+	text, decls, err := xmlValueText(ti, raw, n.schema.Module())
+	if err != nil {
+		return "", nil, fmt.Errorf("%s: XML value: %w", n.schema.Path(), err)
+	}
+	return text, decls, nil
 }
 
 // xmlValueText renders a value token of type ti as XML element text. Values
 // that name identities or data nodes of another module are written with each
 // such module's own prefix, declared on the value's element, as libyang
 // prints them; an identity of the leaf's own module needs no prefix.
-func xmlValueText(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) (string, []xmlNSDecl) {
+func xmlValueText(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) (string, []xmlNSDecl, error) {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedIdentityRef:
 		if id, ok := identityFromJSON(raw, r, leafModule); ok && id.Module().Name() != leafModule.Name() {
 			m := id.Module()
-			return m.Prefix() + ":" + id.Name(), []xmlNSDecl{{prefix: m.Prefix(), uri: m.Namespace()}}
+			return m.Prefix() + ":" + id.Name(), []xmlNSDecl{{prefix: m.Prefix(), uri: m.Namespace()}}, nil
 		}
 	case cambium.ResolvedInstanceIdentifier:
 		if s, ok := jsonStringValue(raw); ok {
-			if path, decls, ok := instanceIdentifierXML(s, leafModule); ok {
-				return path, decls
+			path, decls, ok, err := instanceIdentifierXML(s, leafModule)
+			if err != nil {
+				return "", nil, err
+			}
+			if ok {
+				return path, decls, nil
 			}
 		}
 	case cambium.ResolvedLeafRef:
@@ -563,13 +605,15 @@ func xmlValueText(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.M
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
 			var trial []string
-			validateLeafValue(member, raw, "", leafModule.Name(), &trial)
+			if err := validateLeafValue(member, raw, "", leafModule.Name(), &trial); err != nil {
+				return "", nil, err
+			}
 			if len(trial) == 0 {
 				return xmlValueText(member, raw, leafModule) // first matching member wins
 			}
 		}
 	}
-	return xmlTextFromToken(raw), nil
+	return xmlTextFromToken(raw), nil, nil
 }
 
 // xmlTextFromToken converts an internal JSON token back to XML element text by

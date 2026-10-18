@@ -4,6 +4,7 @@
 package datatree
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -14,14 +15,15 @@ import (
 // then evaluates each present node's when and must constraints with the XPath
 // evaluator. A constraint whose expression cannot be parsed or evaluated (an
 // unsupported construct or function) is SKIPPED — never reported — so the engine
-// never produces a wrong verdict.
-func (t *Tree) checkMustWhen(out *[]string) {
+// never produces a wrong verdict. Supported matcher operational failures are
+// returned rather than classified as unsupported.
+func (t *Tree) checkMustWhen(out *[]string) error {
 	root := &xnode{}
 	root.kids = buildXNodes(flattenTopLevel(t.modules...), t.roots, root)
-	walkMustWhen(root, root, out)
+	return walkMustWhen(root, root, out)
 }
 
-func walkMustWhen(root, n *xnode, out *[]string) {
+func walkMustWhen(root, n *xnode, out *[]string) error {
 	if n.hasSchema {
 		for _, w := range n.schema.Whens() {
 			contextNode := constraintContextNode(n, w.ContextAncestorDepth())
@@ -33,22 +35,35 @@ func walkMustWhen(root, n *xnode, out *[]string) {
 			}
 			ev := constraintEvaluator(root, contextNode, contextNode, w.SourceModule(), n.schema.Module(), w.ExcludedSubtreeRoots())
 			c := ectx{node: contextNode, pos: 1, size: 1}
-			if ok, err := evalConstraint(ev, w.Expression(), c); err == nil && !ok {
+			disposition, err := constraintDisposition(ev, w.Expression(), c)
+			if err != nil {
+				return fmt.Errorf("%s: when %q: %w", xnodePath(n), w.Expression(), err)
+			}
+			if disposition == predicateFalse {
 				*out = append(*out, fmt.Sprintf("%s: when condition %q is not satisfied", xnodePath(n), w.Expression()))
 			}
 		}
 		c := ectx{node: n, pos: 1, size: 1}
 		for _, m := range n.schema.Musts() {
 			ev := constraintEvaluator(root, n, n, m.SourceModule(), n.schema.Module(), nil)
-			if ok, err := evalConstraint(ev, m.Expression(), c); err == nil && !ok {
+			disposition, err := constraintDisposition(ev, m.Expression(), c)
+			if err != nil {
+				return fmt.Errorf("%s: must %q: %w", xnodePath(n), m.Expression(), err)
+			}
+			if disposition == predicateFalse {
 				*out = append(*out, fmt.Sprintf("%s: %s", xnodePath(n), mustMessage(m)))
 			}
 		}
-		checkInstanceIdentifier(constraintEvaluator(root, n, n, n.schema.Module(), n.schema.Module(), nil), n, out)
+		if err := checkInstanceIdentifier(constraintEvaluator(root, n, n, n.schema.Module(), n.schema.Module(), nil), n, out); err != nil {
+			return fmt.Errorf("%s: %w", xnodePath(n), err)
+		}
 	}
 	for _, k := range n.kids {
-		walkMustWhen(root, k, out)
+		if err := walkMustWhen(root, k, out); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func constraintContextNode(n *xnode, ancestorDepth int) *xnode {
@@ -88,7 +103,7 @@ func excludedMap(roots []cambium.SchemaNodeRef) map[cambium.SchemaNodeRef]bool {
 }
 
 // evalConstraint parses and evaluates a constraint expression to a boolean. Any
-// parse or evaluation error is returned so the caller skips the check.
+// parse or evaluation error is returned to the predicate-disposition boundary.
 func evalConstraint(ev *evaluator, expr string, c ectx) (bool, error) {
 	ast, err := parseXPath(expr)
 	if err != nil {
@@ -120,4 +135,36 @@ func xnodePath(n *xnode) string {
 		parts = append([]string{cur.name}, parts...)
 	}
 	return "/" + strings.Join(parts, "/")
+}
+
+// patternEvaluationError distinguishes supported matcher failures from legacy
+// unsupported XPath expressions. Its cause remains available through errors.As.
+type patternEvaluationError struct{ err error }
+
+func (e *patternEvaluationError) Error() string { return e.err.Error() }
+func (e *patternEvaluationError) Unwrap() error { return e.err }
+
+type predicateResult uint8
+
+const (
+	predicateFalse predicateResult = iota
+	predicateTrue
+	legacyUnsupported
+)
+
+// constraintDisposition is the sole compatibility boundary for predicates.
+// Only matcher-origin errors escape; unrelated unsupported XPath keeps its
+// historical present-node skip / absent-node inactive disposition.
+func constraintDisposition(ev *evaluator, expr string, c ectx) (predicateResult, error) {
+	ok, err := evalConstraint(ev, expr, c)
+	if err != nil {
+		if _, matcher := errors.AsType[*patternEvaluationError](err); matcher {
+			return predicateFalse, err
+		}
+		return legacyUnsupported, nil
+	}
+	if ok {
+		return predicateTrue, nil
+	}
+	return predicateFalse, nil
 }

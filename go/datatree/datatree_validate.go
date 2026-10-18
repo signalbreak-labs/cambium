@@ -4,6 +4,7 @@
 package datatree
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -26,7 +27,9 @@ func (e *ValidationError) Error() string {
 // (configuration data only), list keys present in every entry, list key and
 // unique-statement uniqueness, per-leaf value types, leafref instance
 // existence, and must/when XPath constraints. It returns a *ValidationError
-// listing every violation, or nil if the tree is valid.
+// listing every ordinary violation, or nil if the tree is valid. A matcher
+// operational failure returns immediately with its typed cause preserved; any
+// prior ordinary violations are joined to that error.
 //
 // Constraints follow the data tree RFC 7950 describes: only the case of a
 // choice whose data exists is validated, and a non-presence container exists
@@ -44,12 +47,18 @@ func (t *Tree) Validate() error {
 	var violations []string
 	root := t.xroot()
 	v := validator{root: root, out: &violations}
-	v.level(root, topLevelSchema(t.modules...), [][]*node{t.roots}, "")
-	t.checkMustWhen(&violations)
-	if len(violations) == 0 {
-		return nil
+	err := v.level(root, topLevelSchema(t.modules...), [][]*node{t.roots}, "")
+	if err == nil {
+		err = t.checkMustWhen(&violations)
 	}
-	return &ValidationError{Violations: violations}
+	if len(violations) == 0 {
+		return err
+	}
+	ordinary := &ValidationError{Violations: violations}
+	if err == nil {
+		return ordinary
+	}
+	return errors.Join(ordinary, err)
 }
 
 // validator walks the schema in declaration order and checks it against the
@@ -68,20 +77,24 @@ func (v *validator) report(format string, args ...any) {
 // schema, the level's children with choice and case nodes kept. parent is the
 // level's XPath node: a detached placeholder when the level is an absent
 // non-presence container.
-func (v *validator) level(parent *xnode, schema []cambium.SchemaNodeRef, ancestors [][]*node, path string) {
-	v.nodes(parent, schema, indexLevel(ancestors[len(ancestors)-1]), ancestors, path)
+func (v *validator) level(parent *xnode, schema []cambium.SchemaNodeRef, ancestors [][]*node, path string) error {
+	return v.nodes(parent, schema, indexLevel(ancestors[len(ancestors)-1]), ancestors, path)
 }
 
-func (v *validator) nodes(parent *xnode, schema []cambium.SchemaNodeRef, present levelIndex, ancestors [][]*node, path string) {
+func (v *validator) nodes(parent *xnode, schema []cambium.SchemaNodeRef, present levelIndex, ancestors [][]*node, path string) error {
 	for _, sn := range schema {
 		if sn.IsChoice() {
-			v.choice(parent, sn, present, ancestors, path)
+			if err := v.choice(parent, sn, present, ancestors, path); err != nil {
+				return err
+			}
 			continue
 		}
 		childPath := path + "/" + sn.Name()
 		dn := present.node(sn)
 		if dn == nil {
-			v.missing(parent, sn, ancestors, childPath)
+			if err := v.missing(parent, sn, ancestors, childPath); err != nil {
+				return err
+			}
 			continue
 		}
 		switch {
@@ -89,13 +102,17 @@ func (v *validator) nodes(parent *xnode, schema []cambium.SchemaNodeRef, present
 			checkElements(sn, len(dn.entries), childPath, v.out)
 			checkListKeys(sn, dn, childPath, v.out)
 			listNodes := matchingChildXNodes(parent, sn)
-			v.checkUnique(sn, dn, listNodes, childPath)
+			if err := v.checkUnique(sn, dn, listNodes, childPath); err != nil {
+				return err
+			}
 			for i, entry := range dn.entries {
 				var listParent *xnode
 				if i < len(listNodes) {
 					listParent = listNodes[i]
 				}
-				v.level(listParent, levelSchema(sn), appendFrame(ancestors, entry), fmt.Sprintf("%s[%d]", childPath, i))
+				if err := v.level(listParent, levelSchema(sn), appendFrame(ancestors, entry), fmt.Sprintf("%s[%d]", childPath, i)); err != nil {
+					return err
+				}
 			}
 		case sn.IsLeafList():
 			checkElements(sn, len(dn.values), childPath, v.out)
@@ -106,27 +123,42 @@ func (v *validator) nodes(parent *xnode, schema []cambium.SchemaNodeRef, present
 			if ti, ok := sn.LeafType(); ok {
 				for i, value := range dn.values {
 					valuePath := fmt.Sprintf("%s[%d]", childPath, i)
-					validateLeafValue(ti, value, valuePath, sn.Module().Name(), v.out)
-					checkLeafRefInstance(sn, value, ancestors, valuePath, v.out)
+					if err := validateLeafValue(ti, value, valuePath, sn.Module().Name(), v.out); err != nil {
+						return err
+					}
+					if err := checkLeafRefInstance(sn, value, ancestors, valuePath, v.out); err != nil {
+						return err
+					}
 				}
 			}
 		case sn.IsContainer():
-			v.level(firstMatchingChildXNode(parent, sn), levelSchema(sn), appendFrame(ancestors, dn.children), childPath)
+			if err := v.level(firstMatchingChildXNode(parent, sn), levelSchema(sn), appendFrame(ancestors, dn.children), childPath); err != nil {
+				return err
+			}
 		case sn.IsLeaf():
 			if ti, ok := sn.LeafType(); ok {
-				validateLeafValue(ti, dn.value, childPath, sn.Module().Name(), v.out)
+				if err := validateLeafValue(ti, dn.value, childPath, sn.Module().Name(), v.out); err != nil {
+					return err
+				}
 			}
-			checkLeafRefInstance(sn, dn.value, ancestors, childPath, v.out)
+			if err := checkLeafRefInstance(sn, dn.value, ancestors, childPath, v.out); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
 }
 
 // missing checks an absent node whose when conditions (if any) hold: it must
 // not be mandatory or require elements, and an absent non-presence container
 // is validated as an empty one.
-func (v *validator) missing(parent *xnode, sn cambium.SchemaNodeRef, ancestors [][]*node, path string) {
-	if !schemaNodeActiveForMissing(v.root, parent, sn) {
-		return
+func (v *validator) missing(parent *xnode, sn cambium.SchemaNodeRef, ancestors [][]*node, path string) error {
+	active, err := schemaNodeActiveForMissing(v.root, parent, sn)
+	if err != nil {
+		return err
+	}
+	if !active {
+		return nil
 	}
 	if sn.IsMandatory() {
 		v.report("missing mandatory node %s", path)
@@ -135,15 +167,18 @@ func (v *validator) missing(parent *xnode, sn cambium.SchemaNodeRef, ancestors [
 		v.report("%s has 0 entries, fewer than min-elements %d", path, minE)
 	}
 	if sn.IsContainer() && !sn.IsPresenceContainer() {
-		v.level(dummyMissingNode(parent, sn), levelSchema(sn), appendFrame(ancestors, nil), path)
+		if err := v.level(dummyMissingNode(parent, sn), levelSchema(sn), appendFrame(ancestors, nil), path); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // choice checks that at most one case has data and that a mandatory choice
 // has one, then validates the selected case only: constraints inside the
 // other cases do not apply (RFC 7950 §7.9). With data in several cases, the
 // first is validated, as libyang does.
-func (v *validator) choice(parent *xnode, choice cambium.SchemaNodeRef, present levelIndex, ancestors [][]*node, path string) {
+func (v *validator) choice(parent *xnode, choice cambium.SchemaNodeRef, present levelIndex, ancestors [][]*node, path string) error {
 	var withData []cambium.SchemaNodeRef
 	for _, c := range choiceCases(choice) {
 		if caseHas(c, present, instantiated) {
@@ -155,12 +190,18 @@ func (v *validator) choice(parent *xnode, choice cambium.SchemaNodeRef, present 
 	}
 	selected, ok := dataCase(choice, present)
 	if !ok {
-		if choice.IsMandatory() && choiceActive(v.root, parent, choice) {
-			v.report("missing mandatory choice %s/%s", path, choice.Name())
+		if choice.IsMandatory() {
+			active, err := choiceActive(v.root, parent, choice)
+			if err != nil {
+				return err
+			}
+			if active {
+				v.report("missing mandatory choice %s/%s", path, choice.Name())
+			}
 		}
-		return
+		return nil
 	}
-	v.nodes(parent, caseSchema(selected), present, ancestors, path)
+	return v.nodes(parent, caseSchema(selected), present, ancestors, path)
 }
 
 func displayPath(path string) string {
@@ -176,24 +217,27 @@ func (t *Tree) xroot() *xnode {
 	return root
 }
 
-func schemaNodeActiveForMissing(root, parent *xnode, sn cambium.SchemaNodeRef) bool {
+func schemaNodeActiveForMissing(root, parent *xnode, sn cambium.SchemaNodeRef) (bool, error) {
 	whens := sn.Whens()
 	if len(whens) == 0 {
-		return true
+		return true, nil
 	}
 	dummy := dummyMissingNode(parent, sn)
 	for _, w := range whens {
 		contextNode := missingConstraintContext(parent, dummy, w.ContextAncestorDepth())
 		if contextNode == nil {
-			return false
+			return false, nil
 		}
 		ev := constraintEvaluator(root, contextNode, contextNode, w.SourceModule(), sn.Module(), w.ExcludedSubtreeRoots())
-		ok, err := evalConstraint(ev, w.Expression(), ectx{node: contextNode, pos: 1, size: 1})
-		if err != nil || !ok {
-			return false
+		disposition, err := constraintDisposition(ev, w.Expression(), ectx{node: contextNode, pos: 1, size: 1})
+		if err != nil {
+			return false, fmt.Errorf("%s: when %q: %w", xnodePath(dummy), w.Expression(), err)
+		}
+		if disposition != predicateTrue {
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }
 
 func dummyMissingNode(parent *xnode, sn cambium.SchemaNodeRef) *xnode {

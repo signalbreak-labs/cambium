@@ -6,6 +6,7 @@ package datatree
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"slices"
 	"strconv"
@@ -23,12 +24,16 @@ const maxNumericLexicalLen = 256
 
 // canonicalLeafToken returns the canonical token for a value of the leaf or
 // leaf-list sn (see canonicalToken).
-func canonicalLeafToken(sn cambium.SchemaNodeRef, raw json.RawMessage) json.RawMessage {
+func canonicalLeafToken(sn cambium.SchemaNodeRef, raw json.RawMessage) (json.RawMessage, error) {
 	ti, ok := sn.LeafType()
 	if !ok {
-		return raw
+		return raw, nil
 	}
-	return canonicalToken(ti, raw, sn.Module())
+	token, err := canonicalToken(ti, raw, sn.Module())
+	if err != nil {
+		return nil, fmt.Errorf("%s: canonical value: %w", sn.Path(), err)
+	}
+	return token, nil
 }
 
 // canonicalToken returns the canonical form of a leaf value token of type ti —
@@ -38,55 +43,59 @@ func canonicalLeafToken(sn cambium.SchemaNodeRef, raw json.RawMessage) json.RawM
 // instance-identifier that does not resolve against the schema is also kept
 // as written). leafModule is the leaf's module: an identityref naming one of
 // its identities is written without a module qualifier (RFC 7951 §6.8).
-func canonicalToken(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) json.RawMessage {
+func canonicalToken(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) (json.RawMessage, error) {
 	switch ti.Base() {
 	case cambium.BaseTypeString, cambium.BaseTypeBoolean, cambium.BaseTypeEmpty,
 		cambium.BaseTypeEnumeration, cambium.BaseTypeBinary:
-		return raw // already canonical as parsed; skip resolving the type
+		return raw, nil // already canonical as parsed; skip resolving the type
 	}
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedInt:
 		text, ok := integerText(raw, r.Kind)
 		if !ok || len(text) > maxNumericLexicalLen {
-			return raw
+			return raw, nil
 		}
 		v, ok := new(big.Int).SetString(text, 10)
 		if !ok {
-			return raw
+			return raw, nil
 		}
 		if integerJSONQuoted(r.Kind) {
-			return jsonStringToken(v.String())
+			return jsonStringToken(v.String()), nil
 		}
-		return json.RawMessage(v.String())
+		return json.RawMessage(v.String()), nil
 	case cambium.ResolvedDecimal64:
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return raw
+			return raw, nil
 		}
 		fd := int(r.FractionDigits().Value())
 		if num, ok := parseDecimal64(s, fd); ok {
-			return jsonStringToken(formatDecimal64(num, fd))
+			return jsonStringToken(formatDecimal64(num, fd)), nil
 		}
 	case cambium.ResolvedBits:
 		if s, ok := canonicalBits(raw, r.Values()); ok {
-			return jsonStringToken(s)
+			return jsonStringToken(s), nil
 		}
 	case cambium.ResolvedIdentityRef:
 		s, ok := jsonStringValue(raw)
 		if !ok {
-			return raw
+			return raw, nil
 		}
 		if mod, name, qualified := strings.Cut(s, ":"); qualified && mod == leafModule.Name() {
 			var bad []string
 			validateIdentityRef(r, s, "", leafModule.Name(), &bad)
 			if len(bad) == 0 {
-				return jsonStringToken(name)
+				return jsonStringToken(name), nil
 			}
 		}
 	case cambium.ResolvedInstanceIdentifier:
 		if s, ok := jsonStringValue(raw); ok {
-			if path, ok := canonicalInstanceIdentifier(s, leafModule); ok {
-				return jsonStringToken(path)
+			path, ok, err := canonicalInstanceIdentifier(s, leafModule)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				return jsonStringToken(path), nil
 			}
 		}
 	case cambium.ResolvedLeafRef:
@@ -96,13 +105,15 @@ func canonicalToken(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
 			var trial []string
-			validateLeafValue(member, raw, "", leafModule.Name(), &trial)
+			if err := validateLeafValue(member, raw, "", leafModule.Name(), &trial); err != nil {
+				return nil, err
+			}
 			if len(trial) == 0 {
 				return canonicalToken(member, raw, leafModule) // first matching member wins
 			}
 		}
 	}
-	return raw
+	return raw, nil
 }
 
 // valueKey returns the comparison key of a canonical value token of type ti,
@@ -112,14 +123,14 @@ func canonicalToken(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium
 // leaf's own module implicit, so the same identity reads "one" in a leaf of
 // its module and "m:one" in a leaf of another. leafModule is the name of the
 // module of the leaf holding the value.
-func valueKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) string {
+func valueKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) (string, error) {
 	if !valueKeyQualifies(ti) {
-		return string(raw)
+		return string(raw), nil
 	}
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedIdentityRef:
 		if s, ok := jsonStringValue(raw); ok && !strings.Contains(s, ":") {
-			return string(jsonStringToken(leafModule + ":" + s))
+			return string(jsonStringToken(leafModule + ":" + s)), nil
 		}
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
@@ -128,13 +139,15 @@ func valueKey(ti cambium.TypeInfo, raw json.RawMessage, leafModule string) strin
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
 			var trial []string
-			validateLeafValue(member, raw, "", leafModule, &trial)
+			if err := validateLeafValue(member, raw, "", leafModule, &trial); err != nil {
+				return "", err
+			}
 			if len(trial) == 0 {
 				return valueKey(member, raw, leafModule) // first matching member wins
 			}
 		}
 	}
-	return string(raw)
+	return string(raw), nil
 }
 
 // valueKeyQualifies reports whether a value of type ti may name an identity,
@@ -150,12 +163,16 @@ func valueKeyQualifies(ti cambium.TypeInfo) bool {
 
 // leafValueKey returns the comparison key of a value of the leaf or leaf-list
 // sn (see valueKey).
-func leafValueKey(sn cambium.SchemaNodeRef, raw json.RawMessage) string {
+func leafValueKey(sn cambium.SchemaNodeRef, raw json.RawMessage) (string, error) {
 	ti, ok := sn.LeafType()
 	if !ok {
-		return string(raw)
+		return string(raw), nil
 	}
-	return valueKey(ti, raw, sn.Module().Name())
+	key, err := valueKey(ti, raw, sn.Module().Name())
+	if err != nil {
+		return "", fmt.Errorf("%s: comparison key: %w", sn.Path(), err)
+	}
+	return key, nil
 }
 
 // parseDecimal64 returns s as a decimal64 scaled by 10^fractionDigits (the

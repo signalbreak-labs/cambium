@@ -5,6 +5,7 @@ package datatree
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,21 +23,29 @@ import (
 // resolve against the schema is evaluated as written, with the leaf module's
 // import prefixes; anything still unresolvable makes evaluation error out and
 // the check is SKIPPED — never a wrong verdict.
-func checkInstanceIdentifier(ev *evaluator, n *xnode, out *[]string) {
+func checkInstanceIdentifier(ev *evaluator, n *xnode, out *[]string) error {
 	if !n.hasSchema || !n.leaf {
-		return
+		return nil
 	}
 	ti, ok := n.schema.LeafType()
 	if !ok {
-		return
+		return nil
 	}
 	ii, ok := ti.Resolved().(cambium.ResolvedInstanceIdentifier)
 	if !ok || !ii.RequireInstance {
-		return
+		return nil
 	}
 	expr := n.value
-	if steps, ok := resolveJSONInstanceIdentifier(n.value, n.schema.Module()); ok {
-		if xp, decls, ok := renderInstanceIdentifierPrefixed(steps, true); ok {
+	steps, ok, err := resolveJSONInstanceIdentifier(n.value, n.schema.Module())
+	if err != nil {
+		return err
+	}
+	if ok {
+		xp, decls, ok, err := renderInstanceIdentifierPrefixed(steps, true)
+		if err != nil {
+			return err
+		}
+		if ok {
 			expr = xp
 			ev.prefixNS = make(map[string]string, len(decls))
 			for _, d := range decls {
@@ -46,15 +55,19 @@ func checkInstanceIdentifier(ev *evaluator, n *xnode, out *[]string) {
 	}
 	ast, err := parseXPath(expr)
 	if err != nil {
-		return // unparseable instance-identifier: skip
+		return nil //nolint:nilerr // Legacy unsupported instance-identifier syntax is skipped.
 	}
 	v, err := ev.eval(ast, ectx{node: n, pos: 1, size: 1})
+	if _, matcher := errors.AsType[*patternEvaluationError](err); matcher {
+		return err
+	}
 	if err != nil || v.kind != kNodeset {
-		return // unresolvable: skip
+		return nil //nolint:nilerr // Matcher errors escaped above; preserve legacy unsupported XPath policy.
 	}
 	if len(v.ns) == 0 {
 		*out = append(*out, fmt.Sprintf("%s: instance-identifier %q references a non-existent instance", xnodePath(n), n.value))
 	}
+	return nil
 }
 
 // Instance-identifier values (RFC 7950 §9.13) are paths to data nodes, and
@@ -223,7 +236,7 @@ type iidNames interface {
 	// qual; parent is the module of the preceding path node (zero at the root).
 	matches(sn cambium.SchemaNodeRef, qual string, parent cambium.Module) bool
 	// token converts a predicate value as written to a JSON token of type ti.
-	token(ti cambium.TypeInfo, text string, leafModule cambium.Module) json.RawMessage
+	token(ti cambium.TypeInfo, text string, leafModule cambium.Module) (json.RawMessage, error)
 }
 
 // lexicalNames: XML (and YANG schema) form, where each qualifier is a prefix
@@ -235,7 +248,7 @@ func (l lexicalNames) matches(sn cambium.SchemaNodeRef, qual string, _ cambium.M
 	return ok && ns == sn.Namespace()
 }
 
-func (l lexicalNames) token(ti cambium.TypeInfo, text string, leafModule cambium.Module) json.RawMessage {
+func (l lexicalNames) token(ti cambium.TypeInfo, text string, leafModule cambium.Module) (json.RawMessage, error) {
 	return jsonTokenFromText(ti, text, leafModule, l.scope)
 }
 
@@ -250,7 +263,7 @@ func (j jsonNames) matches(sn cambium.SchemaNodeRef, qual string, parent cambium
 	return qual != "" && sn.Module().Name() == qual
 }
 
-func (j jsonNames) token(ti cambium.TypeInfo, text string, leafModule cambium.Module) json.RawMessage {
+func (j jsonNames) token(ti cambium.TypeInfo, text string, leafModule cambium.Module) (json.RawMessage, error) {
 	return jsonTokenFromText(ti, text, leafModule, moduleNameScope{modules: j.modules, local: leafModule})
 }
 
@@ -276,7 +289,7 @@ func (s moduleNameScope) namespace(name string) (string, bool) {
 // resolveInstanceIdentifier resolves parsed steps against the schema reachable
 // from leafModule: the top-level nodes of leafModule and the modules it imports
 // (transitively), then each node's data children, augmentations included.
-func resolveInstanceIdentifier(steps []iidStep, leafModule cambium.Module, names iidNames) ([]iidNode, bool) {
+func resolveInstanceIdentifier(steps []iidStep, leafModule cambium.Module, names iidNames) ([]iidNode, bool, error) {
 	var candidates []cambium.SchemaNodeRef
 	for _, m := range moduleClosure(leafModule) {
 		candidates = append(candidates, flattenTopLevel(m)...)
@@ -286,7 +299,7 @@ func resolveInstanceIdentifier(steps []iidStep, leafModule cambium.Module, names
 	for _, st := range steps {
 		node, ok := findIIDNode(candidates, st.name, st.qual, parent, names)
 		if !ok {
-			return nil, false
+			return nil, false, nil
 		}
 		resolved := iidNode{node: node}
 		for _, p := range st.preds {
@@ -294,23 +307,30 @@ func resolveInstanceIdentifier(steps []iidStep, leafModule cambium.Module, names
 			switch p.kind {
 			case iidPredKey:
 				if !node.IsList() {
-					return nil, false
+					return nil, false, nil
 				}
 				if pred.leaf, ok = findIIDNode(childRefs(node.ListKeys()), p.name, p.qual, node.Module(), names); !ok {
-					return nil, false
+					return nil, false, nil
 				}
 			case iidPredLeafList:
 				if !node.IsLeafList() {
-					return nil, false
+					return nil, false, nil
 				}
 				pred.leaf = node
 			}
 			if p.kind != iidPredPos {
 				ti, ok := pred.leaf.LeafType()
 				if !ok {
-					return nil, false
+					return nil, false, nil
 				}
-				pred.token = canonicalToken(ti, names.token(ti, p.value, pred.leaf.Module()), pred.leaf.Module())
+				token, err := names.token(ti, p.value, pred.leaf.Module())
+				if err != nil {
+					return nil, false, fmt.Errorf("%s: predicate: %w", pred.leaf.Path(), err)
+				}
+				pred.token, err = canonicalToken(ti, token, pred.leaf.Module())
+				if err != nil {
+					return nil, false, fmt.Errorf("%s: predicate: %w", pred.leaf.Path(), err)
+				}
 			}
 			resolved.preds = append(resolved.preds, pred)
 		}
@@ -318,7 +338,7 @@ func resolveInstanceIdentifier(steps []iidStep, leafModule cambium.Module, names
 		parent = node.Module()
 		candidates = childRefs(node.DataChildren(true))
 	}
-	return out, true
+	return out, true, nil
 }
 
 func findIIDNode(candidates []cambium.SchemaNodeRef, name, qual string, parent cambium.Module, names iidNames) (cambium.SchemaNodeRef, bool) {
@@ -349,34 +369,40 @@ func moduleClosure(m cambium.Module) []cambium.Module {
 }
 
 // resolveJSONInstanceIdentifier resolves a value in JSON_IETF form.
-func resolveJSONInstanceIdentifier(value string, leafModule cambium.Module) ([]iidNode, bool) {
+func resolveJSONInstanceIdentifier(value string, leafModule cambium.Module) ([]iidNode, bool, error) {
 	steps, ok := parseInstanceIdentifier(value)
 	if !ok {
-		return nil, false
+		return nil, false, nil
 	}
 	return resolveInstanceIdentifier(steps, leafModule, jsonNames{modules: moduleClosure(leafModule)})
 }
 
 // instanceIdentifierFromLexical converts an XML (or schema) instance-identifier,
 // whose prefixes resolve in scope, to canonical JSON_IETF form.
-func instanceIdentifierFromLexical(value string, leafModule cambium.Module, scope valueScope) (string, bool) {
+func instanceIdentifierFromLexical(value string, leafModule cambium.Module, scope valueScope) (text string, supported bool, err error) {
 	steps, ok := parseInstanceIdentifier(strings.TrimSpace(value))
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
-	nodes, ok := resolveInstanceIdentifier(steps, leafModule, lexicalNames{scope: scope})
+	nodes, ok, err := resolveInstanceIdentifier(steps, leafModule, lexicalNames{scope: scope})
+	if err != nil {
+		return "", false, err
+	}
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 	return renderInstanceIdentifierJSON(nodes)
 }
 
 // canonicalInstanceIdentifier returns a JSON_IETF instance-identifier in
 // canonical form.
-func canonicalInstanceIdentifier(value string, leafModule cambium.Module) (string, bool) {
-	nodes, ok := resolveJSONInstanceIdentifier(value, leafModule)
+func canonicalInstanceIdentifier(value string, leafModule cambium.Module) (text string, supported bool, err error) {
+	nodes, ok, err := resolveJSONInstanceIdentifier(value, leafModule)
+	if err != nil {
+		return "", false, err
+	}
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 	return renderInstanceIdentifierJSON(nodes)
 }
@@ -384,10 +410,13 @@ func canonicalInstanceIdentifier(value string, leafModule cambium.Module) (strin
 // instanceIdentifierXML converts a JSON_IETF instance-identifier to XML form:
 // every node and key qualified with its module's own prefix, each such module
 // declared on the element, in order of first use (as libyang prints it).
-func instanceIdentifierXML(value string, leafModule cambium.Module) (string, []xmlNSDecl, bool) {
-	nodes, ok := resolveJSONInstanceIdentifier(value, leafModule)
+func instanceIdentifierXML(value string, leafModule cambium.Module) (text string, declarations []xmlNSDecl, supported bool, err error) {
+	nodes, ok, err := resolveJSONInstanceIdentifier(value, leafModule)
+	if err != nil {
+		return "", nil, false, err
+	}
 	if !ok {
-		return "", nil, false
+		return "", nil, false, nil
 	}
 	return renderInstanceIdentifierPrefixed(nodes, false)
 }
@@ -395,7 +424,7 @@ func instanceIdentifierXML(value string, leafModule cambium.Module) (string, []x
 // renderInstanceIdentifierJSON writes the canonical JSON_IETF form: the module
 // name on the first node and wherever it changes, bare key names, values
 // single-quoted unless they contain a single quote.
-func renderInstanceIdentifierJSON(nodes []iidNode) (string, bool) {
+func renderInstanceIdentifierJSON(nodes []iidNode) (text string, supported bool, err error) {
 	var b strings.Builder
 	prev := ""
 	for _, n := range nodes {
@@ -410,22 +439,26 @@ func renderInstanceIdentifierJSON(nodes []iidNode) (string, bool) {
 			value := ""
 			if p.kind != iidPredPos {
 				value = xmlTextFromToken(p.token)
-				if id, ok := identityValue(p.leaf, p.token); ok {
+				id, ok, err := identityValue(p.leaf, p.token)
+				if err != nil {
+					return "", false, err
+				}
+				if ok {
 					value = id.Module().Name() + ":" + id.Name() // canonical identityref is qualified
 				}
 			}
 			if !writeIIDPred(&b, p, "", value) {
-				return "", false
+				return "", false, nil
 			}
 		}
 	}
-	return b.String(), true
+	return b.String(), true, nil
 }
 
 // renderInstanceIdentifierPrefixed writes the XML form, returning the prefix
 // declarations it uses. With forXPath set, predicate values are written as the
 // XPath engine sees leaf values (their JSON_IETF text) rather than in XML form.
-func renderInstanceIdentifierPrefixed(nodes []iidNode, forXPath bool) (string, []xmlNSDecl, bool) {
+func renderInstanceIdentifierPrefixed(nodes []iidNode, forXPath bool) (text string, declarations []xmlNSDecl, supported bool, err error) {
 	var decls []xmlNSDecl
 	conflict := false
 	prefix := func(m cambium.Module) string {
@@ -448,7 +481,11 @@ func renderInstanceIdentifierPrefixed(nodes []iidNode, forXPath bool) (string, [
 			value := ""
 			if p.kind != iidPredPos {
 				value = xmlTextFromToken(p.token)
-				if id, ok := identityValue(p.leaf, p.token); ok && !forXPath {
+				id, ok, err := identityValue(p.leaf, p.token)
+				if err != nil {
+					return "", nil, false, err
+				}
+				if ok && !forXPath {
 					value = prefix(id.Module()) + ":" + id.Name()
 				}
 			}
@@ -457,14 +494,14 @@ func renderInstanceIdentifierPrefixed(nodes []iidNode, forXPath bool) (string, [
 				keyPrefix = prefix(p.leaf.Module())
 			}
 			if !writeIIDPred(&b, p, keyPrefix, value) {
-				return "", nil, false
+				return "", nil, false, nil
 			}
 		}
 	}
 	if conflict {
-		return "", nil, false // two modules share a prefix: no single-element form
+		return "", nil, false, nil // two modules share a prefix: no single-element form
 	}
-	return b.String(), decls, true
+	return b.String(), decls, true, nil
 }
 
 func writeIIDPred(b *strings.Builder, p iidValuePred, keyPrefix, value string) bool {
@@ -500,18 +537,19 @@ func writeIIDPred(b *strings.Builder, p iidValuePred, keyPrefix, value string) b
 
 // identityValue reports the identity a leaf value names when the value's
 // effective type (through unions and leafrefs) is identityref.
-func identityValue(leaf cambium.SchemaNodeRef, raw json.RawMessage) (cambium.Identity, bool) {
+func identityValue(leaf cambium.SchemaNodeRef, raw json.RawMessage) (cambium.Identity, bool, error) {
 	ti, ok := leaf.LeafType()
 	if !ok {
-		return cambium.Identity{}, false
+		return cambium.Identity{}, false, nil
 	}
 	return identityOfType(ti, raw, leaf.Module())
 }
 
-func identityOfType(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) (cambium.Identity, bool) {
+func identityOfType(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium.Module) (cambium.Identity, bool, error) {
 	switch r := ti.Resolved().(type) {
 	case cambium.ResolvedIdentityRef:
-		return identityFromJSON(raw, r, leafModule)
+		id, ok := identityFromJSON(raw, r, leafModule)
+		return id, ok, nil
 	case cambium.ResolvedLeafRef:
 		if rt, ok := r.Realtype(); ok && rt != nil {
 			return identityOfType(*rt, raw, leafModule)
@@ -519,11 +557,13 @@ func identityOfType(ti cambium.TypeInfo, raw json.RawMessage, leafModule cambium
 	case cambium.ResolvedUnion:
 		for _, member := range r.Members() {
 			var trial []string
-			validateLeafValue(member, raw, "", leafModule.Name(), &trial)
+			if err := validateLeafValue(member, raw, "", leafModule.Name(), &trial); err != nil {
+				return cambium.Identity{}, false, err
+			}
 			if len(trial) == 0 {
 				return identityOfType(member, raw, leafModule)
 			}
 		}
 	}
-	return cambium.Identity{}, false
+	return cambium.Identity{}, false, nil
 }

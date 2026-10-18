@@ -404,7 +404,9 @@ func TestParseModulesApplyDefaultsAcrossModules(t *testing.T) {
 		} {
 			t.Run(tc.name+"/"+in.name, func(t *testing.T) {
 				tree := parseModules(t, mods, in.f, in.data)
-				tree.ApplyDefaults()
+				if err := tree.ApplyDefaults(); err != nil {
+					t.Fatal(err)
+				}
 				gotJSON, gotXML := serializeTree(t, tree)
 				if gotJSON != tc.jsonWant {
 					t.Errorf("JSON:\n got %s\nwant %s", gotJSON, tc.jsonWant)
@@ -412,7 +414,9 @@ func TestParseModulesApplyDefaultsAcrossModules(t *testing.T) {
 				if gotXML != tc.xmlWant {
 					t.Errorf("XML:\n got %s\nwant %s", gotXML, tc.xmlWant)
 				}
-				tree.ApplyDefaults() // idempotent
+				if err := tree.ApplyDefaults(); err != nil {
+					t.Fatal(err)
+				} // idempotent
 				if again, _ := serializeTree(t, tree); again != tc.jsonWant {
 					t.Errorf("second ApplyDefaults changed the tree:\n got %s\nwant %s", again, tc.jsonWant)
 				}

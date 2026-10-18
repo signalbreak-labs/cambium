@@ -937,8 +937,26 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     pattern and schema/default context, retain `CAMBIUM_E0001` at the context
     boundary, and preserve the underlying `ResourceError` or `ConfigurationError`
     through Go `errors.As`. A compile-resource refusal is not a syntax verdict.
-    Pure-Go data-tree and generated-code consumers are not yet migrated to this
-    bounded matcher; their existing contracts still apply.
+    The experimental pure-Go data tree uses this same bounded matcher for string
+    restrictions and supported XPath `re-match`, with exact full-string XSD
+    semantics. Matcher failures propagate through ordered union selection,
+    canonicalization, ordering, XML conversion, validation and defaults to the
+    initiating public operation, preserving their typed cause through `errors.As`.
+    Inversion applies only to successful booleans. Ordinary mismatch remains a
+    validation violation; unsupported XPath retains its existing skip/inactive
+    policy, and `and`/`or` retain short-circuit evaluation.
+
+    `Tree.ApplyDefaults() error` is transactional: failure leaves all original
+    nodes, nested values and ordering unchanged. Successful application preserves
+    schema order, keys-first order, user order, canonical system order and
+    idempotence. Guards see the initial tree view, without fixed-point reevaluation.
+    Callers must handle the returned error. Ordinary Go call statements remain
+    legal, but method values typed `func()` and interfaces declaring
+    `ApplyDefaults()` must migrate to the error-returning signature; this is a real
+    compatibility change in the experimental API. `Validate` retains ordinary
+    `*ValidationError` results and may join prior violations to an operational
+    error. Parse/ParseModules and Serialize retain their existing public signatures.
+    Generated-code consumers are not yet migrated to this bounded matcher.
 
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices
