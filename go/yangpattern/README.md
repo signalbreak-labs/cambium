@@ -80,9 +80,14 @@ matching does not prevent an eligible bounded fallback from proving a result.
 `Program.GoRegexp` is a separate translation API. It emits canonical, anchored Go
 syntax or an error, including for counts that Go cannot represent natively.
 `cambium.Pattern.Program` exposes this compiler while preserving `Regex()` and
-separate inversion. Schema-default, data-tree, and codegen consumers are being
-migrated separately; this package alone does not imply those consumers already
-use the bounded runtime.
+separate inversion. Cambium schema-default validation, the experimental pure-Go
+data tree, and generated Go now use the bounded runtime. Their public behavior,
+including typed operational errors and finite budgets, is specified in the
+[API contract](../../spec/api.md); see also the
+[pure-Go data-tree guide](../../docs/guides/data-tree-pure-go.md) and
+[codegen guide](../../docs/guides/codegen.md). These Cambium library paths do
+not establish downstream TerraYang provider, NETCONF, or Terraform integration;
+those consumers still require separate work and verification.
 
 `RuntimeSources()` returns the explicit ordered source inventory and fresh byte
 slices. Copy these files byte-for-byte, including their package declaration and

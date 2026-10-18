@@ -972,6 +972,19 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     change. These finite budgets do not guarantee every valid pattern/value pair
     can be evaluated, and do not extend the existing XPath capability subset.
 
+    Before schema names are allocated, Go codegen reserves every package-level
+    declaration in the portable pattern runtime, whether or not a schema uses
+    patterns or emits that runtime. This keeps generated schema names stable when
+    pattern helpers later become necessary, while preserving the runtime
+    declarations unchanged in the single self-contained generated file. It is a
+    bounded generated-source compatibility exception: an existing no-pattern
+    schema may gain suffixed public names after regeneration (for example, module
+    `program` changes root type `Program` to `Program2`), and callers of affected
+    generated or planned identifiers must migrate. The public `PlanVersion`
+    remains `cambium.codegen.plan.v1` because the planning record format is
+    unchanged; it does not guarantee identical name values across generator
+    versions. See the [codegen generated-name migration guide](../docs/guides/codegen.md#generated-names).
+
     Public resolved type slice metadata is defensive: mutating returned
     `Range`, `Length`, `Patterns`, `Values()`, `Bases()`, or `Members()` slices
     must not mutate the schema IR observed by later handle reads.

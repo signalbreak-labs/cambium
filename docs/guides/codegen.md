@@ -48,6 +48,10 @@ schema/codegen planning model without using generated Go. Because Go is the only
 shipping renderer today, the plan still includes Go type expressions; downstream
 renderers can ignore those and use the embedded `cambium.SchemaNodeRef`,
 `BaseType`, resolved type, defaults, constraints, and field-order data instead.
+`PlanVersion` remains `cambium.codegen.plan.v1` when generated names change:
+the record format is unchanged, but the tag does not promise identical name
+values across generator versions. See [Generated names](#generated-names) before
+regenerating code or consuming planned identifiers.
 
 ## What it emits
 
@@ -104,15 +108,44 @@ name, so their constraints never merge.
 All package-level identifiers in the file come from one allocator, which
 reserves each type together with the names derived from it (`<T>FieldOrder`,
 `New<T>`, `Parse<T>`, enum and union variants) and the fixed helper names
-(`AnyData`, `CambiumStruct`, `WithDefaultsMode`, ...). A name that would
+(`AnyData`, `CambiumStruct`, `WithDefaultsMode`, ...). It also reserves **every
+package-level declaration in the portable pattern runtime** (including
+`Program`, `ProgramData`, `ResourceError`, `MatchLimits`, and `Restore`) before
+allocating schema names, even for a schema with no patterns, when that runtime
+is absent from the generated file. This keeps schema names stable if a later
+schema change activates the runtime. A name that would
 collide gets the smallest numeric suffix that frees its whole family: in module
 `m`, containers `a-b/c` and `a/b-c` would both be `MABC`, so the one claimed
 second is `MABC2`, and the root type of a module named `cambium-struct` is
 `CambiumStruct2`. Names are claimed depth first in a canonical
 order: each struct's own-module children in schema order, then children from
 other modules by module name, with RPC/notification documents last. Generated
-names therefore depend only on the schema, not on module load order, and a
-schema without collisions keeps the names it always had.
+names do not depend on module load order or whether pattern helpers are emitted.
+
+This expanded reservation is a **generated-source compatibility change** for
+schemas whose former names now collide. For example, this legal module has no
+pattern:
+
+```yang
+module program {
+  namespace "urn:program";
+  prefix p;
+  leaf value { type string; }
+}
+```
+
+Its root type was `Program` and is now `Program2`. The same rule can rename
+roots such as `ProgramData`, `ResourceError`, `MatchLimits`, or `Restore`, and
+derived declarations: a `resource` module with an `error` container uses
+`ResourceError2` for the container struct because `ResourceError` is reserved.
+The changed identifiers appear in both generated Go and public `Plan` output
+(for example, `RecordPlan.Name` and Go type expressions). After upgrading the
+generator, regenerate the affected files, inspect the generated-code diff and
+planning output, and update callers that reference renamed types, constructors,
+manifests, or other generated identifiers. Such callers may otherwise fail to
+compile; the regenerated output is not fully source-compatible with the earlier
+generated output. `PlanVersion` stays `cambium.codegen.plan.v1` because the plan
+record format did not change, not because name values are stable across versions.
 
 Enum names can be any string. Any character other than a letter or digit
 separates words (`a/b` and `c d` become `AB` and `CD`), a leading digit gets a
