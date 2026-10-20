@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows semantic versioning for the Go module release line.
 
+## [go/v0.8.1] - 2026-10-20
+
+### Added
+
+- `ResolvedString.Unenforced` holds declared patterns that a
+  `ValidationVendorCompatible` context could not compile. `Patterns` lists
+  only the patterns Cambium enforces.
+
+### Fixed
+
+- A pattern with more than about 32 `\d`, `\w` or `\p{...}` escapes no
+  longer exceeds the 16 MiB compile limit: translator scratch is checked
+  as a peak per atom instead of accumulating. This affected, for example,
+  the route-distinguisher pattern in the `ietf-routing-types` module that
+  Cisco IOS-XE 17.6.1 through 17.18.1 ship.
+- Each distinct pattern atom is translated once per compilation, so a
+  pattern that repeats an escape a few hundred times no longer exceeds the
+  compile work budget.
+- In `ValidationVendorCompatible` mode, a pattern Cambium cannot compile,
+  because it is not XSD syntax or exceeds a compile limit, no longer fails
+  the schema load. It is kept in `ResolvedString.Unenforced`, reported once
+  as a `LoadReport` warning that names its location, and left to the
+  device. Strict mode still rejects it.
+
 ## [go/v0.7.1] - 2026-10-16
 
 ### Added
