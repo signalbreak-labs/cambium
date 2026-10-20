@@ -161,6 +161,18 @@ func TestEscapeScratchIsTransient(t *testing.T) {
 			t.Errorf("route distinguisher %q = %v,%v, want %v", value, ok, err, want)
 		}
 	}
+	// Distinct atoms are each translated, so their scratch must not add up either.
+	var distinct strings.Builder
+	for _, letter := range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN" {
+		distinct.WriteString(`[\d` + string(letter) + `]`)
+	}
+	p, err = Compile(distinct.String())
+	if err != nil {
+		t.Fatalf("40 distinct escape classes: %v", err)
+	}
+	if ok, err := p.MatchString(strings.Repeat("7", 40)); err != nil || !ok {
+		t.Fatalf("40 distinct escape classes rejected 40 digits: %v,%v", ok, err)
+	}
 	// One escape's scratch is still reserved before translation.
 	_, err = CompileWithLimits(`\d`, CompileLimits{Bytes: uint64(len(`\d`)+4+8192)*64 - 1})
 	checkPhase(t, err, "compile")
