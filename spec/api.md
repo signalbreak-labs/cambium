@@ -187,7 +187,12 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     double-quoted `pattern` arguments (§6.1.3 defines only `\n`, `\t`, `\"`,
     and `\\` there), preserved verbatim as regex escapes with one warning per
     occurrence naming its source location; unknown escapes in any other
-    double-quoted argument remain errors in every mode. Duplicate revision
+    double-quoted argument remain errors in every mode. A `pattern` that Cambium
+    cannot compile, because it is not XSD syntax or exceeds a compile limit, is
+    kept in `ResolvedString.Unenforced` instead of failing the load, with one
+    warning per pattern statement naming its source location. `Patterns` then
+    lists only enforced patterns, and enforcing the others is left to the device.
+    Strict loads reject such a pattern. Duplicate revision
     warnings include
     the module/submodule name, duplicate revision date, the duplicate statement
     source location, and the previous declaration as a related location when
@@ -931,7 +936,9 @@ Backend/data-tier fixtures where both sides have a comparable backend.
     nested ordered unions and resolved leafref real types. Native translation
     refusal cannot by itself reject a valid default. Pattern compilation validates
     all stored string/union pattern metadata during type construction, including
-    later union members; value matching still short-circuits in declaration order
+    later union members; in `ValidationVendorCompatible` a pattern that does not
+    compile is kept in `ResolvedString.Unenforced` instead, and no consumer
+    evaluates it. Value matching still short-circuits in declaration order
     and is not performed when there is no default. Ordinary proven default
     mismatches keep their constraint diagnostics. Matcher operational errors carry
     pattern and schema/default context, retain `CAMBIUM_E0001` at the context

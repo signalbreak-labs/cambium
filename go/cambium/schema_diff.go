@@ -349,7 +349,11 @@ func resolvedTypeDiffFingerprint(resolved ResolvedType) string {
 	case ResolvedBinary:
 		return "binary(length=" + rangeBoundsDiffFingerprint(r.Length) + ")"
 	case ResolvedString:
-		return "string(length=" + rangeBoundsDiffFingerprint(r.Length) + ",patterns=" + patternsDiffFingerprint(r.Patterns) + ")"
+		unenforced := ""
+		if len(r.Unenforced) > 0 {
+			unenforced = ",unenforced=" + patternsDiffFingerprint(r.Unenforced)
+		}
+		return "string(length=" + rangeBoundsDiffFingerprint(r.Length) + ",patterns=" + patternsDiffFingerprint(r.Patterns) + unenforced + ")"
 	case ResolvedEnumeration:
 		return "enumeration(" + enumValuesDiffFingerprint(r.Values()) + ")"
 	case ResolvedBits:

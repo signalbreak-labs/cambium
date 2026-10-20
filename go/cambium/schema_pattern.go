@@ -67,54 +67,71 @@ func stringPatternMatchesDefault(pattern Pattern, value string) (bool, error) {
 	return matched, nil
 }
 
-func patterns(st *yangparse.Statement) ([]Pattern, error) {
-	var out []Pattern
+// patterns returns the statement's patterns that Cambium enforces and, for a
+// ValidationVendorCompatible context, the ones it cannot compile. Those stay
+// unenforced: the device that owns the schema enforces them.
+func (m *moduleData) patterns(st *yangparse.Statement) (enforced, unenforced []Pattern, err error) {
 	for _, p := range direct(st, "pattern") {
+		compiled := true
 		if err := validateYANGPatternSyntax(p.Argument); err != nil {
-			if _, ok := errors.AsType[*yangpattern.ConfigurationError](err); ok {
-				return nil, fmt.Errorf("invalid pattern %q at %s: %w", p.Argument, p.Location(), err)
+			if m.ctx == nil || m.ctx.validationMode != ValidationVendorCompatible {
+				if _, ok := errors.AsType[*yangpattern.ConfigurationError](err); ok {
+					return nil, nil, fmt.Errorf("invalid pattern %q at %s: %w", p.Argument, p.Location(), err)
+				}
+				return nil, nil, fmt.Errorf("cannot compile pattern %q at %s: %w", p.Argument, p.Location(), err)
 			}
-			return nil, fmt.Errorf("cannot compile pattern %q at %s: %w", p.Argument, p.Location(), err)
+			if reported := m.ctx.build.unenforcedPatterns; reported == nil || !reported[p] {
+				if reported != nil {
+					reported[p] = true
+				}
+				m.recordVendorCompatibleWarning(p, nil, "pattern %q at %s is not enforced in vendor-compatible mode: %v", p.Argument, p.Location(), err)
+			}
+			compiled = false
 		}
 		var tag *string
 		errorMessage, err := constraintMetadataArg(p, "error-message")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if s, err := constraintMetadataArg(p, "error-app-tag"); err != nil {
-			return nil, err
+			return nil, nil, err
 		} else if s != "" {
 			tag = ptr(s)
 		}
 		description, err := constraintMetadataArg(p, "description")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		reference, err := constraintMetadataArg(p, "reference")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		inverted := false
 		modifiers := direct(p, "modifier")
 		if len(modifiers) > 1 {
-			return nil, fmt.Errorf("pattern %q has multiple modifier statements at %s", p.Argument, modifiers[1].Location())
+			return nil, nil, fmt.Errorf("pattern %q has multiple modifier statements at %s", p.Argument, modifiers[1].Location())
 		}
 		if len(modifiers) == 1 {
 			if modifiers[0].Argument != "invert-match" {
-				return nil, fmt.Errorf("invalid pattern modifier %q at %s", modifiers[0].Argument, modifiers[0].Location())
+				return nil, nil, fmt.Errorf("invalid pattern modifier %q at %s", modifiers[0].Argument, modifiers[0].Location())
 			}
 			inverted = true
 		}
-		out = append(out, Pattern{
+		pattern := Pattern{
 			regex:        p.Argument,
 			errorMessage: errorMessage,
 			appTag:       tag,
 			description:  description,
 			reference:    reference,
 			inverted:     inverted,
-		})
+		}
+		if compiled {
+			enforced = append(enforced, pattern)
+		} else {
+			unenforced = append(unenforced, pattern)
+		}
 	}
-	return out, nil
+	return enforced, unenforced, nil
 }
 
 func validateYANGPatternSyntax(pattern string) error {

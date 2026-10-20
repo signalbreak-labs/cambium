@@ -51,13 +51,15 @@ cache without rescanning decimal strings. The cache is never exported and is
 recomputed from the actual supplied bounds on every restore.
 
 The compiler removes nullable repeat children, combines exact nested repetition
-and intervals starting at zero, and preserves nested intervals with holes. Match
-specialization clips counts against candidate length without changing exported
-metadata. The dispatcher uses direct repeated-class scans, eligible canonical Go
-regexps, a sparse derivative DAG, then bounded native expansion. Ordinary and
-expanded native execution share instruction/source/work checks. Cached native
-state never waives a stricter per-call policy. No value-dependent arena survives
-a call, and no package-level value cache is maintained.
+and intervals starting at zero, and preserves nested intervals with holes. Each
+distinct atom is translated once per compilation; repeating it reuses the
+translated node. Match specialization clips counts against candidate length
+without changing exported metadata. The dispatcher uses direct repeated-class
+scans, eligible canonical Go regexps, a sparse derivative DAG, then bounded
+native expansion. Ordinary and expanded native execution share
+instruction/source/work checks. Cached native state never waives a stricter
+per-call policy. No value-dependent arena survives a call, and no package-level
+value cache is maintained.
 
 `CompileWithLimits`, `RestoreWithLimits`, and `MatchStringWithLimits` are separate
 policies. Zero fields choose defaults, never unlimited work. The defaults are:
@@ -73,6 +75,9 @@ These are operational ceilings, not restrictions on legal candidate length.
 Direct scanning and stable transition-cache hits do not spend structural work
 per rune. Storage accounting is conservative, checked before allocations, and
 separate from the allocator measurements in the engineering acceptance tests.
+Translator scratch for an escape or class is checked against the remaining
+storage before that atom is translated and is not retained, so it limits each
+atom rather than the number of escapes in a pattern.
 Optional native preparation may be omitted when constructor resources are low.
 Each evaluator attempt has its declared allowance; exhausting speculative
 matching does not prevent an eligible bounded fallback from proving a result.

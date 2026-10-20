@@ -499,3 +499,35 @@ func TestDatatreePatternUniqueImplicitDefaultToken(t *testing.T) {
 		})
 	}
 }
+
+// A vendor-compatible schema keeps patterns Cambium cannot compile unenforced;
+// the data tree leaves them to the device and still enforces the others.
+func TestDatatreeLeavesUnenforcedPatternsToTheDevice(t *testing.T) {
+	b, err := cambium.NewContextBuilder(cambium.ContextFlags{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.LoadModuleStr(`module pm {yang-version 1.1; namespace "urn:pm"; prefix p;
+	  leaf name {type string {pattern 'a{,5}';}}
+	  leaf plain {type string {pattern '[a-z]+';}}}`); err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := b.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ctx.Close() })
+	mod, err := ctx.Schema("pm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := patternTree(t, mod, `{"pm:name":"zzz","pm:plain":"abc"}`).Validate(); err != nil {
+		t.Fatalf("unenforced pattern rejected a value: %v", err)
+	}
+	if _, ok := errors.AsType[*datatree.ValidationError](patternTree(t, mod, `{"pm:plain":"ABC"}`).Validate()); !ok {
+		t.Fatal("enforced pattern accepted ABC")
+	}
+}

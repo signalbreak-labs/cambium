@@ -413,11 +413,11 @@ func (m *moduleData) parseTypeSeen(st *yangparse.Statement, seen map[*yangparse.
 		if err != nil {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, err
 		}
-		ps, err := patterns(st)
+		ps, unenforced, err := m.patterns(st)
 		if err != nil {
 			return TypeInfo{base: BaseTypeUnknown, resolved: ResolvedUnknown{}}, err
 		}
-		ti.resolved = ResolvedString{Length: lengths, Patterns: ps}
+		ti.resolved = ResolvedString{Length: lengths, Patterns: ps, Unenforced: unenforced}
 	case BaseTypeBoolean:
 		ti.resolved = ResolvedBoolean{}
 	case BaseTypeInt8, BaseTypeInt16, BaseTypeInt32, BaseTypeInt64, BaseTypeUint8, BaseTypeUint16, BaseTypeUint32, BaseTypeUint64:
@@ -984,12 +984,15 @@ func (m *moduleData) applyTypeRestrictions(r ResolvedType, st *yangparse.Stateme
 			}
 			v.Length = rs
 		}
-		ps, err := patterns(st)
+		ps, unenforced, err := m.patterns(st)
 		if err != nil {
 			return nil, err
 		}
 		if len(ps) > 0 {
 			v.Patterns = append(v.Patterns, ps...)
+		}
+		if len(unenforced) > 0 {
+			v.Unenforced = append(v.Unenforced, unenforced...)
 		}
 		return v, nil
 	case ResolvedBinary:
