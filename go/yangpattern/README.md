@@ -73,6 +73,9 @@ These are operational ceilings, not restrictions on legal candidate length.
 Direct scanning and stable transition-cache hits do not spend structural work
 per rune. Storage accounting is conservative, checked before allocations, and
 separate from the allocator measurements in the engineering acceptance tests.
+Translator scratch for an escape or class is checked against the remaining
+storage before that atom is translated and is not retained, so it limits each
+atom rather than the number of escapes in a pattern.
 Optional native preparation may be omitted when constructor resources are low.
 Each evaluator attempt has its declared allowance; exhausting speculative
 matching does not prevent an eligible bounded fallback from proving a result.

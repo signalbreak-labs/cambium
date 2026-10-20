@@ -128,3 +128,40 @@ func TestSaturatedAccountingCannotAuthorizeOverflow(t *testing.T) {
 	}
 	checkPhase(t, b.err, "compile")
 }
+
+// Translator scratch for a category escape is released after its atom, so it
+// bounds each atom rather than the number of escapes in a pattern.
+func TestEscapeScratchIsTransient(t *testing.T) {
+	// ietf-routing-types revision 2017-02-27, as shipped in Cisco IOS-XE 17.6.1
+	// through 17.18.1, has 45 category escapes in this one pattern.
+	routeDistinguisher := `(0:(6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|` +
+		`[0-5]?\d{0,3}\d):(429496729[0-5]|42949672[0-8]\d|` +
+		`4294967[01]\d{2}|429496[0-6]\d{3}|42949[0-5]\d{4}|` +
+		`4294[0-8]\d{5}|429[0-3]\d{6}|42[0-8]\d{7}|4[01]\d{8}|` +
+		`[0-3]?\d{0,8}\d))|` +
+		`(1:(((\d|[1-9]\d|1\d{2}|2[0-4]\d|25[0-5])\.){3}(\d|[1-9]\d|` +
+		`1\d{2}|2[0-4]\d|25[0-5])):(6553[0-5]|655[0-2]\d|` +
+		`65[0-4]\d{2}|6[0-4]\d{3}|[0-5]?\d{0,3}\d))|` +
+		`(2:(429496729[0-5]|42949672[0-8]\d|4294967[01]\d{2}|` +
+		`429496[0-6]\d{3}|42949[0-5]\d{4}|4294[0-8]\d{5}|` +
+		`429[0-3]\d{6}|42[0-8]\d{7}|4[01]\d{8}|[0-3]?\d{0,8}\d):` +
+		`(6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|` +
+		`[0-5]?\d{0,3}\d))|` +
+		`(([3-9a-fA-F]|[1-9a-fA-F][\da-fA-F]{1,3}):` +
+		`[\da-fA-F]{1,12})`
+	p, err := Compile(routeDistinguisher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for value, want := range map[string]bool{
+		"0:65535:4294967295": true, "1:192.0.2.1:65535": true, "2:4294967295:65535": true, "a:123456789abc": true,
+		"0:65536:1": false, "1:192.0.2.256:1": false, "3": false,
+	} {
+		if ok, err := p.MatchString(value); err != nil || ok != want {
+			t.Errorf("route distinguisher %q = %v,%v, want %v", value, ok, err, want)
+		}
+	}
+	// One escape's scratch is still reserved before translation.
+	_, err = CompileWithLimits(`\d`, CompileLimits{Bytes: uint64(len(`\d`)+4+8192)*64 - 1})
+	checkPhase(t, err, "compile")
+}
