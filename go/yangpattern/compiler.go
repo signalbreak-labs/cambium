@@ -25,7 +25,7 @@ func CompileWithLimits(source string, limits CompileLimits) (*Program, error) {
 	if !utf8.ValidString(source) {
 		return nil, &ConfigurationError{"source is not UTF-8"}
 	}
-	c := compiler{limits: l, b: ledger{phase: "compile", stage: "parse", byteLimit: l.Bytes, workLimit: l.Work}, intern: make(map[string]uint32)}
+	c := compiler{limits: l, b: ledger{phase: "compile", stage: "parse", byteLimit: l.Bytes, workLimit: l.Work}, intern: make(map[string]uint32), atoms: make(map[string]uint32)}
 	if !c.b.charge(mulSat(uint64(len(source)), 8), uint64(len(source))) {
 		return nil, c.b.err
 	}
@@ -74,6 +74,7 @@ type compiler struct {
 	nodes                 []NodeData
 	nullable              []bool
 	intern                map[string]uint32
+	atoms                 map[string]uint32
 	edges, digits, ranges uint64
 	err                   error
 }
@@ -343,6 +344,15 @@ func (c *compiler) atom(depth uint64) uint32 {
 		}
 	}
 	atom := c.source[start:c.pos]
+	// A repeated atom reuses its translated node and spends no further scratch
+	// or translation work.
+	if !c.b.charge(0, uint64(len(atom))) {
+		return 0
+	}
+	key := string(atom)
+	if id, ok := c.atoms[key]; ok {
+		return id
+	}
 	// Reserve conservative temporary storage before the existing atom translator
 	// expands Unicode tables or class subtraction. Numerical counts never enter it.
 	bound := uint64(len(atom) + 4)
@@ -366,14 +376,18 @@ func (c *compiler) atom(depth uint64) uint32 {
 		c.fail("invalid character atom")
 		return 0
 	}
-	if len(ranges) == 0 {
-		return 0
+	id := uint32(0)
+	if len(ranges) != 0 {
+		out := make([]RuneRange, len(ranges))
+		for i, r := range ranges {
+			out[i] = RuneRange{r[0], r[1]}
+		}
+		id = c.put(NodeData{Op: OpClass, Ranges: out})
 	}
-	out := make([]RuneRange, len(ranges))
-	for i, r := range ranges {
-		out[i] = RuneRange{r[0], r[1]}
+	if c.b.charge(uint64(len(key))+64, 1) {
+		c.atoms[key] = id
 	}
-	return c.put(NodeData{Op: OpClass, Ranges: out})
+	return id
 }
 func (c *compiler) scanEscape() {
 	if c.pos >= len(c.source) {

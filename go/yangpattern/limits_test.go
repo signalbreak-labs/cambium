@@ -165,3 +165,19 @@ func TestEscapeScratchIsTransient(t *testing.T) {
 	_, err = CompileWithLimits(`\d`, CompileLimits{Bytes: uint64(len(`\d`)+4+8192)*64 - 1})
 	checkPhase(t, err, "compile")
 }
+
+// Each distinct atom is translated once, so repeating an escape costs no more
+// translation work than writing it once.
+func TestRepeatedAtomsTranslateOnce(t *testing.T) {
+	for atom, value := range map[string]string{`\d`: "7", `[^\w\s]`: "-"} {
+		p, err := Compile(strings.Repeat(atom, 1000))
+		if err != nil {
+			t.Fatalf("%s repeated: %v", atom, err)
+		}
+		for n, want := range map[int]bool{1000: true, 999: false} {
+			if ok, err := p.MatchString(strings.Repeat(value, n)); err != nil || ok != want {
+				t.Errorf("%s repeated, %d of %q = %v,%v", atom, n, value, ok, err)
+			}
+		}
+	}
+}
