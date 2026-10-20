@@ -202,7 +202,8 @@ feature set, mandatory config augments, config false mandatory typedef defaults,
 unambiguous local-name path fallbacks, leafref cycles, import and include
 cycles, `yang-version` mismatches between a module and its submodules or a YANG
 1.0 module importing a YANG 1.1 module by revision, same-module references
-to deprecated or obsolete definitions, and unknown backslash escapes in
+to deprecated or obsolete definitions, patterns Cambium cannot compile (kept in
+`ResolvedString.Unenforced` and left to the device), and unknown backslash escapes in
 double-quoted `pattern` arguments preserved verbatim as regex escapes.
 Duplicate `Module.Revisions()` entries
 are preserved in declaration order.

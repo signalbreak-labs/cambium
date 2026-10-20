@@ -42,6 +42,9 @@ type buildState struct {
 	validFeatures map[*featureData]bool
 	// featureEnabled holds each evaluated enabled feature's if-feature result.
 	featureEnabled map[*featureData]bool
+	// unenforcedPatterns holds the pattern statements already reported as not
+	// enforced, so each is reported once.
+	unenforcedPatterns map[*yangparse.Statement]bool
 }
 
 type typedefKey struct {
@@ -70,6 +73,7 @@ func (c *Context) beginRebuild() {
 	c.build.typedefTypes = make(map[typedefKey]TypeInfo)
 	c.build.validFeatures = make(map[*featureData]bool)
 	c.build.featureEnabled = make(map[*featureData]bool)
+	c.build.unenforcedPatterns = make(map[*yangparse.Statement]bool)
 }
 
 // endRebuild drops the memos and makes an exhausted budget the rebuild's
@@ -80,6 +84,7 @@ func (c *Context) endRebuild(err error) error {
 	c.build.typedefTypes = nil
 	c.build.validFeatures = nil
 	c.build.featureEnabled = nil
+	c.build.unenforcedPatterns = nil
 	if c.build.limitErr != nil {
 		c.dirty = true
 		return c.build.limitErr

@@ -487,9 +487,14 @@ type ResolvedBinary struct{ Length []RangeBound }
 func (ResolvedBinary) resolvedType() {}
 
 // ResolvedString is the string type with optional length and pattern restrictions.
+// Patterns are enforced. Unenforced holds declared patterns that a
+// ValidationVendorCompatible context could not compile; it keeps them for
+// introspection, reports each as a LoadReport warning, and leaves enforcing
+// them to the device. A strict context rejects such a pattern instead.
 type ResolvedString struct {
-	Length   []RangeBound
-	Patterns []Pattern
+	Length     []RangeBound
+	Patterns   []Pattern
+	Unenforced []Pattern
 }
 
 func (ResolvedString) resolvedType() {}
@@ -638,6 +643,7 @@ func cloneResolvedType(resolved ResolvedType) ResolvedType {
 	case ResolvedString:
 		r.Length = append([]RangeBound(nil), r.Length...)
 		r.Patterns = append([]Pattern(nil), r.Patterns...)
+		r.Unenforced = append([]Pattern(nil), r.Unenforced...)
 		return r
 	case ResolvedEnumeration:
 		r.def.values = append([]EnumValue(nil), r.def.values...)

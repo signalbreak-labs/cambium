@@ -434,3 +434,32 @@ func TestValidMetadataKeepsOrdinaryDiagnostics(t *testing.T) {
 }
 `, `"errors"`, `"strings"`)
 }
+
+// Code generated from a vendor-compatible schema leaves the patterns Cambium
+// cannot compile to the device, and still checks the others.
+func TestGeneratedCodeLeavesUnenforcedPatternsToTheDevice(t *testing.T) {
+	builder, err := cambium.NewContextBuilder(cambium.ContextFlags{DisableSearchdirCwd: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.SetValidationMode(cambium.ValidationVendorCompatible); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.LoadModuleStr(`module unenforced { yang-version 1.1; namespace "urn:unenforced"; prefix p;
+	  leaf name { type string { pattern 'a{,5}'; } }
+	  leaf plain { type string { pattern '[a-z]+'; } } }`); err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ctx.Close()
+	src, err := codegen.GenerateGo(ctx, "unenforced")
+	if err != nil {
+		t.Fatalf("GenerateGo: %v", err)
+	}
+	if strings.Contains(src, "a{,5}") || !strings.Contains(src, "[a-z]+") {
+		t.Fatal("generated code must check only the enforced pattern")
+	}
+}
